@@ -2,7 +2,7 @@ const $ = s => document.querySelector(s);
 const names = {codex:'OpenAI Codex',claude:'Anthropic Claude',antigravity:'Google Antigravity',copilot:'GitHub Copilot'};
 const errors = {sign_in_required:'Session expired or rejected. Reconnect through the official client.',local_session_unavailable:'Local session unavailable.',independent_sign_in_needed:'Official sign-in needed.',rate_limited:'Provider rate limit. Waiting to retry.',identity_changed:'Account changed. Waiting for discovery.',quota_not_reported:'No quota reported.',copilot_setup_required:'Run Setup-Copilot.ps1 to verify the existing GitHub CLI account.',copilot_auth_source_unsupported:'This reader requires the existing github.com GitHub CLI sign-in.',copilot_read_timeout:'Copilot quota read timed out.'};
 let latest=null, editing=false, draft=[], removed=[], busy=false, dragged=null, alerts=false, notice='';
-const expanded=new Set(), previous=new Map(), lastNotification=new Map();
+const expanded=new Set(), previous=new Map(), lastNotification=new Map(), openMetrics=new Set();
 try{$('#mode').value=localStorage.getItem('quotaDisplayMode')==='used'?'used':'remaining'}catch{}
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function button(text,label,action,cls=''){const b=el('button',cls,text);b.type='button';b.setAttribute('aria-label',label);b.onclick=action;return b}
@@ -25,45 +25,59 @@ function quotaPace(b,live=true,now=Date.now()){
  const difference=b.remaining-timeRemaining;
  return {available:true,timeRemaining,difference,direction:difference>=0?'under':'over'};
 }
+function donutValues(remaining,timeRemaining,used=false){
+ const quota=used?100-remaining:remaining;
+ const time=used?100-timeRemaining:timeRemaining;
+ return {quota:Math.max(0,Math.min(100,quota)),time:Math.max(0,Math.min(100,time)),timeLabel:used?'elapsed':'remaining'};
+}
 // PACE_CALC_END
-function metric(b,live=true){
+function metric(b,live=true,key=''){
  if(!b)return el('div','unknown','Not reported');
  const box=el('div','metric');
  if(b.unlimited||b.remaining==null){
-  box.append(el('span','unknown',b.unlimited?'Unlimited':'Unknown'));
+  const unknown=el('div','unknown-trigger',b.unlimited?'Unlimited':'Unknown');unknown.tabIndex=0;unknown.dataset.metricKey=key;
+  const details=el('span','metric-popover');details.append(el('strong','',b.label+' · '+(b.unlimited?'Unlimited':'Quota not reported')),el('span','',resetText(b.resetsAt)));
+  if(!live)details.append(el('span','pace unavailable','Stale quota data'));
+  unknown.setAttribute('aria-label',`${b.label}. ${b.unlimited?'Unlimited':'Quota not reported'}. ${resetText(b.resetsAt)}.${live?'':' Stale quota data.'}`);
+  if(openMetrics.has(key))unknown.classList.add('open');
+  unknown.onclick=()=>{openMetrics.has(key)?openMetrics.delete(key):openMetrics.add(key);unknown.classList.toggle('open',openMetrics.has(key))};
+  unknown.onkeydown=e=>{if(e.key==='Escape'){openMetrics.delete(key);unknown.classList.remove('open');unknown.classList.add('dismissed');unknown.blur()}};
+  unknown.onpointerleave=()=>unknown.classList.remove('dismissed');unknown.onfocus=()=>unknown.classList.remove('dismissed');
+  unknown.append(details);box.append(unknown);
  }else{
   const used=$('#mode').value==='used',value=used?100-b.remaining:b.remaining;
-  const p=el('span','percent',Math.round(value)+'%');p.title=value.toFixed(1)+'% '+(used?'used':'remaining');
-  const meter=el('div','meter'),bar=el('div','bar'+(b.remaining<=10?' low':''));bar.style.width=value+'%';
-  meter.setAttribute('role','meter');meter.setAttribute('aria-label',b.label+' '+(used?'used':'remaining'));
-  meter.setAttribute('aria-valuenow',value);meter.setAttribute('aria-valuemin',0);meter.setAttribute('aria-valuemax',100);
-  meter.append(bar);box.append(p,meter);
   const pace=quotaPace(b,live);
-  if(pace){
-   if(pace.available){
-    const timeMeter=el('div','time-meter'),timeBar=el('div','time-bar');timeBar.style.width=pace.timeRemaining+'%';timeMeter.append(timeBar);
-    const points=Math.abs(pace.difference),rounded=points<1?points.toFixed(1):Math.round(points).toString();
-    const paceText=`${rounded} percentage points ${pace.direction} pace`;
-    timeMeter.title=`${pace.timeRemaining.toFixed(1)}% of the quota window remains. ${b.remaining.toFixed(1)}% of quota remains. ${paceText}.`;
-    timeMeter.setAttribute('role','img');timeMeter.setAttribute('aria-label',timeMeter.title);
-    box.append(timeMeter,el('span','pace '+pace.direction,paceText));
-   }else{
-    const unavailable=el('span','pace unavailable','Pace unavailable · '+pace.reason);unavailable.setAttribute('aria-label','Pace unavailable because '+pace.reason+'.');box.append(unavailable);
-   }
-  }
+  const values=donutValues(b.remaining,pace?.available?pace.timeRemaining:0,used);
+  const donut=el('div','donut'+(b.remaining<=10?' low':'')+(live?'':' stale')+(pace?.available?'':' no-time'));donut.tabIndex=0;donut.dataset.metricKey=key;donut.style.setProperty('--quota',values.quota);donut.style.setProperty('--time',values.time);
+  donut.setAttribute('role','meter');donut.setAttribute('aria-valuenow',value);donut.setAttribute('aria-valuemin',0);donut.setAttribute('aria-valuemax',100);
+  const center=el('span','donut-value',Math.round(value)+'%'),details=el('span','metric-popover');
+  const primary=`${b.label} ${value.toFixed(1)}% ${used?'used':'remaining'}`;
+  details.append(el('strong','',primary),el('span','',resetText(b.resetsAt)));
+  if(pace?.available){
+   const points=Math.abs(pace.difference),rounded=points<1?points.toFixed(1):Math.round(points).toString(),paceText=`${rounded} percentage points ${pace.direction} pace`;
+   const timeText=used?`${(100-pace.timeRemaining).toFixed(1)}% time elapsed · ${pace.timeRemaining.toFixed(1)}% remaining`:`${pace.timeRemaining.toFixed(1)}% time remaining`;
+   details.append(el('span','pace '+pace.direction,`${timeText} · ${paceText}`));
+   donut.setAttribute('aria-label',`${primary}. Inner ring shows ${values.time.toFixed(1)}% of time ${values.timeLabel}. ${paceText}. ${resetText(b.resetsAt)}.`);
+  }else if(pace){
+   details.append(el('span','pace unavailable','Pace unavailable · '+pace.reason));
+   donut.setAttribute('aria-label',`${primary}. Pace unavailable because ${pace.reason}. ${resetText(b.resetsAt)}.`);
+  }else donut.setAttribute('aria-label',`${primary}. ${resetText(b.resetsAt)}.`);
+  if(!live)donut.setAttribute('aria-label','Stale quota. '+donut.getAttribute('aria-label'));
+  if(b.amountRemaining!=null)details.append(el('span','',new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(b.amountRemaining)+' / '+(b.entitlement??'?')+' '+b.unit+' remaining'));
+  if(!b.unlimited&&b.available===false)details.append(el('span','','Currently unavailable'));
+  if(openMetrics.has(key))donut.classList.add('open');
+  donut.onclick=()=>{openMetrics.has(key)?openMetrics.delete(key):openMetrics.add(key);donut.classList.toggle('open',openMetrics.has(key))};
+  donut.onkeydown=e=>{if(e.key==='Escape'){openMetrics.delete(key);donut.classList.remove('open');donut.classList.add('dismissed');donut.blur()}};
+  donut.onpointerleave=()=>donut.classList.remove('dismissed');donut.onfocus=()=>donut.classList.remove('dismissed');
+  donut.append(center,details);box.append(donut);
  }
- const reset=el('span','reset',resetText(b.resetsAt));
- reset.title=b.resetsAt?new Date(b.resetsAt).toString():'Provider did not report a reset time';box.append(reset);
- if(b.amountRemaining!=null){
-  box.append(el('span','reset',new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(b.amountRemaining)+' / '+(b.entitlement??'?')+' '+b.unit+' remaining'));
- }
- if(!b.unlimited&&b.available===false)box.append(el('span','reset','Currently unavailable'));
+ if(!live)box.append(el('span','metric-stale','Stale quota'));
  return box;
 }
 function groupsFor(a){const groups=[...a.groups];if(a.provider==='antigravity')for(const [label,re] of [['Gemini',/gemini/i],['Claude / GPT',/claude|gpt/i]])if(!groups.some(g=>re.test(g.label)))groups.push({label,buckets:[]});if(!groups.length)groups.push({label:'Subscription',buckets:[]});return groups}
 function focusMove(id,direction){const card=[...document.querySelectorAll('.account')].find(c=>c.dataset.id===id);const wanted=card?.querySelector(`[data-move="${direction}"]`);(wanted&&!wanted.disabled?wanted:card?.querySelector('[data-move]:not(:disabled)'))?.focus()}
 function move(id,direction){if(busy)return;const i=draft.findIndex(a=>a.id===id), j=i+direction;if(j<0||j>=draft.length)return;[draft[i],draft[j]]=[draft[j],draft[i]];renderAccounts();focusMove(id,direction)}
-function renderAccounts(){const area=$('#accounts');area.classList.toggle('editing',editing);area.replaceChildren();const accounts=editing?draft:latest.accounts;const display=$('#mode').value==='used'?'used':'remaining';
+function renderAccounts(){const area=$('#accounts'),focused=document.activeElement?.dataset?.metricKey;area.classList.toggle('editing',editing);area.replaceChildren();const accounts=editing?draft:latest.accounts;const display=$('#mode').value==='used'?'used':'remaining';
 accounts.forEach((a,index)=>{const card=el('article','account');card.dataset.id=a.id;card.setAttribute('aria-label',names[a.provider]+' '+a.label);const head=el('div','account-head');
 if(editing){const handle=el('span','drag-handle','↕');handle.title='Drag to reorder';handle.setAttribute('aria-hidden','true');head.append(handle);setupDrag(handle,card,a.id)}
 head.append(el('span','provider',names[a.provider]),el('span','email',a.label),el('span','state '+a.status,a.status),el('span','age',age(a.ageSeconds)));
@@ -72,16 +86,17 @@ const groups=groupsFor(a),monthly=a.provider==='copilot';
 const columns=monthly?[{label:'Monthly '+display,test:b=>b.windowKind==='monthly'}]:[{label:'5-hour '+display,test:b=>b.windowSeconds===18000},{label:'Weekly '+display,test:b=>b.windowSeconds===604800}];
 const other=groups.some(g=>g.buckets.some(b=>!columns.some(c=>c.test(b))));
 if(other){const known=[...columns];columns.push({label:'Other limits',test:b=>!known.some(c=>c.test(b))})}
-const table=el('table','quota-table');table.setAttribute('aria-label',names[a.provider]+' quota '+display);const tr=el('tr');for(const label of ['Quota group',...columns.map(c=>c.label)]){const th=el('th','',label);th.scope='col';tr.append(th)}const thead=el('thead');thead.append(tr);table.append(thead);const tbody=el('tbody');for(const g of groups){const row=el('tr');row.append(el('td','group-label',g.label));for(const column of columns){const cell=el('td'),matches=g.buckets.filter(column.test);if(!matches.length)cell.append(metric(null));for(const b of matches){if(matches.length>1)cell.append(el('div','unknown',b.label));cell.append(metric(b,a.status==='live'))}row.append(cell)}tbody.append(row)}table.append(tbody);card.append(table);
+const table=el('table','quota-table');table.setAttribute('aria-label',names[a.provider]+' quota '+display);const tr=el('tr');for(const label of ['Quota group',...columns.map(c=>c.label)]){const th=el('th','',label);th.scope='col';tr.append(th)}const thead=el('thead');thead.append(tr);table.append(thead);const tbody=el('tbody');for(const g of groups){const row=el('tr');row.append(el('td','group-label',g.label));for(const column of columns){const cell=el('td'),matches=g.buckets.filter(column.test);if(!matches.length)cell.append(metric(null));for(const b of matches){if(matches.length>1)cell.append(el('div','unknown',b.label));const metricKey=a.id+'/'+(g.id||g.label)+'/'+(b.id||b.label);cell.append(metric(b,a.status==='live',metricKey))}row.append(cell)}tbody.append(row)}table.append(tbody);card.append(table);
 if(monthly&&groups[0]?.plan)card.append(el('div','details',groups[0].plan+' · Models '+(groups[0].models?.join(', ')||'not reported')));
 if(a.error)card.append(el('div','warning',(errors[a.error]||'Reader unavailable.')+(a.nextAttempt>Date.now()/1000?' Retry eligible '+date(a.nextAttempt*1000):'')));
 if(expanded.has(a.id)&&!editing){const details=el('div','details');details.append(el('div','',a.source),el('div','',a.identityStatus),el('div','','Last successful read '+(a.lastSuccess?new Date(a.lastSuccess*1000).toLocaleString():'Never')),el('div','','Next eligible read '+date(a.nextAttempt? a.nextAttempt*1000:null)));card.append(details)}area.append(card)});
 if(!accounts.length)area.append(el('div','empty',editing?'All accounts marked for removal. Save to apply, or Cancel to keep them.':'No accounts displayed. Restore removed accounts below.'));
 $('#edit-count').textContent=editing?`${draft.length} accounts · ${removed.length} marked for removal · Changes not saved`:'';
+if(focused)[...area.querySelectorAll('[data-metric-key]')].find(n=>n.dataset.metricKey===focused)?.focus({preventScroll:true});
 }
 function render(){if(!latest)return;$('#summary').textContent=`${latest.accounts.filter(a=>a.status==='live').length}/${latest.accounts.length} live`;$('#updated').textContent='Display '+new Date(latest.now*1000).toLocaleTimeString();$('#restore').hidden=!latest.hasRemovedAccounts||editing;$('#edit').hidden=editing;$('#save').hidden=!editing;$('#cancel').hidden=!editing;$('#edit-help').hidden=!editing;$('#refresh').disabled=editing||busy;$('#save').disabled=busy;$('#cancel').disabled=busy;$('#mode').disabled=busy;$('#edit').disabled=busy;$('#message').textContent=notice||(latest.storageError?'Encrypted cache unavailable.':latest.refreshing?'Reading quotas…':'Auto-check 5 min. Refresh respects provider backoff.');renderAccounts();renderConnections()}
 function notify(data){for(const a of data.accounts){if(a.status!=='live')continue;for(const g of a.groups)for(const b of g.buckets){if(b.remaining===null)continue;const key=a.id+'/'+g.id+'/'+b.id,old=previous.get(key);let text='';if(b.remaining<=10&&(!old||old.remaining>10))text='10% or less remaining.';if(old&&old.resetsAt&&new Date(old.resetsAt)<Date.now()&&b.remaining>old.remaining&&b.resetsAt!==old.resetsAt)text='Provider reports replenished quota.';previous.set(key,b);if(alerts&&text&&Date.now()-(lastNotification.get(key)||0)>3600000){new Notification(names[a.provider],{body:g.label+' · '+b.label+'\n'+text});lastNotification.set(key,Date.now())}}}}
-async function update(){try{const r=await fetch('/api/status');if(!r.ok)throw Error();latest=await r.json();if(!editing&&!busy)render();notify(latest)}catch{message('Disconnected. Displayed values may be stale.',true);document.querySelectorAll('.state').forEach(n=>{n.textContent='Disconnected';n.className='state stale'})}}
+async function update(){try{const r=await fetch('/api/status');if(!r.ok)throw Error();latest=await r.json();$('#message').classList.remove('error');if(!editing&&!busy)render();notify(latest)}catch{$('#message').textContent='Disconnected. Displayed values may be stale.';$('#message').className='error';document.querySelectorAll('.state').forEach(n=>{n.textContent='Disconnected';n.className='state stale'});document.querySelectorAll('.donut').forEach(n=>{n.classList.add('stale');if(!n.getAttribute('aria-label').startsWith('Stale quota.'))n.setAttribute('aria-label','Stale quota. '+n.getAttribute('aria-label'))});document.querySelectorAll('.metric').forEach(n=>{if(!n.querySelector('.metric-stale'))n.append(el('span','metric-stale','Stale quota'))})}}
 async function post(path,payload={}){const r=await fetch(path,{method:'POST',headers:{'X-Quota-Request':'refresh','Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok){const data=await r.json().catch(()=>({}));throw Error(data.error||'Request failed. Please try again.')}return r.json()}
 $('#edit').onclick=()=>{if(!latest)return;editing=true;draft=structuredClone(latest.accounts);removed=[];notice='';render()};
 $('#cancel').onclick=()=>{editing=false;draft=[];removed=[];notice='Changes discarded.';render()};

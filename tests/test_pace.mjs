@@ -8,6 +8,7 @@ assert.ok(calculation,'pace calculation markers should be present');
 const context={};
 vm.runInNewContext(calculation[1]+';this.quotaPace=quotaPace',context);
 const pace=context.quotaPace;
+const donut=context.donutValues;
 const now=Date.parse('2026-09-20T00:00:00Z');
 
 const fiveHour={windowSeconds:18000,remaining:70,resetsAt:'2026-09-20T02:30:00Z'};
@@ -25,5 +26,8 @@ assert.equal(pace({...fiveHour,resetsAt:'2026-09-19T23:59:00Z'},true,now).availa
 assert.equal(pace({...fiveHour,resetsAt:'2026-09-20T06:00:00Z'},true,now).available,false);
 assert.equal(pace(fiveHour,false,now).reason,'quota data is not live');
 assert.equal(pace({windowSeconds:3600,remaining:50,resetsAt:'2026-09-20T00:30:00Z'},true,now),null);
+assert.deepEqual({...donut(70,50,false)},{quota:70,time:50,timeLabel:'remaining'});
+assert.deepEqual({...donut(70,50,true)},{quota:30,time:50,timeLabel:'elapsed'});
+assert.deepEqual({...donut(120,-5,false)},{quota:100,time:0,timeLabel:'remaining'});
 
 console.log('pace calculation tests passed');

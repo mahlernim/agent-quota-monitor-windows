@@ -15,7 +15,7 @@ import time
 import webbrowser
 
 from .connections import Connections
-from .desktop_views import compact_group, compact_window, display_remaining, popup_rows, selected_window
+from .desktop_views import compact_group, compact_window, display_remaining, exact_remaining, popup_rows, selected_window, tray_code
 from .monitor import Monitor
 from .server import handler
 from .vault import Vault
@@ -72,6 +72,7 @@ class DesktopApplication:
         self.tray = None
         self.events = queue.Queue()
         self.activation_event = activation_event
+        self.window_icons = []
 
     @property
     def url(self):
@@ -112,12 +113,44 @@ class DesktopApplication:
         if not found:
             return 'Agent Quota Monitor Windows: quota unavailable'
         account, group, bucket = found
-        value, _ = display_remaining(bucket)
-        stale = ' | STALE' if account.get('status') == 'stale' else ''
-        return f'Agent Quota Monitor Windows: {value} | {account.get("label", "account")} | {group.get("label", "group")}{stale}'[:127]
+        value = exact_remaining(bucket)
+        status = account.get('status', 'pending').upper()
+        # Windows may truncate tray text, so quota state must come first.
+        return f'{tray_code(account, group)} | {compact_window(bucket)} | {value} | {status} | {account.get("label", "account")} | {group.get("label", "group")} | {account.get("provider", "provider")}'[:127]
+
+    def _window_icon_image(self):
+        """Static robot-in-donut icon for the native windows, independent of quota state."""
+        from PIL import Image, ImageDraw
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.ellipse((4, 4, 60, 60), outline='#5f9de0', width=6)
+        draw.rounded_rectangle((19, 23, 45, 43), radius=5, fill='#d7e4f5', outline='#4777ad', width=2)
+        draw.line((32, 16, 32, 23), fill='#4777ad', width=2)
+        draw.ellipse((29, 13, 35, 19), fill='#5f9de0')
+        draw.ellipse((24, 29, 28, 33), fill='#25374a')
+        draw.ellipse((36, 29, 40, 33), fill='#25374a')
+        draw.line((26, 38, 38, 38), fill='#4777ad', width=2)
+        return image
+
+    def _set_window_icon(self, window):
+        from PIL import Image, ImageTk
+        source = self._window_icon_image()
+        icons = [ImageTk.PhotoImage(source.resize((size, size), Image.Resampling.LANCZOS), master=window)
+                 for size in (16, 32, 64)]
+        self.window_icons.extend(icons)
+        window.iconphoto(True, *icons)
+        if os.name == 'nt':
+            # Windows may retain a generic title-bar icon with Tk iconphoto.
+            # An ICO supplies explicit small and large native icon resources.
+            icon_path = APP_DIR / 'robot-ring.ico'
+            if not getattr(self, '_native_icon_saved', False):
+                APP_DIR.mkdir(parents=True, exist_ok=True)
+                source.save(icon_path, format='ICO', sizes=[(16, 16), (32, 32), (64, 64)])
+                self._native_icon_saved = True
+            window.iconbitmap(str(icon_path))
 
     def _icon_image(self):
-        from PIL import Image, ImageDraw
+        from PIL import Image, ImageDraw, ImageFont
         image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         found, choice = self._selected()
@@ -129,9 +162,18 @@ class DesktopApplication:
         if percent is not None and status == 'live':
             draw.arc((5, 5, 59, 59), start=-90, end=-90 + round(percent * 3.6), fill=fill, width=7)
         else:
-            # Gray question mark means stale, pending, or unknown. It never
-            # implies a healthy quota remaining value.
-            draw.text((25, 18), '?', fill='#d0d0d0')
+            # Broken gray arcs are deliberately distinct from a live donut.
+            for start in range(-90, 270, 60):
+                draw.arc((5, 5, 59, 59), start=start, end=start + 34, fill='#a0a0a0', width=7)
+        code = tray_code(found[0], found[1]) if found else '?'
+        # Keep text legible against both dark and light Windows tray themes.
+        draw.ellipse((16, 16, 48, 48), fill='#24313d')
+        try:
+            font = ImageFont.truetype(str(Path(os.environ.get('WINDIR', r'C:\Windows')) / 'Fonts' / 'segoeuib.ttf'), 24)
+        except OSError:
+            font = ImageFont.load_default()
+        x0, y0, x1, y1 = draw.textbbox((0, 0), code, font=font)
+        draw.text(((64 - (x1 - x0)) / 2 - x0, (64 - (y1 - y0)) / 2 - y0 - 1), code, fill='#f2f2f2', font=font)
         return image
 
     def _update_tray(self):
@@ -167,6 +209,7 @@ class DesktopApplication:
         import tkinter as tk
         from tkinter import ttk
         popup = tk.Toplevel(self.root)
+        self._set_window_icon(popup)
         popup.title('Agent Quota Monitor Windows')
         popup.geometry(self.settings.load().get('desktopPopupGeometry', '680x320'))
         popup.protocol('WM_DELETE_WINDOW', popup.withdraw)
@@ -184,6 +227,8 @@ class DesktopApplication:
             body.column(column, width=widths[column], minwidth=42, stretch=column == 'account')
         body.grid(row=1, column=0, sticky='nsew', padx=6, pady=2)
         body.bind('<<TreeviewSelect>>', self._choose_popup_row)
+        body.bind('<Motion>', self._hover_popup_row)
+        body.bind('<Leave>', lambda *_: self._set_popup_detail())
         popup.rowconfigure(1, weight=1)
         controls = tk.Frame(popup)
         controls.grid(row=2, column=0, sticky='ew', padx=6, pady=(2, 6))
@@ -195,7 +240,10 @@ class DesktopApplication:
         scale = tk.Scale(controls, from_=35, to=100, orient='horizontal', label='Opacity', command=self._set_opacity)
         scale.set(max(35, min(100, opacity)))
         scale.pack(side='right')
+        detail = tk.Label(popup, anchor='w', justify='left', height=2, font=('Segoe UI', 9), foreground='#4b5563')
+        detail.grid(row=3, column=0, sticky='ew', padx=6, pady=(0, 2))
         self.popup, self.popup_body = popup, body
+        self.popup_detail = detail
         self._remember_geometry('desktopPopupGeometry', popup)
         self._refresh_popup()
 
@@ -227,7 +275,23 @@ class DesktopApplication:
                         self.popup_body.selection_set(f'quota-{index}')
                         break
         self._repainting_popup = False
+        self._set_popup_detail()
         self._update_tray()
+
+    def _set_popup_detail(self, row=None, heading='Selected'):
+        if not row:
+            selected = self.popup_body.selection() if self.popup_body else ()
+            if selected and selected[0] != 'empty':
+                row = self.popup_rows[int(selected[0].rsplit('-', 1)[1])]
+        if row:
+            self.popup_detail.config(text=f"{heading}  {row['group']} | {row['window']} | {row['exact']} remaining | {row['status'].upper()} | reset {row['reset']}\n{row['account']} | last success {row['lastSuccess']}")
+        else:
+            self.popup_detail.config(text='Select a quota row to use it in the tray and floating monitor.')
+
+    def _hover_popup_row(self, event):
+        item = self.popup_body.identify_row(event.y)
+        if item and item != 'empty':
+            self._set_popup_detail(self.popup_rows[int(item.rsplit('-', 1)[1])], heading='Details')
 
     def _choose_popup_row(self, *_):
         if getattr(self, '_repainting_popup', False):
@@ -238,6 +302,7 @@ class DesktopApplication:
         index = int(selection[0].rsplit('-', 1)[1])
         row = self.popup_rows[index]
         self._remember_selection(dict(accountId=row['accountId'], groupId=row['groupId'], bucketId=row['bucketId']))
+        self._set_popup_detail(row)
         self._refresh_floating()
         self._update_tray()
 
@@ -256,6 +321,7 @@ class DesktopApplication:
         if not self.floating:
             floating = tk.Toplevel(self.root)
             floating.title('Quota')
+            self._set_window_icon(floating)
             floating.geometry(self.settings.load().get('desktopFloatingGeometry', '300x115'))
             floating.attributes('-topmost', True)
             floating.protocol('WM_DELETE_WINDOW', self._toggle_floating_ui)
@@ -316,6 +382,7 @@ class DesktopApplication:
         import tkinter as tk
         self.start_services()
         self.root = tk.Tk()
+        self._set_window_icon(self.root)
         self.root.withdraw()
         self._build_popup()
         self._start_tray()

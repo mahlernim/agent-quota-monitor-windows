@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from quota.desktop_views import compact_group, compact_window, display_remaining, popup_rows, reset_label, selected_window
+from quota.desktop_views import compact_group, compact_window, display_remaining, exact_remaining, last_success_label, popup_rows, reset_label, selected_window, tray_code
 from quota.desktop import DesktopSettings
 
 
@@ -54,6 +54,17 @@ class DesktopViewTests(unittest.TestCase):
         self.assertEqual(compact_group('Claude and GPT models'), 'Claude-GPT')
         self.assertEqual(compact_window({'windowSeconds': 18000}), '5h')
         self.assertEqual(compact_window({'windowSeconds': 604800}), '7d')
+
+    def test_tray_codes_and_exact_tooltip_values_keep_provider_identity(self):
+        self.assertEqual(tray_code({'provider': 'codex'}, {}), 'CX')
+        self.assertEqual(tray_code({'provider': 'claude'}, {}), 'CL')
+        self.assertEqual(tray_code({'provider': 'antigravity'}, {'label': 'Gemini Models'}), 'GM')
+        self.assertEqual(tray_code({'provider': 'antigravity'}, {'label': 'Claude and GPT models'}), 'CG')
+        self.assertEqual(tray_code({'provider': 'copilot'}, {}), 'CP')
+        self.assertEqual(exact_remaining({'remaining': 82.5}), '82.5%')
+        self.assertEqual(exact_remaining({'remaining': float('nan')}), 'Unknown')
+        self.assertEqual(exact_remaining({'remaining': 12.3456789}), '12.3456789%')
+        self.assertEqual(last_success_label(0), '1970-01-01 00:00 UTC')
 
     def test_reset_label_does_not_claim_replenishment(self):
         now = datetime(2026, 9, 20, tzinfo=timezone.utc)

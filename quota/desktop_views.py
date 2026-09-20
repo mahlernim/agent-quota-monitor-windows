@@ -36,6 +36,16 @@ def display_remaining(bucket):
     return 'Unknown', None
 
 
+def exact_remaining(bucket):
+    """Keep provider precision for native tooltip text without inventing it."""
+    value = bucket.get('remaining')
+    if bucket.get('unlimited') is True:
+        return 'Unlimited'
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and 0 <= value <= 100:
+        return str(value) + '%'
+    return 'Unknown'
+
+
 def reset_label(value, now=None):
     if not value:
         return 'Reset unknown'
@@ -68,6 +78,32 @@ def compact_window(bucket):
     return bucket.get('label', 'Window')
 
 
+def last_success_label(value):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return 'Never'
+    try:
+        return datetime.fromtimestamp(value, timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+    except (OverflowError, OSError, ValueError):
+        return 'Unknown'
+
+
+def tray_code(account, group):
+    provider = account.get('provider')
+    if provider == 'codex':
+        return 'CX'
+    if provider == 'claude':
+        return 'CL'
+    if provider == 'copilot':
+        return 'CP'
+    if provider == 'antigravity':
+        label = group.get('label', '')
+        if label == 'Gemini Models':
+            return 'GM'
+        if label == 'Claude and GPT models':
+            return 'CG'
+    return '?'
+
+
 def popup_rows(snapshot):
     """Flatten live and stale windows without inventing quota values."""
     rows = []
@@ -76,6 +112,7 @@ def popup_rows(snapshot):
         rows.append(dict(accountId=account.get('id'), groupId=group.get('id'), bucketId=bucket.get('id'),
                          provider=account.get('provider', 'Unknown'), account=account.get('label', 'Unreported account'),
                          group=compact_group(group.get('label', 'Unreported group')), window=compact_window(bucket),
-                         remaining=remaining, numeric=numeric, status=account.get('status', 'pending'),
-                         reset=reset_label(bucket.get('resetsAt')).replace('Resets in ', '')))
+                         remaining=remaining, exact=exact_remaining(bucket), numeric=numeric, status=account.get('status', 'pending'),
+                         reset=reset_label(bucket.get('resetsAt')).replace('Resets in ', ''),
+                         lastSuccess=last_success_label(account.get('lastSuccess'))))
     return rows

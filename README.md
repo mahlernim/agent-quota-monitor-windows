@@ -12,7 +12,9 @@ Early development prototype. Source is available for testing, but there is no si
 - A compact popup of monitored quota windows.
 - An optional floating monitor with adjustable opacity.
 - A full local dashboard with account ordering, removal, connection actions, and provider selection.
-- Prominent quota remaining bars with thin time-remaining tracks for valid five-hour and weekly windows. Pace compares remaining quota with an even consumption schedule, not a usage prediction.
+- Compact paired donuts with a thick quota ring and a thin time ring for valid five-hour and weekly windows. Remaining mode compares quota remaining with time remaining. Used mode compares quota used with time elapsed. Pace compares quota with an even consumption schedule, not a usage prediction.
+
+Hover or focus a quota to see precise percentages, reset times, and pace details. Quota values and stale status stay visible without opening details.
 
 Unknown and stale readings are explicit. Direct Claude and Claude supplied through Antigravity are separate quotas. Missing windows never imply unlimited usage.
 

@@ -46,7 +46,7 @@ def handler(monitor, port, connections=None):
                 if connections:
                     data['connections'] = connections.snapshot()
                 return self.send(200, json.dumps(data, allow_nan=False).encode())
-            files = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8')}
+            files = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8'), '/icon.svg': ('icon.svg', 'image/svg+xml')}
             if self.path not in files:
                 return self.send(404, b'{}')
             path, mime = files[self.path]
