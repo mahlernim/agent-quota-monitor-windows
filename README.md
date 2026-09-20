@@ -9,8 +9,8 @@ Early development beta. Source and a portable Windows build workflow are availab
 ## Views
 
 - A tray donut for a selected account, quota group, and window.
-- A compact popup of monitored quota windows.
-- An optional floating monitor with adjustable opacity.
+- A compact native main window with grouped quota donuts.
+- An optional frameless floating strip of multiple pinned quota donuts, with adjustable opacity.
 - A full local dashboard with account ordering, removal, connection actions, and provider selection.
 - Compact paired donuts with a thick quota ring and a thin time ring for valid five-hour and weekly windows. Remaining mode compares quota remaining with time remaining. Used mode compares quota used with time elapsed. Pace compares quota with an even consumption schedule, not a usage prediction.
 

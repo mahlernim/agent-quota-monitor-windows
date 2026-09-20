@@ -16,6 +16,7 @@ import webbrowser
 
 from .connections import Connections
 from .desktop_views import compact_group, compact_window, display_remaining, exact_remaining, popup_rows, selected_window, tray_code
+from .desktop_widgets import QuotaGrid
 from .monitor import Monitor
 from .server import handler
 from .vault import Vault
@@ -229,28 +230,17 @@ class DesktopApplication:
 
     def _build_popup(self):
         import tkinter as tk
-        from tkinter import ttk
         popup = tk.Toplevel(self.root)
         self._set_window_icon(popup)
         popup.title('Agent Quota Monitor Windows')
-        popup.geometry(self.settings.load().get('desktopPopupGeometry', '680x320'))
+        popup.geometry(self.settings.load().get('desktopPopupGeometry', '760x480'))
         popup.protocol('WM_DELETE_WINDOW', popup.withdraw)
         popup.bind('<Escape>', lambda *_: popup.withdraw())
         popup.columnconfigure(0, weight=1)
-        title = tk.Label(popup, text='Agent Quota Monitor Windows', font=('Segoe UI', 11, 'bold'))
+        title = tk.Label(popup, text='Outer quota · Inner time  |  Click tray · ★/Space pin', font=('Segoe UI', 9, 'bold'))
         title.grid(row=0, column=0, sticky='w', padx=6, pady=(6, 2))
-        columns = ('status', 'provider', 'account', 'group', 'window', 'left', 'reset')
-        body = ttk.Treeview(popup, columns=columns, show='headings', selectmode='browse', height=10)
-        headings = {'status': 'Status', 'provider': 'Provider', 'account': 'Account', 'group': 'Group',
-                    'window': 'Window', 'left': 'Left', 'reset': 'Reset'}
-        widths = {'status': 52, 'provider': 80, 'account': 150, 'group': 115, 'window': 65, 'left': 50, 'reset': 80}
-        for column in columns:
-            body.heading(column, text=headings[column])
-            body.column(column, width=widths[column], minwidth=42, stretch=column == 'account')
+        body = QuotaGrid(popup, self._choose_popup_row, self._hover_popup_row, self._toggle_floating_pin)
         body.grid(row=1, column=0, sticky='nsew', padx=6, pady=2)
-        body.bind('<<TreeviewSelect>>', self._choose_popup_row)
-        body.bind('<Motion>', self._hover_popup_row)
-        body.bind('<Leave>', lambda *_: self._set_popup_detail())
         popup.rowconfigure(1, weight=1)
         controls = tk.Frame(popup)
         controls.grid(row=2, column=0, sticky='ew', padx=6, pady=(2, 6))
@@ -272,61 +262,72 @@ class DesktopApplication:
     def _refresh_popup(self):
         if not self.popup:
             return
-        previous = self.popup_body.selection()
         selected_key = self.settings.load().get('desktopSelection')
-        self._repainting_popup = True
-        for item in self.popup_body.get_children():
-            self.popup_body.delete(item)
         rows = popup_rows(self.monitor.snapshot())
         self.popup_rows = rows
-        if not rows:
-            self.popup_body.insert('', 'end', iid='empty', values=('Pending', '', 'No readable quota windows yet', '', '', '', ''))
-        for index, row in enumerate(rows):
-            item = f'quota-{index}'
-            self.popup_body.insert('', 'end', iid=item, values=(row['status'].upper(), row['provider'], row['account'], row['group'], row['window'], row['remaining'], row['reset']))
-            key = dict(accountId=row['accountId'], groupId=row['groupId'], bucketId=row['bucketId'])
-            if key == selected_key:
-                self.popup_body.selection_set(item)
-        # Keep a visible selection for the current default without making it a
-        # persistent choice. Only an explicit row click calls _remember_selection.
-        if not self.popup_body.selection() and rows:
+        # Keep a visible selection for the current default without persisting it.
+        if not selected_key and rows:
             found, choice = self._selected()
             if found:
-                for index, row in enumerate(rows):
-                    if choice == dict(accountId=row['accountId'], groupId=row['groupId'], bucketId=row['bucketId']):
-                        self.popup_body.selection_set(f'quota-{index}')
-                        break
-        self._repainting_popup = False
+                selected_key = choice
+        self.popup_body.set_rows(rows, selected_key, self._floating_selections())
         self._set_popup_detail()
         self._update_tray()
 
     def _set_popup_detail(self, row=None, heading='Selected'):
         if not row:
-            selected = self.popup_body.selection() if self.popup_body else ()
-            if selected and selected[0] != 'empty':
-                row = self.popup_rows[int(selected[0].rsplit('-', 1)[1])]
+            selected = self.popup_body.selected if self.popup_body else None
+            if selected:
+                row = next((item for item in self.popup_rows if QuotaGrid.key(item) == selected), None)
         if row:
-            self.popup_detail.config(text=f"{heading}  {row['group']} | {row['window']} | {row['exact']} remaining | {row['status'].upper()} | reset {row['reset']}\n{row['account']} | last success {row['lastSuccess']}")
+            self.popup_detail.config(text=f"{heading}  {row['group']} | {row['window']} | {row['exact']} remaining | {row['status'].upper()} | reset {row['reset']} | {row.get('pace', 'pace unknown')}\n{row['account']} | last success {row['lastSuccess']}")
         else:
             self.popup_detail.config(text='Select a quota row to use it in the tray and floating monitor.')
 
-    def _hover_popup_row(self, event):
-        item = self.popup_body.identify_row(event.y)
-        if item and item != 'empty':
-            self._set_popup_detail(self.popup_rows[int(item.rsplit('-', 1)[1])], heading='Details')
+    def _hover_popup_row(self, row):
+        self._set_popup_detail(row, heading='Details') if row else self._set_popup_detail()
 
-    def _choose_popup_row(self, *_):
-        if getattr(self, '_repainting_popup', False):
-            return
-        selection = self.popup_body.selection()
-        if not selection or selection[0] == 'empty' or not getattr(self, 'popup_rows', None):
-            return
-        index = int(selection[0].rsplit('-', 1)[1])
-        row = self.popup_rows[index]
+    def _choose_popup_row(self, row):
         self._remember_selection(dict(accountId=row['accountId'], groupId=row['groupId'], bucketId=row['bucketId']))
         self._set_popup_detail(row)
         self._refresh_floating()
         self._update_tray()
+
+    @staticmethod
+    def _selection_key(row):
+        return dict(accountId=row['accountId'], groupId=row['groupId'], bucketId=row['bucketId'])
+
+    @staticmethod
+    def _normalize_selection(row):
+        if not isinstance(row, dict) or not all(isinstance(row.get(key), str) for key in ('accountId', 'groupId', 'bucketId')):
+            return None
+        return dict(accountId=row['accountId'], groupId=row['groupId'], bucketId=row['bucketId'])
+
+    def _floating_selections(self):
+        preferences = self.settings.load()
+        saved = preferences.get('desktopFloatingSelections')
+        if isinstance(saved, list):
+            return [item for item in (self._normalize_selection(value) for value in saved) if item]
+        # A first-run floating strip follows the tray without overwriting an
+        # explicit empty pinned list or a removed account selection.
+        found, choice = self._selected()
+        return [choice] if found and choice else []
+
+    def _toggle_floating_pin(self, row):
+        key = self._selection_key(row)
+        saved = self._floating_selections()
+        if key in saved:
+            saved = [item for item in saved if item != key]
+        else:
+            saved.append(key)
+        self.settings.save({'desktopFloatingSelections': saved})
+        self._refresh_popup()
+        self._refresh_floating()
+
+    def _pinned_rows(self):
+        rows = self.popup_rows if getattr(self, 'popup_rows', None) is not None else popup_rows(self.monitor.snapshot())
+        keys = self._floating_selections()
+        return [row for row in rows if self._selection_key(row) in keys]
 
     def _set_opacity(self, value):
         opacity = max(35, min(100, int(float(value))))
@@ -337,19 +338,28 @@ class DesktopApplication:
     def _toggle_floating_ui(self):
         import tkinter as tk
         if self.floating and self.floating.winfo_viewable():
+            self._clear_floating_hover()
             self.floating.withdraw()
             self.settings.save({'desktopFloating': False})
             return
         if not self.floating:
+            from .floating_widgets import FloatingQuotaStrip
             floating = tk.Toplevel(self.root)
             floating.title('Quota')
             self._set_window_icon(floating)
-            floating.geometry(self.settings.load().get('desktopFloatingGeometry', '300x115'))
+            floating.overrideredirect(True)
+            floating.geometry(self.settings.load().get('desktopFloatingGeometry', '180x100'))
             floating.attributes('-topmost', True)
             floating.protocol('WM_DELETE_WINDOW', self._toggle_floating_ui)
-            label = tk.Label(floating, font=('Segoe UI', 11, 'bold'), justify='left', anchor='w')
-            label.pack(fill='both', expand=True, padx=12, pady=10)
-            self.floating, self.floating_label = floating, label
+            strip = FloatingQuotaStrip(floating, self._floating_hover, self._clear_floating_hover)
+            strip.pack(fill='both', expand=True)
+            menu = tk.Menu(floating, tearoff=0)
+            menu.add_command(label='Show main monitor', command=self.show_popup)
+            menu.add_command(label='Hide floating', command=self._toggle_floating_ui)
+            strip.bind('<Button-3>', lambda event: menu.tk_popup(event.x_root, event.y_root), add='+')
+            strip.bind('<ButtonPress-1>', self._begin_floating_drag, add='+')
+            strip.bind('<B1-Motion>', self._drag_floating, add='+')
+            self.floating, self.floating_strip = floating, strip
             self._remember_geometry('desktopFloatingGeometry', floating)
         opacity = self.settings.load().get('desktopOpacity', 85)
         self.floating.attributes('-alpha', max(35, min(100, opacity)) / 100)
@@ -360,14 +370,61 @@ class DesktopApplication:
     def _refresh_floating(self):
         if not self.floating:
             return
-        found, choice = self._selected()
-        if found:
-            account, group, bucket = found
-            remaining, _ = display_remaining(bucket)
-            stale = 'STALE ' if account.get('status') == 'stale' else ''
-            self.floating_label.config(text=f'{stale}{remaining}  {account.get("provider", "provider")}  {compact_window(bucket)}\n{account.get("label", "Unreported account")}  |  {compact_group(group.get("label", "Quota"))}')
-        else:
-            self.floating_label.config(text='Quota unavailable\nOpen dashboard to connect')
+        self.floating_strip.set_rows(self._pinned_rows())
+        self.floating.update_idletasks()
+        width = self.floating_strip.requested_width
+        height = max(68, self.floating_strip.requested_height)
+        x, y = self.floating.winfo_x(), self.floating.winfo_y()
+        self.floating.geometry(f'{width}x{height}{x:+d}{y:+d}')
+
+    def _begin_floating_drag(self, event):
+        self._clear_floating_hover()
+        self._floating_drag = (event.x_root - self.floating.winfo_x(), event.y_root - self.floating.winfo_y())
+
+    def _drag_floating(self, event):
+        if hasattr(self, '_floating_drag'):
+            x, y = self._floating_drag
+            self.floating.geometry(f'{event.x_root - x:+d}{event.y_root - y:+d}')
+
+    def _floating_hover(self, row):
+        self._hover_popup_row(row)
+        key = self._selection_key(row)
+        if getattr(self, '_floating_tip_key', None) == key:
+            return
+        if getattr(self, '_floating_tip_after', None):
+            self.root.after_cancel(self._floating_tip_after)
+        self._floating_tip_key = key
+        self._floating_tip_after = self.root.after(400, lambda: self._show_floating_tip(row, key))
+
+    def _show_floating_tip(self, row, key):
+        self._floating_tip_after = None
+        if getattr(self, '_floating_tip_key', None) != key or not self.floating.winfo_viewable():
+            return
+        import tkinter as tk
+        if getattr(self, 'floating_tip', None):
+            self.floating_tip.destroy()
+        tip = tk.Toplevel(self.floating)
+        tip.overrideredirect(True)
+        tip.attributes('-topmost', True)
+        tk.Label(tip, text=f"{row['account']} | {row['group']}\n{row['window']} | {row['exact']} | reset {row['reset']} | {row.get('pace', 'pace unknown')}",
+                 background='#fffde7', foreground='#263442', relief='solid', borderwidth=1,
+                 font=('Segoe UI', 8), justify='left', padx=6, pady=4).pack()
+        x, y = self.floating.winfo_pointerxy()
+        tip.update_idletasks()
+        x = min(x + 12, self.floating.winfo_screenwidth() - tip.winfo_reqwidth() - 4)
+        y = min(y + 12, self.floating.winfo_screenheight() - tip.winfo_reqheight() - 4)
+        tip.geometry(f'+{max(4, x)}+{max(4, y)}')
+        self.floating_tip = tip
+
+    def _clear_floating_hover(self):
+        self._set_popup_detail()
+        self._floating_tip_key = None
+        if getattr(self, '_floating_tip_after', None):
+            self.root.after_cancel(self._floating_tip_after)
+            self._floating_tip_after = None
+        if getattr(self, 'floating_tip', None):
+            self.floating_tip.destroy()
+            self.floating_tip = None
 
     def _remember_geometry(self, key, window):
         timer = {'id': None}
@@ -383,6 +440,7 @@ class DesktopApplication:
                 event = self.events.get_nowait()
                 if event == 'quit':
                     self.stop.set()
+                    self._clear_floating_hover()
                     if self.tray:
                         self.tray.stop()
                     self.root.destroy()
@@ -393,7 +451,9 @@ class DesktopApplication:
                     self._toggle_floating_ui()
                 elif event == 'hide':
                     self.popup.withdraw()
-                    if self.floating: self.floating.withdraw()
+                    if self.floating:
+                        self._clear_floating_hover()
+                        self.floating.withdraw()
                 if event in ('refresh', 'show-popup'):
                     self._refresh_popup(); self._refresh_floating()
         except queue.Empty:

@@ -2,8 +2,9 @@ import unittest
 import importlib.util
 from datetime import datetime, timedelta, timezone
 
-from quota.desktop_views import compact_group, compact_window, display_remaining, exact_remaining, last_success_label, popup_rows, reset_label, selected_window, tray_code
+from quota.desktop_views import compact_group, compact_window, display_remaining, exact_remaining, last_success_label, popup_rows, quota_pace, reset_label, selected_window, tray_code
 from quota.desktop import DARK_TRAY_TEXT, LIGHT_TRAY_TEXT, DesktopApplication, DesktopSettings, tray_text_color
+from quota.desktop_widgets import QuotaGrid
 
 
 class Vault:
@@ -98,6 +99,49 @@ class DesktopViewTests(unittest.TestCase):
         self.assertEqual(vault.value['desktopOpacity'], 72)
         self.assertEqual(vault.value['enabledProviders'], ['codex'])
         self.assertEqual(vault.value['accountOrder'], ['keep'])
+
+    def test_native_quota_grid_smoke(self):
+        import tkinter as tk
+        root = tk.Tk(); root.withdraw()
+        try:
+            grid = QuotaGrid(root, lambda row: None, lambda row: None, lambda row: None)
+            grid.pack(fill='both', expand=True)
+            grid.set_rows([{'accountId': 'a', 'groupId': 'g', 'bucketId': '5h', 'provider': 'codex', 'account': 'one', 'group': 'Codex', 'window': '5h', 'remaining': '80%', 'numeric': 80, 'timeRemaining': 50, 'status': 'live', 'reset': '2h', 'pace': 'on pace'}])
+            root.update_idletasks()
+            self.assertEqual(len(grid.cards), 1)
+        finally:
+            root.destroy()
+
+    def test_native_pace_matches_remaining_schedule(self):
+        now = datetime(2026, 9, 20, tzinfo=timezone.utc)
+        bucket = {'remaining': 70, 'windowSeconds': 18000,
+                  'resetsAt': (now + timedelta(hours=2.5)).isoformat()}
+        value, text = quota_pace(bucket, now=now)
+        self.assertEqual(value, 50)
+        self.assertIn('20.0 points under pace', text)
+        self.assertIsNone(quota_pace(bucket, live=False, now=now)[0])
+        for reset in (now, now+timedelta(hours=6)):
+            self.assertIsNone(quota_pace(dict(bucket, resetsAt=reset.isoformat()), now=now)[0])
+        self.assertIsNone(quota_pace(dict(bucket, remaining=float('nan')), now=now)[0])
+        self.assertIsNone(quota_pace(dict(bucket, windowSeconds=None), now=now)[0])
+
+    def test_floating_pins_are_independent_of_tray_and_keep_explicit_empty(self):
+        app = DesktopApplication.__new__(DesktopApplication)
+        vault = Vault()
+        app.settings = DesktopSettings(vault)
+        tray = dict(accountId='tray', groupId='g', bucketId='week')
+        app._selected = lambda: (({}, {}, {}), tray)
+        app._refresh_popup = lambda: None
+        app._refresh_floating = lambda: None
+        self.assertEqual(app._floating_selections(), [tray])
+        app.settings.save({'desktopFloatingSelections': []})
+        self.assertEqual(app._floating_selections(), [])
+        other = dict(accountId='other', groupId='g', bucketId='five')
+        app._toggle_floating_pin(other)
+        self.assertEqual(app._floating_selections(), [other])
+        self.assertNotIn('desktopSelection', vault.value)
+        app._toggle_floating_pin(other)
+        self.assertEqual(app._floating_selections(), [])
 
 
 if __name__ == '__main__':

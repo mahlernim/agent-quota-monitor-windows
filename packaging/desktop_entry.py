@@ -23,6 +23,16 @@ def self_test(output):
         assert app._window_icon_image().size == (64, 64)
         app._selected = lambda: (({'provider': 'codex', 'status': 'live'}, {'label': 'Codex'}, {'remaining': 50}), None)
         assert app._icon_image().size == (64, 64)
+        from quota.desktop_widgets import QuotaGrid
+        from quota.floating_widgets import FloatingQuotaStrip
+        rows = [dict(accountId='sample', groupId='quota', bucketId='week', provider='codex',
+                     account='Sample account', group='Codex', window='7d', remaining='50%',
+                     numeric=50, timeRemaining=25, status='live', code='CX')]
+        grid = QuotaGrid(root, lambda row: None, lambda row: None, lambda row: None)
+        grid.set_rows(rows, selected=rows[0], pinned=rows)
+        strip = FloatingQuotaStrip(root)
+        strip.set_rows(rows)
+        assert strip.requested_width > 0
         root.update()
     finally:
         root.destroy()

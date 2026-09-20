@@ -104,15 +104,39 @@ def tray_code(account, group):
     return '?'
 
 
+def quota_pace(bucket, live=True, now=None):
+    """Compare quota remaining and time remaining only for known fixed windows."""
+    duration = bucket.get('windowSeconds')
+    if duration not in (18000, 604800):
+        return None, 'Time window not reported'
+    value = bucket.get('remaining')
+    if not live or bucket.get('available') is False:
+        return None, 'Pace unavailable until quota is live'
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or not 0 <= value <= 100:
+        return None, 'Pace unavailable without quota remaining'
+    try:
+        reset = datetime.fromisoformat(bucket['resetsAt'].replace('Z', '+00:00'))
+        seconds = (reset - (now or datetime.now(timezone.utc))).total_seconds()
+        if not 0 < seconds <= duration:
+            return None, 'Reset time is outside the current window'
+    except (KeyError, AttributeError, TypeError, ValueError):
+        return None, 'Reset time not reported'
+    remaining = seconds / duration * 100
+    difference = value - remaining
+    return remaining, f'{remaining:.1f}% time left | {abs(difference):.1f} points {"under" if difference >= 0 else "over"} pace'
+
+
 def popup_rows(snapshot):
     """Flatten live and stale windows without inventing quota values."""
     rows = []
     for account, group, bucket in _windows(snapshot):
         remaining, numeric = display_remaining(bucket)
+        time_remaining, pace = quota_pace(bucket, account.get('status') == 'live')
         rows.append(dict(accountId=account.get('id'), groupId=group.get('id'), bucketId=bucket.get('id'),
                          provider=account.get('provider', 'Unknown'), account=account.get('label', 'Unreported account'),
                          group=compact_group(group.get('label', 'Unreported group')), window=compact_window(bucket),
                          remaining=remaining, exact=exact_remaining(bucket), numeric=numeric, status=account.get('status', 'pending'),
+                         code=tray_code(account, group), timeRemaining=time_remaining, pace=pace,
                          reset=reset_label(bucket.get('resetsAt')).replace('Resets in ', ''),
                          lastSuccess=last_success_label(account.get('lastSuccess'))))
     return rows
