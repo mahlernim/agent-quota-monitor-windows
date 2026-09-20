@@ -2,7 +2,7 @@
 
 Keep an eye on your AI coding quotas, reset times, and how fast you are spending them, straight from the Windows tray.
 
-**[Download v0.2.0-beta.4](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.0-beta.4)** (`agent-quota-monitor-windows-0.2.0-beta.4-win-x64.zip`, Windows x64)
+**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0-beta.5/agent-quota-monitor-windows-0.2.0-beta.5-setup-win-x64.exe)** · [Portable ZIP and release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.0-beta.5)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -14,12 +14,14 @@ Keep an eye on your AI coding quotas, reset times, and how fast you are spending
 
 ## Quick start
 
-1. Download the ZIP from the release page above.
-2. Extract **all** files into a permanent folder, for example `C:\Tools\AgentQuotaMonitor`. Do not run the app from inside the ZIP.
-3. Run `agent-quota-monitor-windows.exe`.
+1. Download and run the Windows x64 installer above.
+2. Follow the setup wizard. No administrator rights are needed.
+3. Open **Agent Quota Monitor** from the Start menu.
 4. Open **Settings**, choose the providers you want, and connect any that are not detected yet.
 
-This is a portable app, not a setup installer. Python and .NET runtimes are bundled. You still need the official coding clients for the providers you use.
+The installer creates a Start menu shortcut and optionally a desktop shortcut. Python and .NET runtimes are bundled. You still need the official coding clients for the providers you use.
+
+Prefer a portable app? Download the ZIP, extract **all** files into a permanent folder, and run `agent-quota-monitor-windows.exe`. Do not run it from inside the ZIP.
 
 This beta is unsigned. Windows may display an unknown-publisher warning.
 
@@ -64,6 +66,16 @@ A gray, stale reading means the value could not be refreshed. It does not mean z
 ## Start with Windows
 
 Settings has an optional **Start with Windows (in the tray)** switch. It is off by default and needs no administrator rights. Because the app is portable, keep its folder in a permanent place. If you need to move or delete the folder, turn the switch off first, then turn it on again from the new location.
+
+## Updates
+
+The monitor checks GitHub shortly after startup and at most once every 24 hours. A quiet banner offers **Download update**, **Later**, **Skip this version**, and **Release notes**. It never interrupts your work or installs anything automatically.
+
+Later postpones reminders for a day. Skip this version hides that release across restarts. **Check for updates** in Settings lets you reconsider skipped releases. Settings also lets you disable automatic checks. Stable builds ignore betas; beta builds can receive newer betas or stable releases.
+
+Download update opens the official release page. Quit the monitor, run the new installer, and keep the same installation folder. Settings and account bindings are preserved. Portable users should quit before replacing their extracted files.
+
+Uninstall through Windows Installed apps. App files, shortcuts, and this installation's startup entry are removed. Monitor settings and vendor accounts are preserved.
 
 ## Troubleshooting
 

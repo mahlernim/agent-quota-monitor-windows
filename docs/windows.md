@@ -1,5 +1,9 @@
 # Agent Quota Monitor Windows
 
+The recommended download is the per-user setup executable. It creates a Start menu shortcut and an optional desktop shortcut without administrator rights. Quit the monitor before updating into the same folder. Windows Installed apps provides removal of app files and this installation's startup entry. Monitor settings and vendor credentials are preserved.
+
+Settings offers Check for updates and an automatic-check toggle. Checks contact the public GitHub releases API without account credentials, shortly after launch and at most daily. Failures are silent unless you requested the check. The main-window banner opens the official release page. Later snoozes for a day; Skip this version survives restarts. Manual checks reconsider skipped releases. Stable builds ignore prereleases. Nothing is installed automatically. Non-secret update preferences are stored in your Windows user registry; quota snapshots remain encrypted separately.
+
 This beta uses WPF for the native windows and vector graphics. Extract the entire archive and run `agent-quota-monitor-windows.exe`. The package includes the .NET runtime and a separate local quota reader, so Python and .NET do not need to be installed separately. Keep the `backend` folder and all runtime files beside the executable.
 
 Click a donut to choose the tray quota. Corner stars choose the quotas in the compact floating strip. Hover for details. Drag the floating strip to reposition it, and right-click for its menu and opacity. Close hides the main window. Quit stops the reader if this application started it.

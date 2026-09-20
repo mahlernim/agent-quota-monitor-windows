@@ -22,6 +22,8 @@ public sealed class App : Application
     private Mutex? mutex; private EventWaitHandle? activation; private DispatcherTimer? timer;
     private double opacity = 0.85;
     private DispatcherTimer? placementSave;
+    private UpdateService? updates;
+    private DispatcherTimer? updateTimer;
     [STAThread] public static void Main(string[] args)
     {
         var app = new App();
@@ -52,6 +54,11 @@ public sealed class App : Application
         if (!Environment.GetCommandLineArgs().Contains("--minimized")) main.Show();
         try { await EnsureBackend(); await Poll(); }
         catch { main.Title = "Agent Quota Monitor · backend unavailable"; }
+        updates = new UpdateService();
+        updates.Changed += () => main.SetUpdate(updates);
+        updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        updateTimer.Tick += async (_, _) => { updateTimer.Interval = TimeSpan.FromHours(1); await updates.Check(); };
+        updateTimer.Start();
         timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) }; timer.Tick += async (_, _) => await Poll(); timer.Start();
     }
     private async Task EnsureBackend()
@@ -116,7 +123,7 @@ public sealed class App : Application
     private void ShowAccounts()
     {
         if (accounts != null) { accounts.Activate(); return; }
-        accounts = new AccountsWindow(main!, http, () => _ = Poll());
+        accounts = new AccountsWindow(main!, http, () => _ = Poll(), updates);
         accounts.Closed += (_, _) => accounts = null; accounts.Show();
     }
     private static void OpenWeb() => Process.Start(new ProcessStartInfo("http://127.0.0.1:8765") { UseShellExecute = true });
@@ -129,7 +136,7 @@ public sealed class App : Application
     }
     private async Task Quit()
     {
-        if (stopping) return; stopping = true; timer?.Stop(); placementSave?.Stop(); tray?.Dispose();
+        if (stopping) return; stopping = true; updateTimer?.Stop(); updates?.Dispose(); timer?.Stop(); placementSave?.Stop(); tray?.Dispose();
         if (backend != null && !backend.HasExited)
         {
             await Post("/api/shutdown", new {});

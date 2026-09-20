@@ -23,6 +23,7 @@ public sealed class AccountsWindow : Window
         ["copilot"] = "GitHub Copilot"
     };
 
+    private readonly UpdateService? _updates;
     private readonly HttpClient _http;
     private readonly Action _changed;
     private readonly Dictionary<string, CheckBox> _providerChecks = [];
@@ -52,8 +53,9 @@ public sealed class AccountsWindow : Window
     private string? _activeJobId;
     private string _accountsSignature = string.Empty;
 
-    public AccountsWindow(Window owner, HttpClient http, Action changed)
+    internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null)
     {
+        _updates = updates;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _changed = changed ?? throw new ArgumentNullException(nameof(changed));
@@ -101,6 +103,20 @@ public sealed class AccountsWindow : Window
             catch { startup.IsChecked = false; _message.Text = "Could not change Windows startup. Check your Windows account permissions."; }
         };
         body.Children.Add(startup);
+        if (_updates is not null) {
+            var auto = new CheckBox { Content = "Check for updates automatically", IsChecked = _updates.Preferences.Automatic, Margin = new Thickness(0, 3, 0, 3) };
+            auto.Click += (_, _) => _updates.SetAutomatic(auto.IsChecked == true);
+            body.Children.Add(auto);
+            var check = new Button { Content = "Check for updates", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(7, 3, 7, 3) };
+            check.Click += async (_, _) => await _updates.Check(true);
+            body.Children.Add(check);
+            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 5) };
+            body.Children.Add(status);
+            void UpdateStatus() { check.IsEnabled = !_updates.Busy; status.Text = $"Installed {UpdateService.InstalledVersion} · " + _updates.Status; }
+            _updates.Changed += UpdateStatus;
+            Closed += (_, _) => _updates.Changed -= UpdateStatus;
+            UpdateStatus();
+        }
         body.Children.Add(new Separator { Margin = new Thickness(0, 2, 0, 8) });
         body.Children.Add(new TextBlock
         {

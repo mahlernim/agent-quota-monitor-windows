@@ -12,6 +12,7 @@ namespace AgentQuotaMonitor;
 /// <summary>Compact native WPF quota monitor. The host owns polling and persistence.</summary>
 public sealed class MainWindow : Window
 {
+    private readonly WrapPanel _updateBanner = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(8, 0, 8, 4) };
     private readonly Action<QuotaItem> _selectTray;
     private readonly Action<QuotaItem> _togglePin;
     private readonly WrapPanel _groups = new() { Margin = new Thickness(6) };
@@ -42,8 +43,23 @@ public sealed class MainWindow : Window
         toolbar.Children.Add(Button("Floating", showFloating));
         toolbar.Children.Add(Button("Settings", accounts));
         toolbar.Children.Add(Button("Quit", quit));
+        DockPanel.SetDock(_updateBanner, Dock.Top); root.Children.Add(_updateBanner);
         _scroll.Content = _groups;
         root.Children.Add(_scroll);
+    }
+
+    internal void SetUpdate(UpdateService updates)
+    {
+        _updateBanner.Children.Clear();
+        var release = updates.Available;
+        _updateBanner.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;
+        if (release is null) return;
+        _updateBanner.Children.Add(Label($"Version {release.Tag.TrimStart('v')} is available", true));
+        void Open() => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(release.Url) { UseShellExecute = true });
+        _updateBanner.Children.Add(Button("Download update", Open));
+        _updateBanner.Children.Add(Button("Later", updates.Later));
+        _updateBanner.Children.Add(Button("Skip this version", updates.Skip));
+        _updateBanner.Children.Add(Button("Release notes", Open));
     }
 
     public void SetData(IReadOnlyList<QuotaItem> items, string? selectedKey, ISet<string> pins)

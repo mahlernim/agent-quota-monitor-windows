@@ -24,4 +24,6 @@ Documentation images render the same native controls with synthetic sample data.
 
 ## Contributions
 
+Build the installer with `./Build-Installer.ps1 -BundleDirectory <portable-build-folder> -Version <version>` after installing Inno Setup 6. Validate installation, upgrades, removal, and preservation of settings before publishing. Run update policy tests with `dotnet run --project tests/native-updates/UpdateTests.csproj`.
+
 Include Windows version, app version, provider names, and sanitized error categories in issues. Never include credentials, authorization codes, private provider files, or personal quota screenshots. See [provider interfaces](provider-evidence.md) and [third-party notices](../THIRD-PARTY-NOTICES.md).

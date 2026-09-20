@@ -19,3 +19,6 @@ work/
 .dotnet/
 native/bin/
 native/obj/
+
+tests/native-updates/bin/
+tests/native-updates/obj/
