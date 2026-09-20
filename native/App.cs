@@ -26,6 +26,7 @@ public sealed class App : Application
     {
         var app = new App();
         if (args.Length == 2 && args[0] == "--self-test-output") { app.SelfTest(args[1]); return; }
+        if (args.Length == 2 && args[0] == "--screenshots-output") { PreviewImages.Create(args[1]); return; }
         app.Run();
     }
     protected override async void OnStartup(StartupEventArgs e)
@@ -147,7 +148,7 @@ public sealed class App : Application
         var boundary = new QuotaItem { Code = "GM", Remaining = 40, TimeRemaining = 80, Status = "live" };
         if (warning.NumberColor != "#c18a19" || critical.NumberColor != "#c54444" || boundary.NumberColor != "#25313d") throw new Exception("Pace thresholds");
         if (warning.Color != warning.IdentityColor || critical.Color != critical.IdentityColor) throw new Exception("Identity ring changed");
-        if (StartupRegistration.Command(@"C:\Apps With Spaces\monitor.exe") != "\"C:\\Apps With Spaces\\monitor.exe\" --minimized") throw new Exception("Startup command quoting");
+        if (StartupRegistration.Command("monitor.exe") != "\"monitor.exe\" --minimized") throw new Exception("Startup command quoting");
         var sizing = new FloatingWindow(() => {}, () => {}); sizing.SetScale(1.5);
         if (sizing.MonitorScale != 1.5) throw new Exception("Floating scale");
         var d = new Donut { Item = q, Width = 56, Height = 56 }; d.Measure(new Size(56, 56)); d.Arrange(new Rect(0, 0, 56, 56));

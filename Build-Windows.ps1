@@ -41,6 +41,7 @@ try {
         -ArgumentList '--self-test-output', ('"' + $report + '"') -WorkingDirectory $env:TEMP -WindowStyle Hidden -PassThru
     if (-not $smoke.WaitForExit(30000)) { throw 'WPF smoke check timed out.' }
     if ($smoke.ExitCode -ne 0 -or -not (Test-Path $report)) { throw 'WPF smoke check failed.' }
+    if (-not (Get-Content $report -Raw | ConvertFrom-Json).passed) { throw 'WPF smoke report did not pass.' }
     $archive = Join-Path $destination "agent-quota-monitor-windows-$Version-win-x64.zip"
     Compress-Archive -LiteralPath $bundle -DestinationPath $archive
     $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()

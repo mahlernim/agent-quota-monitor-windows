@@ -1,66 +1,92 @@
-# Agent Quota Monitor Windows
+# Agent Quota Monitor for Windows
 
-A Windows tray utility for AI subscription quotas, reset times, and consumption pace.
+Keep an eye on your AI coding quotas, reset times, and how fast you are spending them, straight from the Windows tray.
 
-## Status
+**[Download v0.2.0-beta.4](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.0-beta.4)** (`agent-quota-monitor-windows-0.2.0-beta.4-win-x64.zip`, Windows x64)
 
-Early development beta. Source and a portable Windows build workflow are available for testing, but there is no signed installer or stable release yet. Supports any enabled combination of OpenAI Codex, direct Anthropic Claude, Google Antigravity, and GitHub Copilot. One provider is enough.
+![Main window with grouped quota rings](docs/images/main-window.png)
 
-## Views
+*Main window. Accounts and quota values shown are sample data.*
 
-- A tray donut for a selected account, quota group, and window.
-- A compact native main window with grouped quota donuts.
-- An optional frameless floating strip of multiple pinned quota donuts, with adjustable opacity.
-- A full local dashboard with account ordering, removal, connection actions, and provider selection.
-- Compact paired donuts with a thick quota ring and a thin time ring for valid five-hour and weekly windows. Remaining mode compares quota remaining with time remaining. Used mode compares quota used with time elapsed. Pace compares quota with an even consumption schedule, not a usage prediction.
+![Floating monitor strip pinned above other windows](docs/images/floating-monitor.png)
 
-Hover or focus a quota to see precise percentages, reset times, and pace details. Quota values and stale status stay visible without opening details.
+*Floating monitor. Accounts and quota values shown are sample data.*
 
-Unknown and stale readings are explicit. Direct Claude and Claude supplied through Antigravity are separate quotas. Missing windows never imply unlimited usage.
+## Quick start
 
-## Run
+1. Download the ZIP from the release page above.
+2. Extract **all** files into a permanent folder, for example `C:\Tools\AgentQuotaMonitor`. Do not run the app from inside the ZIP.
+3. Run `agent-quota-monitor-windows.exe`.
+4. Open **Settings**, choose the providers you want, and connect any that are not detected yet.
 
-The primary Windows app uses WPF vector graphics. Extract the entire portable ZIP and run `agent-quota-monitor-windows.exe`. Python and .NET runtimes are bundled. See [Windows instructions](docs/windows.md).
+This is a portable app, not a setup installer. Python and .NET runtimes are bundled. You still need the official coding clients for the providers you use.
 
-To build from source, install .NET 8 SDK and 64-bit Python 3.12, then run `./Build-Windows.ps1`. For development, use `./Start-Windows.ps1`. The earlier Tk shell remains available through [legacy desktop instructions](docs/desktop.md).
+This beta is unsigned. Windows may display an unknown-publisher warning.
 
-Normal colors identify agents using blue-green hues. Yellow percentage text means quota remaining is below half of time remaining, and red text means it is below one quarter. Missing or stale timing never triggers a pace warning. Percentages show at most one decimal.
+## Providers
 
-For the browser-only version, run `./Start-Dashboard.ps1` and open http://127.0.0.1:8765/. The backend uses Python standard-library modules. Desktop dependencies are listed in requirements-desktop.txt.
+Any combination works, and one provider is enough. The monitor reads quotas through the sessions your official clients already created, so a browser login by itself may not be recognized.
 
-Only one monitor process should run against an account cache. Stop the browser-only process before starting the desktop version. The desktop owns its local server and polling. Startup at Windows sign-in is opt-in through Settings.
+| Provider | How to connect | Notes |
+| --- | --- | --- |
+| OpenAI Codex | Settings, then **Sign in** | Launches the official Codex client sign-in |
+| Anthropic Claude (direct) | Settings, then **Sign in** | Launches the official Claude Code sign-in |
+| Google Antigravity | Settings, then **Open official client** | Account selection happens inside Antigravity |
+| GitHub Copilot (optional) | Settings, then **Sign in** | Opens `gh auth login` in a console and your browser |
 
-## Provider connections
+If an existing session is already recognized, you do not need to sign in again.
 
-Enable only the providers you want in Connections. A first unconfigured launch discovers existing supported sessions without adding empty cards for missing providers. Explicitly enabled providers may show connection guidance when a session is unavailable.
+Copilot needs a one-time optional setup with PowerShell 7, Node and npm, Python, and the GitHub CLI, using `Setup-Copilot.ps1` from the source repository. See [Copilot setup](docs/copilot-setup.md).
 
-Codex and Claude use existing official coding-client sessions. Dashboard sign-in launches the official client and verifies a fresh quota read. Antigravity uses its running local service, whose provider account ID is not reported. Copilot uses its official SDK quota interface and requires its separate optional setup. See [provider interfaces](docs/provider-evidence.md).
+To switch accounts, sign in to the other account through the provider's own client. The monitor follows whichever account the official client reports and never switches for you.
 
-## Privacy and ownership
+**Remove** hides an account and stops monitoring it. It does not log you out of the provider or touch your credentials. **Restore hidden accounts** brings it back.
 
-- Credentials stay with official clients. No shared refresh-token renewal, logout, proxy routing, paid API setup, or automatic account switching.
-- Normalized snapshots and preferences are encrypted with Windows DPAPI under `%LOCALAPPDATA%/QuotaDashboard`. This legacy directory name is retained to preserve existing data.
-- No quota-reading inference prompts. Polling honors cooldowns and provider retry delays.
-- The web server binds to 127.0.0.1 and checks Host, Origin, and same-origin action headers. It is not an isolation boundary against other software running as the same Windows user.
-- Removal hides an account and stops future polling without revoking its credentials. Disabling a provider preserves its cached data and display preferences.
-- No telemetry or automatic public uploads.
+## Everyday controls
 
-## Validation
+- **Click a ring** in the main window to pick the quota shown in the system tray. The chosen one is labelled **Tray**.
+- **Click a corner star** to pin or unpin a quota on the floating monitor.
+- **Toolbar**, at the top right, has Refresh, Web, Floating, Settings, and Quit.
+- **Hover a ring** for exact percentages, reset times, and pace details.
+- **Close** hides the main window to the tray. **Quit** exits, and stops the quota reader if this app started it.
+- **Web** opens the full local dashboard. Reordering accounts is done there with its edit controls, not by dragging rings in the native window.
 
-```powershell
-python -m unittest discover -s tests -v
-node --check web/app.js
-node tests/test_pace.mjs
-```
+Floating monitor: right-click it for **Size** (75, 100, 125, 150, 200%) and **Opacity** (35, 50, 70, 85, 100%). Drag it to move it, and double-click it to bring back the main window. Both preferences are remembered.
 
-Tests use synthetic fixtures. Live verification and Windows UI checks are separate from automated tests. Sleep/resume, DPI, screen-reader support, installer distribution, and clean-machine behavior still need broader testing before a stable release.
+## Reading a quota ring
 
-## Contributing
+The thick outer ring is quota remaining, in a color that identifies the provider. The thin gray ring just inside it is time remaining in the current window, and it appears only when the reset timing is known. Percentages show at most one decimal.
 
-Issues and pull requests are welcome. Do not attach credentials, authorization URLs, provider files, personal account screenshots, or private quota snapshots. Include application version, Windows version, enabled provider names, and sanitized error categories.
+The number turns **amber** when quota remaining falls below half of time remaining, and **red** below one quarter. For example, with 80% of the window left, amber starts under 40% quota and red under 20%. Without timing data there is no pace warning at all.
 
-MIT licensed. Independent software, not affiliated with or endorsed by the supported providers. See THIRD-PARTY-NOTICES.md for research references and license notices.
+A gray, stale reading means the value could not be refreshed. It does not mean zero, and a missing window never means unlimited.
 
-The native main window groups quotas by account. Click a ring to select the system-tray quota, shown by the Tray marker. Corner stars pin quotas to the floating monitor. Right-click the floating monitor for Size (75–200%) and Opacity (35–100%). Both settings persist. Outer rings keep agent colors, including burnt orange for direct Claude. Gray time rings sit immediately inside quota rings. Pace warnings color the percentage text.
+## Start with Windows
 
-In Settings, Start with Windows launches the monitor in the tray when you sign in. It is off by default, needs no administrator rights, and can be disabled there. Keep the portable folder in a permanent location. Disable startup before moving or deleting it, then re-enable it from the new location. Windows Task Manager can independently disable startup entries.
+Settings has an optional **Start with Windows (in the tray)** switch. It is off by default and needs no administrator rights. Because the app is portable, keep its folder in a permanent place. If you need to move or delete the folder, turn the switch off first, then turn it on again from the new location.
+
+## Troubleshooting
+
+- **An account is missing.** Sign in through the provider's own client, then press Refresh. A browser-only login may not create the session the monitor reads.
+- **Everything looks stale.** Press Refresh. If it persists, confirm the provider's client still has a valid session.
+- **Copilot shows nothing.** Complete the one-time setup in [Copilot setup](docs/copilot-setup.md), then use Copilot **Sign in** and finish the prompts in the console window that opens.
+- **Nothing happens when launching.** Confirm you extracted the whole ZIP, including the `backend` folder, next to the executable.
+- **Values seem frozen after a move.** Run only one monitor at a time against the same account cache.
+
+## Privacy
+
+- Credentials stay with the official clients. The monitor reads local sessions and never logs you out, switches accounts, or routes traffic through a proxy.
+- Settings and cached snapshots are encrypted for your Windows user account.
+- The local server listens on loopback only.
+- No telemetry, automatic public uploads, or prompts sent to a model to estimate quotas.
+
+Provider interfaces are internal to those products and can change without notice, which may interrupt readings.
+
+## More
+
+- [Windows details](docs/windows.md)
+- [Provider interfaces](docs/provider-evidence.md)
+- [Building and contributing](docs/development.md)
+- [Third-party notices](THIRD-PARTY-NOTICES.md)
+
+MIT licensed. Independent project, not affiliated with or endorsed by any of the supported providers.
