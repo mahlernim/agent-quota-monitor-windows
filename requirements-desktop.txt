@@ -1,0 +1,3 @@
+# Optional native desktop shell dependencies. The web dashboard has no extra requirements.
+Pillow==11.3.0
+pystray==0.19.5

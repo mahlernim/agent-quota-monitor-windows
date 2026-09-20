@@ -1,0 +1,76 @@
+import unittest
+from datetime import datetime, timedelta, timezone
+
+from quota.desktop_views import compact_group, compact_window, display_remaining, popup_rows, reset_label, selected_window
+from quota.desktop import DesktopSettings
+
+
+class Vault:
+    def __init__(self): self.value = {'enabledProviders': ['codex'], 'accountOrder': ['keep']}
+    def load(self): return self.value.copy()
+    def save(self, value): self.value = value.copy()
+
+
+class Lock:
+    def __init__(self): self.entered = 0
+    def __enter__(self): self.entered += 1
+    def __exit__(self, *args): self.entered -= 1
+
+
+class DesktopViewTests(unittest.TestCase):
+    def snapshot(self):
+        return {'accounts': [
+            {'id': 'codex-one', 'provider': 'codex', 'label': 'one', 'status': 'live', 'groups': [
+                {'id': 'codex', 'label': 'Codex', 'buckets': [{'id': 'five', 'label': 'Five-hour window', 'remaining': 82}]}]},
+            {'id': 'google-one', 'provider': 'antigravity', 'label': 'separate', 'status': 'stale', 'groups': [
+                {'id': 'claude', 'label': 'Claude and GPT models', 'buckets': [{'id': 'week', 'label': 'Weekly window', 'remaining': None}]}]},
+        ]}
+
+    def test_default_selection_prefers_reported_remaining(self):
+        found, choice = selected_window(self.snapshot())
+        self.assertEqual(found[0]['id'], 'codex-one')
+        self.assertEqual(choice['bucketId'], 'five')
+
+    def test_saved_selection_keeps_provider_account_and_group(self):
+        selected = {'accountId': 'google-one', 'groupId': 'claude', 'bucketId': 'week'}
+        found, choice = selected_window(self.snapshot(), selected)
+        self.assertEqual(found[0]['label'], 'separate')
+        self.assertEqual(choice, selected)
+
+    def test_missing_saved_selection_never_switches_to_another_account(self):
+        selected = {'accountId': 'removed', 'groupId': 'anything', 'bucketId': 'anything'}
+        found, choice = selected_window(self.snapshot(), selected)
+        self.assertIsNone(found)
+        self.assertEqual(choice, selected)
+
+    def test_unknown_and_stale_are_explicit(self):
+        rows = popup_rows(self.snapshot())
+        self.assertEqual(rows[1]['remaining'], 'Unknown')
+        self.assertEqual(rows[1]['status'], 'stale')
+        self.assertEqual(display_remaining({'unlimited': True}), ('Unlimited', None))
+
+    def test_compact_table_labels_keep_known_window_meaning(self):
+        self.assertEqual(compact_group('Gemini Models'), 'Gemini')
+        self.assertEqual(compact_group('Claude and GPT models'), 'Claude-GPT')
+        self.assertEqual(compact_window({'windowSeconds': 18000}), '5h')
+        self.assertEqual(compact_window({'windowSeconds': 604800}), '7d')
+
+    def test_reset_label_does_not_claim_replenishment(self):
+        now = datetime(2026, 9, 20, tzinfo=timezone.utc)
+        future = (now + timedelta(hours=2, minutes=5)).isoformat()
+        self.assertEqual(reset_label(future, now), 'Resets in 2h 05m')
+        self.assertEqual(reset_label((now-timedelta(seconds=1)).isoformat(), now), 'Reset time passed')
+
+    def test_desktop_preferences_merge_under_the_monitor_lock(self):
+        vault, lock = Vault(), Lock()
+        settings = DesktopSettings(vault)
+        settings.lock = lock
+        settings.save({'desktopOpacity': 72})
+        self.assertEqual(lock.entered, 0)
+        self.assertEqual(vault.value['desktopOpacity'], 72)
+        self.assertEqual(vault.value['enabledProviders'], ['codex'])
+        self.assertEqual(vault.value['accountOrder'], ['keep'])
+
+
+if __name__ == '__main__':
+    unittest.main()
