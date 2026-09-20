@@ -13,6 +13,13 @@ public sealed class FloatingWindow : Window
     private readonly Action _openMain;
     private readonly Action _hideRequested;
     private readonly StackPanel _items;
+    public event Action? ScaleChanged;
+    public double MonitorScale { get; private set; } = 1;
+    public void SetScale(double value) {
+        MonitorScale = Math.Clamp(value, .75, 2);
+        _items.LayoutTransform = new ScaleTransform(MonitorScale, MonitorScale);
+        ScaleChanged?.Invoke();
+    }
 
     public FloatingWindow(Action openMain, Action hide)
     {
@@ -36,7 +43,7 @@ public sealed class FloatingWindow : Window
             Background = new SolidColorBrush(Color.FromArgb(238, 247, 248, 249)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(184, 193, 201)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(5),
+            CornerRadius = new CornerRadius(2),
             Padding = new Thickness(4, 3, 4, 3),
             Child = _items
         };
@@ -108,8 +115,18 @@ public sealed class FloatingWindow : Window
         show.Click += (_, _) => _openMain();
         menu.Items.Add(show);
 
+        var size = new MenuItem { Header = "Size" };
+        foreach (var value in new[] { .75, 1.0, 1.25, 1.5, 2.0 }) {
+            var choice = new MenuItem { Header = $"{value * 100:0}%", IsCheckable = true, Tag = value };
+            choice.Click += (_, _) => SetScale((double)choice.Tag);
+            size.Items.Add(choice);
+        }
+        menu.Opened += (_, _) => {
+            foreach (MenuItem choice in size.Items) choice.IsChecked = Math.Abs(MonitorScale - (double)choice.Tag) < .005;
+        };
+        menu.Items.Add(size);
         var opacity = new MenuItem { Header = "Opacity" };
-        foreach ((string label, double value) in new[] { ("100%", 1.0), ("85%", 0.85), ("70%", 0.70) })
+        foreach ((string label, double value) in new[] { ("100%", 1.0), ("85%", 0.85), ("70%", 0.70), ("50%", 0.50), ("35%", 0.35) })
         {
             var choice = new MenuItem { Header = label, IsCheckable = true, Tag = value };
             choice.Click += (_, _) =>
@@ -123,6 +140,10 @@ public sealed class FloatingWindow : Window
                 choice.IsChecked = true;
             opacity.Items.Add(choice);
         }
+        menu.Opened += (_, _) => {
+            foreach (MenuItem choice in opacity.Items)
+                choice.IsChecked = Math.Abs(Opacity - (double)choice.Tag) < 0.005;
+        };
         menu.Items.Add(opacity);
 
         var hide = new MenuItem { Header = "Hide floating monitor" };

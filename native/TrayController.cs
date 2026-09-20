@@ -72,12 +72,12 @@ public sealed class TrayController : IDisposable
             double? timeRemaining = ValidPercent(item?.TimeRemaining);
             if (timeRemaining is not null)
             {
-                var innerBounds = RectangleF.Inflate(bounds, -10, -10);
+                var innerBounds = RectangleF.Inflate(bounds, -5, -5);
                 using var innerTrack = new Pen(System.Drawing.Color.FromArgb(225, 230, 234), 2);
                 graphics.DrawEllipse(innerTrack, innerBounds);
                 if (timeRemaining is > 0)
                 {
-                    using var time = new Pen(item?.Stale == true ? System.Drawing.Color.Gray : ring, 2)
+                    using var time = new Pen(System.Drawing.Color.Gray, 2)
                         { StartCap = LineCap.Round, EndCap = LineCap.Round };
                     if (timeRemaining >= 100)
                         graphics.DrawEllipse(time, innerBounds);

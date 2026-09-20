@@ -34,7 +34,7 @@ public sealed class Donut : FrameworkElement
         if (side < 12) return;
         var center = new Point(ActualWidth / 2, ActualHeight / 2);
         var outerRadius = side / 2 - 4;
-        var innerRadius = outerRadius - 9;
+        var innerRadius = outerRadius - 4;
         var track = new SolidColorBrush(Color.FromRgb(222, 227, 233));
         track.Freeze();
         DrawTrack(dc, center, outerRadius, 6, track);
@@ -44,19 +44,19 @@ public sealed class Donut : FrameworkElement
         if (!item.Stale && item.TimeRemaining is double time)
         {
             DrawTrack(dc, center, innerRadius, 2, track);
-            DrawProgress(dc, center, innerRadius, 2, Clamp(time), tint);
+            DrawProgress(dc, center, innerRadius, 2, Clamp(time), Brushes.Gray);
         }
         var text = item.Unlimited ? "∞" : item.Remaining is double value ? value.ToString("0.#", CultureInfo.InvariantCulture) + "%" : "?";
         var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         var dip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         var fontSize = text.Length >= 5 ? 8.0 : 10.0;
         var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface,
-            fontSize, item.Stale ? Brushes.Gray : Brushes.Black, dip);
+            fontSize, ToBrush(item.NumberColor, Colors.Black), dip);
         while (formatted.Width > innerRadius * 2 - 3 && fontSize > 6)
         {
             fontSize -= 1;
             formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface,
-                fontSize, item.Stale ? Brushes.Gray : Brushes.Black, dip);
+                fontSize, ToBrush(item.NumberColor, Colors.Black), dip);
         }
         dc.DrawText(formatted, new Point(center.X - formatted.Width / 2, center.Y - formatted.Height / 2));
     }

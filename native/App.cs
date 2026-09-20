@@ -43,7 +43,8 @@ public sealed class App : Application
         main.Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/robot-ring.ico"));
         floating.Icon = main.Icon;
         placementSave = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        placementSave.Tick += (_, _) => { placementSave.Stop(); if (preferencesLoaded && !stopping) _ = Post("/api/desktop", new { wpfFloatingLeft = floating.Left, wpfFloatingTop = floating.Top, desktopOpacity = Math.Round(floating.Opacity * 100) }); };
+        placementSave.Tick += (_, _) => { placementSave.Stop(); if (preferencesLoaded && !stopping) _ = Post("/api/desktop", new { wpfFloatingLeft = floating.Left, wpfFloatingTop = floating.Top, desktopOpacity = Math.Round(floating.Opacity * 100), desktopFloatingScale = Math.Round(floating.MonitorScale * 100) }); };
+        floating.ScaleChanged += () => { if (preferencesLoaded) { placementSave.Stop(); placementSave.Start(); } };
         floating.LocationChanged += (_, _) => { if (preferencesLoaded) { placementSave.Stop(); placementSave.Start(); } };
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(Window.OpacityProperty, typeof(Window)).AddValueChanged(floating, (_, _) => { if (preferencesLoaded) { opacity = floating.Opacity; placementSave.Stop(); placementSave.Start(); } });
         tray = new TrayController(ShowMain, OpenWeb, ToggleFloating, () => _ = Quit());
@@ -89,6 +90,7 @@ public sealed class App : Application
                 opacity = Math.Clamp((QuotaItem.Number(p, "desktopOpacity") ?? 85) / 100, .35, 1);
                 if (QuotaItem.Number(p, "wpfFloatingLeft") is double x) floating!.Left = x;
                 if (QuotaItem.Number(p, "wpfFloatingTop") is double y) floating!.Top = y;
+                floating!.SetScale((QuotaItem.Number(p, "desktopFloatingScale") ?? 100) / 100);
                 preferencesLoaded = true;
                 if (p.TryGetProperty("desktopFloating", out var f) && f.ValueKind == JsonValueKind.True) { floating!.Opacity = opacity; floating.Show(); }
             }
@@ -143,7 +145,10 @@ public sealed class App : Application
         var warning = new QuotaItem { Code = "GM", Remaining = 39, TimeRemaining = 80, Status = "live" };
         var critical = new QuotaItem { Code = "GM", Remaining = 19, TimeRemaining = 80, Status = "live" };
         var boundary = new QuotaItem { Code = "GM", Remaining = 40, TimeRemaining = 80, Status = "live" };
-        if (warning.Color != "#c18a19" || critical.Color != "#c54444" || boundary.Color != boundary.IdentityColor) throw new Exception("Pace thresholds");
+        if (warning.NumberColor != "#c18a19" || critical.NumberColor != "#c54444" || boundary.NumberColor != "#25313d") throw new Exception("Pace thresholds");
+        if (warning.Color != warning.IdentityColor || critical.Color != critical.IdentityColor) throw new Exception("Identity ring changed");
+        var sizing = new FloatingWindow(() => {}, () => {}); sizing.SetScale(1.5);
+        if (sizing.MonitorScale != 1.5) throw new Exception("Floating scale");
         var d = new Donut { Item = q, Width = 56, Height = 56 }; d.Measure(new Size(56, 56)); d.Arrange(new Rect(0, 0, 56, 56));
         var image = new System.Windows.Media.Imaging.RenderTargetBitmap(112,112,192,192,System.Windows.Media.PixelFormats.Pbgra32); image.Render(d);
         File.WriteAllText(output, "{\"passed\":true,\"wpfVector\":true,\"providerReads\":0}");

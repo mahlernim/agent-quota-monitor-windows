@@ -24,10 +24,11 @@ public sealed class QuotaItem
     public bool Unlimited { get; init; }
     public bool Stale => Status != "live";
     public void MarkDisconnected() { Status = "stale"; TimeRemaining = null; Tooltip = "Disconnected · cached quota\n" + Tooltip.Replace("Disconnected · cached quota\n", ""); }
-    public string IdentityColor => Code switch { "CX" => "#168f87", "CL" => "#248fa5", "GM" => "#287bc1", "CG" => "#297e91", "CP" => "#488b74", _ => "#287bc1" };
-    public string Color => Stale ? "#89929d" : TimeRemaining is > 0 && Remaining.HasValue
-        ? Remaining < TimeRemaining / 4 ? "#c54444" : Remaining < TimeRemaining / 2 ? "#c18a19" : IdentityColor
-        : IdentityColor;
+    public string IdentityColor => Code switch { "CX" => "#168f87", "CL" => "#c46843", "GM" => "#287bc1", "CG" => "#99734b", "CP" => "#488b74", _ => "#287bc1" };
+    public string Color => Stale ? "#89929d" : IdentityColor;
+    public string NumberColor => Stale ? "#89929d" : TimeRemaining is > 0 && Remaining.HasValue
+        ? Remaining < TimeRemaining / 4 ? "#c54444" : Remaining < TimeRemaining / 2 ? "#c18a19" : "#25313d"
+        : "#25313d";
     public object Selection => new { accountId = AccountId, groupId = GroupId, bucketId = BucketId };
     public static string Percent(double value) => value.ToString("0.#", CultureInfo.CurrentCulture) + "%";
     public static string MakeKey(string a, string g, string b) => JsonSerializer.Serialize(new[] { a, g, b });

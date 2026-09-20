@@ -56,7 +56,7 @@ def handler(monitor, port, connections=None):
             if self.path == '/api/desktop':
                 with monitor.lock:
                     prefs = monitor.settings_vault.load() if monitor.settings_vault else {}
-                keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'wpfFloatingLeft', 'wpfFloatingTop')
+                keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop')
                 return self.send(200, json.dumps({key: prefs[key] for key in keys if key in prefs}, allow_nan=False).encode())
             files = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8'), '/icon.svg': ('icon.svg', 'image/svg+xml')}
             if self.path not in files:
@@ -81,9 +81,9 @@ def handler(monitor, port, connections=None):
                     if not isinstance(data, dict): raise ValueError()
                     for key, value in data.items():
                         if key == 'desktopFloating' and isinstance(value, bool): continue
-                        if key in ('desktopOpacity', 'wpfFloatingLeft', 'wpfFloatingTop') and type(value) in (int, float):
+                        if key in ('desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop') and type(value) in (int, float):
                             import math
-                            if math.isfinite(value) and (35 <= value <= 100 if key == 'desktopOpacity' else -100000 <= value <= 100000): continue
+                            if math.isfinite(value) and (35 <= value <= 100 if key == 'desktopOpacity' else 75 <= value <= 200 if key == 'desktopFloatingScale' else -100000 <= value <= 100000): continue
                         values = [value] if key == 'desktopSelection' else value if key == 'desktopFloatingSelections' else None
                         if isinstance(values, list) and len(values) <= 100 and all(isinstance(v, dict) and set(v) == {'accountId', 'groupId', 'bucketId'} and all(isinstance(s, str) and len(s) <= 512 for s in v.values()) for v in values): continue
                         raise ValueError()

@@ -24,7 +24,7 @@ The primary Windows app uses WPF vector graphics. Extract the entire portable ZI
 
 To build from source, install .NET 8 SDK and 64-bit Python 3.12, then run `./Build-Windows.ps1`. For development, use `./Start-Windows.ps1`. The earlier Tk shell remains available through [legacy desktop instructions](docs/desktop.md).
 
-Normal colors identify agents using blue-green hues. Yellow means quota remaining is below half of time remaining, and red means it is below one quarter. Missing or stale timing never triggers a pace warning. Percentages show at most one decimal.
+Normal colors identify agents using blue-green hues. Yellow percentage text means quota remaining is below half of time remaining, and red text means it is below one quarter. Missing or stale timing never triggers a pace warning. Percentages show at most one decimal.
 
 For the browser-only version, run `./Start-Dashboard.ps1` and open http://127.0.0.1:8765/. The backend uses Python standard-library modules. Desktop dependencies are listed in requirements-desktop.txt.
 
@@ -60,3 +60,5 @@ Tests use synthetic fixtures. Live verification and Windows UI checks are separa
 Issues and pull requests are welcome. Do not attach credentials, authorization URLs, provider files, personal account screenshots, or private quota snapshots. Include application version, Windows version, enabled provider names, and sanitized error categories.
 
 MIT licensed. Independent software, not affiliated with or endorsed by the supported providers. See THIRD-PARTY-NOTICES.md for research references and license notices.
+
+The native main window groups quotas by account. Click a ring to select the system-tray quota, shown by the Tray marker. Corner stars pin quotas to the floating monitor. Right-click the floating monitor for Size (75–200%) and Opacity (35–100%). Both settings persist. Outer rings keep agent colors, including burnt orange for direct Claude. Gray time rings sit immediately inside quota rings. Pace warnings color the percentage text.
