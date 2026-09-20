@@ -1,4 +1,4 @@
-param([string]$Version = '0.2.0-beta.1')
+param([string]$Version = '0.2.0-beta.3')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$') { throw 'Use a simple semantic version.' }
 Push-Location $PSScriptRoot
@@ -16,7 +16,7 @@ try {
     & $python -c "import runpy; runpy.run_path('packaging/make_icon.py')"
     $destination = Join-Path $PSScriptRoot "dist/wpf-$Version-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     $bundle = Join-Path $destination 'agent-quota-monitor-windows'
-    & $sdk publish native/AgentQuotaMonitor.csproj -c Release -r win-x64 --self-contained true -o $bundle --nologo
+    & $sdk publish native/AgentQuotaMonitor.csproj -c Release -r win-x64 --self-contained true -p:Version=$Version -o $bundle --nologo
     if ($LASTEXITCODE) { throw 'WPF build failed.' }
     & $python -m PyInstaller --clean --windowed --onedir --noupx --name quota-backend `
         --paths $PSScriptRoot --distpath (Join-Path $destination 'reader') --workpath build/backend --specpath build `

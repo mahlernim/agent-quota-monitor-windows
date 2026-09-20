@@ -2,9 +2,9 @@
 
 This beta uses WPF for the native windows and vector graphics. Extract the entire archive and run `agent-quota-monitor-windows.exe`. The package includes the .NET runtime and a separate local quota reader, so Python and .NET do not need to be installed separately. Keep the `backend` folder and all runtime files beside the executable.
 
-Click a donut to choose the tray quota. Pin checkboxes choose the quotas in the compact floating strip. Hover for details. Drag the floating strip to reposition it, and right-click for its menu and opacity. Close hides the main window. Quit stops the reader if this application started it.
+Click a donut to choose the tray quota. Corner stars choose the quotas in the compact floating strip. Hover for details. Drag the floating strip to reposition it, and right-click for its menu and opacity. Close hides the main window. Quit stops the reader if this application started it.
 
-Colors identify agents using blue-green shades. Yellow percentage text means quota remaining is below half the remaining portion of the time window. Red means it is below one quarter. Missing timing data never generates a projected warning. Percentages show at most one decimal.
+Outer ring colors identify agents, including burnt orange for direct Claude. Yellow percentage text means quota remaining is below half the remaining portion of the time window. Red percentage text means it is below one quarter. Missing timing data never generates a projected warning. Percentages show at most one decimal.
 
 Accounts opens native provider, sign-in, removal, and restore controls. Codex and Claude launch their official coding-client sign-in commands. Antigravity opens its official desktop application, where account selection takes place. The monitor verifies returned account identity. Removal hides the account and stops monitoring without logging out or revoking credentials. Copilot still requires its optional official CLI/SDK setup. Web opens the full dashboard, including account ordering.
 
