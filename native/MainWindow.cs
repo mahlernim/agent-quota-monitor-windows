@@ -40,7 +40,7 @@ public sealed class MainWindow : Window
         toolbar.Children.Add(Button("Refresh", refresh));
         toolbar.Children.Add(Button("Web", openWeb));
         toolbar.Children.Add(Button("Floating", showFloating));
-        toolbar.Children.Add(Button("Accounts", accounts));
+        toolbar.Children.Add(Button("Settings", accounts));
         toolbar.Children.Add(Button("Quit", quit));
         _scroll.Content = _groups;
         root.Children.Add(_scroll);

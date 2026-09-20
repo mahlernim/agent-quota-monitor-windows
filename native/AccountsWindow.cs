@@ -57,7 +57,7 @@ public sealed class AccountsWindow : Window
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _changed = changed ?? throw new ArgumentNullException(nameof(changed));
-        Title = "Accounts and providers";
+        Title = "Settings and accounts";
         Icon = owner.Icon;
         Width = 560;
         MinWidth = 460;
@@ -90,6 +90,18 @@ public sealed class AccountsWindow : Window
         root.Children.Add(footer);
 
         var body = new StackPanel();
+        var startup = new CheckBox {
+            Content = "Start with Windows (in the tray)", Margin = new Thickness(0, 0, 0, 6),
+            ToolTip = "Starts when you sign in. Keep the portable app in a permanent folder. Turn this off before moving or deleting it."
+        };
+        try { startup.IsChecked = StartupRegistration.Enabled; }
+        catch { startup.IsEnabled = false; _message.Text = "Windows startup settings are unavailable."; }
+        startup.Click += (_, _) => {
+            try { StartupRegistration.SetEnabled(startup.IsChecked == true); _message.Text = ""; }
+            catch { startup.IsChecked = false; _message.Text = "Could not change Windows startup. Check your Windows account permissions."; }
+        };
+        body.Children.Add(startup);
+        body.Children.Add(new Separator { Margin = new Thickness(0, 2, 0, 8) });
         body.Children.Add(new TextBlock
         {
             Text = "Monitored providers",
@@ -133,6 +145,10 @@ public sealed class AccountsWindow : Window
             body.Children.Add(row);
         }
 
+        body.Children.Add(new TextBlock {
+            Text = "Copilot setup uses GitHub CLI sign-in: gh auth login --hostname github.com --web. Then run Setup-Copilot.ps1 from the source repository once.",
+            TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 5, 0, 0)
+        });
         _saveProviders.Click += async (_, _) => await SaveProvidersAsync();
         body.Children.Add(_saveProviders);
 

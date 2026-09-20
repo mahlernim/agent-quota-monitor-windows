@@ -28,7 +28,7 @@ Normal colors identify agents using blue-green hues. Yellow percentage text mean
 
 For the browser-only version, run `./Start-Dashboard.ps1` and open http://127.0.0.1:8765/. The backend uses Python standard-library modules. Desktop dependencies are listed in requirements-desktop.txt.
 
-Only one monitor process should run against an account cache. Stop the browser-only process before starting the desktop version. The desktop owns its local server and polling. Nothing starts with Windows automatically.
+Only one monitor process should run against an account cache. Stop the browser-only process before starting the desktop version. The desktop owns its local server and polling. Startup at Windows sign-in is opt-in through Settings.
 
 ## Provider connections
 
@@ -62,3 +62,5 @@ Issues and pull requests are welcome. Do not attach credentials, authorization U
 MIT licensed. Independent software, not affiliated with or endorsed by the supported providers. See THIRD-PARTY-NOTICES.md for research references and license notices.
 
 The native main window groups quotas by account. Click a ring to select the system-tray quota, shown by the Tray marker. Corner stars pin quotas to the floating monitor. Right-click the floating monitor for Size (75–200%) and Opacity (35–100%). Both settings persist. Outer rings keep agent colors, including burnt orange for direct Claude. Gray time rings sit immediately inside quota rings. Pace warnings color the percentage text.
+
+In Settings, Start with Windows launches the monitor in the tray when you sign in. It is off by default, needs no administrator rights, and can be disabled there. Keep the portable folder in a permanent location. Disable startup before moving or deleting it, then re-enable it from the new location. Windows Task Manager can independently disable startup entries.

@@ -48,7 +48,7 @@ public sealed class App : Application
         floating.LocationChanged += (_, _) => { if (preferencesLoaded) { placementSave.Stop(); placementSave.Start(); } };
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(Window.OpacityProperty, typeof(Window)).AddValueChanged(floating, (_, _) => { if (preferencesLoaded) { opacity = floating.Opacity; placementSave.Stop(); placementSave.Start(); } });
         tray = new TrayController(ShowMain, OpenWeb, ToggleFloating, () => _ = Quit());
-        main.Show();
+        if (!Environment.GetCommandLineArgs().Contains("--minimized")) main.Show();
         try { await EnsureBackend(); await Poll(); }
         catch { main.Title = "Agent Quota Monitor · backend unavailable"; }
         timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) }; timer.Tick += async (_, _) => await Poll(); timer.Start();
@@ -147,6 +147,7 @@ public sealed class App : Application
         var boundary = new QuotaItem { Code = "GM", Remaining = 40, TimeRemaining = 80, Status = "live" };
         if (warning.NumberColor != "#c18a19" || critical.NumberColor != "#c54444" || boundary.NumberColor != "#25313d") throw new Exception("Pace thresholds");
         if (warning.Color != warning.IdentityColor || critical.Color != critical.IdentityColor) throw new Exception("Identity ring changed");
+        if (StartupRegistration.Command(@"C:\Apps With Spaces\monitor.exe") != "\"C:\\Apps With Spaces\\monitor.exe\" --minimized") throw new Exception("Startup command quoting");
         var sizing = new FloatingWindow(() => {}, () => {}); sizing.SetScale(1.5);
         if (sizing.MonitorScale != 1.5) throw new Exception("Floating scale");
         var d = new Donut { Item = q, Width = 56, Height = 56 }; d.Measure(new Size(56, 56)); d.Arrange(new Rect(0, 0, 56, 56));
