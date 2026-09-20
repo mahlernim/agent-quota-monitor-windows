@@ -65,7 +65,7 @@ class DesktopViewTests(unittest.TestCase):
         self.assertEqual(tray_code({'provider': 'copilot'}, {}), 'CP')
         self.assertEqual(exact_remaining({'remaining': 82.5}), '82.5%')
         self.assertEqual(exact_remaining({'remaining': float('nan')}), 'Unknown')
-        self.assertEqual(exact_remaining({'remaining': 12.3456789}), '12.3456789%')
+        self.assertEqual(exact_remaining({'remaining': 12.3456789}), '12.3%')
         self.assertEqual(last_success_label(0), '1970-01-01 00:00 UTC')
 
     def test_tray_palette_follows_windows_light_theme_with_safe_fallback(self):
@@ -118,7 +118,7 @@ class DesktopViewTests(unittest.TestCase):
                   'resetsAt': (now + timedelta(hours=2.5)).isoformat()}
         value, text = quota_pace(bucket, now=now)
         self.assertEqual(value, 50)
-        self.assertIn('20.0 points under pace', text)
+        self.assertIn('Within pace', text)
         self.assertIsNone(quota_pace(bucket, live=False, now=now)[0])
         for reset in (now, now+timedelta(hours=6)):
             self.assertIsNone(quota_pace(dict(bucket, resetsAt=reset.isoformat()), now=now)[0])

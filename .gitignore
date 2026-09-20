@@ -16,3 +16,6 @@ credentials/
 secrets/
 runtime/
 work/
+.dotnet/
+native/bin/
+native/obj/

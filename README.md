@@ -20,9 +20,11 @@ Unknown and stale readings are explicit. Direct Claude and Claude supplied throu
 
 ## Run
 
-Windows and Python 3.12 or newer are required. Clone this repository, open PowerShell in its directory, and run the desktop setup described in [desktop instructions](docs/desktop.md).
+The primary Windows app uses WPF vector graphics. Extract the entire portable ZIP and run `agent-quota-monitor-windows.exe`. Python and .NET runtimes are bundled. See [Windows instructions](docs/windows.md).
 
-The portable build bundles Python and the desktop libraries. Extract its entire ZIP and run the executable. See [portable instructions](docs/portable.md). To build it from source on Windows with 64-bit Python, run `./Build-Portable.ps1`. The script creates a separate build environment, bundles only declared application resources, runs an offline UI/resource smoke check, then creates a ZIP and SHA-256 checksum under `dist/`. The package layout follows [PyInstaller's runtime resource guidance](https://www.pyinstaller.org/en/stable/runtime-information.html).
+To build from source, install .NET 8 SDK and 64-bit Python 3.12, then run `./Build-Windows.ps1`. For development, use `./Start-Windows.ps1`. The earlier Tk shell remains available through [legacy desktop instructions](docs/desktop.md).
+
+Normal colors identify agents using blue-green hues. Yellow means quota remaining is below half of time remaining, and red means it is below one quarter. Missing or stale timing never triggers a pace warning. Percentages show at most one decimal.
 
 For the browser-only version, run `./Start-Dashboard.ps1` and open http://127.0.0.1:8765/. The backend uses Python standard-library modules. Desktop dependencies are listed in requirements-desktop.txt.
 

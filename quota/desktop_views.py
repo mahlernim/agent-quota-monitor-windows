@@ -42,7 +42,7 @@ def exact_remaining(bucket):
     if bucket.get('unlimited') is True:
         return 'Unlimited'
     if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and 0 <= value <= 100:
-        return str(value) + '%'
+        return f'{value:.1f}'.rstrip('0').rstrip('.') + '%'
     return 'Unknown'
 
 
@@ -123,7 +123,7 @@ def quota_pace(bucket, live=True, now=None):
         return None, 'Reset time not reported'
     remaining = seconds / duration * 100
     difference = value - remaining
-    return remaining, f'{remaining:.1f}% time left | {abs(difference):.1f} points {"under" if difference >= 0 else "over"} pace'
+    return remaining, f'{remaining:.1f}% time left | {"Within pace" if difference >= 0 else "Faster usage"}'
 
 
 def popup_rows(snapshot):

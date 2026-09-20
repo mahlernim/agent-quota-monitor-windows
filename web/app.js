@@ -31,7 +31,7 @@ function donutValues(remaining,timeRemaining,used=false){
  return {quota:Math.max(0,Math.min(100,quota)),time:Math.max(0,Math.min(100,time)),timeLabel:used?'elapsed':'remaining'};
 }
 // PACE_CALC_END
-function metric(b,live=true,key=''){
+function metric(b,live=true,key='',color='#168f87'){
  if(!b)return el('div','unknown','Not reported');
  const box=el('div','metric');
  if(b.unlimited||b.remaining==null){
@@ -48,13 +48,13 @@ function metric(b,live=true,key=''){
   const used=$('#mode').value==='used',value=used?100-b.remaining:b.remaining;
   const pace=quotaPace(b,live);
   const values=donutValues(b.remaining,pace?.available?pace.timeRemaining:0,used);
-  const donut=el('div','donut'+(b.remaining<=10?' low':'')+(live?'':' stale')+(pace?.available?'':' no-time'));donut.tabIndex=0;donut.dataset.metricKey=key;donut.style.setProperty('--quota',values.quota);donut.style.setProperty('--time',values.time);
+  const donut=el('div','donut'+(b.remaining<=10?' low':'')+(live?'':' stale')+(pace?.available?'':' no-time'));donut.tabIndex=0;donut.dataset.metricKey=key;donut.style.setProperty('--ring',!live?'#89929d':pace?.available&&b.remaining<pace.timeRemaining/4?'#c54444':pace?.available&&b.remaining<pace.timeRemaining/2?'#c18a19':color);donut.style.setProperty('--quota',values.quota);donut.style.setProperty('--time',values.time);
   donut.setAttribute('role','meter');donut.setAttribute('aria-valuenow',value);donut.setAttribute('aria-valuemin',0);donut.setAttribute('aria-valuemax',100);
   const center=el('span','donut-value',Math.round(value)+'%'),details=el('span','metric-popover');
   const primary=`${b.label} ${value.toFixed(1)}% ${used?'used':'remaining'}`;
   details.append(el('strong','',primary),el('span','',resetText(b.resetsAt)));
   if(pace?.available){
-   const points=Math.abs(pace.difference),rounded=points<1?points.toFixed(1):Math.round(points).toString(),paceText=`${rounded} percentage points ${pace.direction} pace`;
+   const points=Math.abs(pace.difference),rounded=points<1?points.toFixed(1):Math.round(points).toString(),paceText=(pace.direction==='under'?'Within pace':'Faster usage');
    const timeText=used?`${(100-pace.timeRemaining).toFixed(1)}% time elapsed · ${pace.timeRemaining.toFixed(1)}% remaining`:`${pace.timeRemaining.toFixed(1)}% time remaining`;
    details.append(el('span','pace '+pace.direction,`${timeText} · ${paceText}`));
    donut.setAttribute('aria-label',`${primary}. Inner ring shows ${values.time.toFixed(1)}% of time ${values.timeLabel}. ${paceText}. ${resetText(b.resetsAt)}.`);
@@ -86,7 +86,7 @@ const groups=groupsFor(a),monthly=a.provider==='copilot';
 const columns=monthly?[{label:'Monthly '+display,test:b=>b.windowKind==='monthly'}]:[{label:'5-hour '+display,test:b=>b.windowSeconds===18000},{label:'Weekly '+display,test:b=>b.windowSeconds===604800}];
 const other=groups.some(g=>g.buckets.some(b=>!columns.some(c=>c.test(b))));
 if(other){const known=[...columns];columns.push({label:'Other limits',test:b=>!known.some(c=>c.test(b))})}
-const table=el('table','quota-table');table.setAttribute('aria-label',names[a.provider]+' quota '+display);const tr=el('tr');for(const label of ['Quota group',...columns.map(c=>c.label)]){const th=el('th','',label);th.scope='col';tr.append(th)}const thead=el('thead');thead.append(tr);table.append(thead);const tbody=el('tbody');for(const g of groups){const row=el('tr');row.append(el('td','group-label',g.label));for(const column of columns){const cell=el('td'),matches=g.buckets.filter(column.test);if(!matches.length)cell.append(metric(null));for(const b of matches){if(matches.length>1)cell.append(el('div','unknown',b.label));const metricKey=a.id+'/'+(g.id||g.label)+'/'+(b.id||b.label);cell.append(metric(b,a.status==='live',metricKey))}row.append(cell)}tbody.append(row)}table.append(tbody);card.append(table);
+const table=el('table','quota-table');table.setAttribute('aria-label',names[a.provider]+' quota '+display);const tr=el('tr');for(const label of ['Quota group',...columns.map(c=>c.label)]){const th=el('th','',label);th.scope='col';tr.append(th)}const thead=el('thead');thead.append(tr);table.append(thead);const tbody=el('tbody');for(const g of groups){const row=el('tr');row.append(el('td','group-label',g.label));for(const column of columns){const cell=el('td'),matches=g.buckets.filter(column.test);if(!matches.length)cell.append(metric(null));for(const b of matches){if(matches.length>1)cell.append(el('div','unknown',b.label));const metricKey=a.id+'/'+(g.id||g.label)+'/'+(b.id||b.label);cell.append(metric(b,a.status==='live',metricKey,a.provider==='codex'?'#168f87':a.provider==='claude'?'#248fa5':a.provider==='copilot'?'#488b74':/gemini/i.test(g.label)?'#287bc1':'#297e91'))}row.append(cell)}tbody.append(row)}table.append(tbody);card.append(table);
 if(monthly&&groups[0]?.plan)card.append(el('div','details',groups[0].plan+' · Models '+(groups[0].models?.join(', ')||'not reported')));
 if(a.error)card.append(el('div','warning',(errors[a.error]||'Reader unavailable.')+(a.nextAttempt>Date.now()/1000?' Retry eligible '+date(a.nextAttempt*1000):'')));
 if(expanded.has(a.id)&&!editing){const details=el('div','details');details.append(el('div','',a.source),el('div','',a.identityStatus),el('div','','Last successful read '+(a.lastSuccess?new Date(a.lastSuccess*1000).toLocaleString():'Never')),el('div','','Next eligible read '+date(a.nextAttempt? a.nextAttempt*1000:null)));card.append(details)}area.append(card)});

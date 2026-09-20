@@ -53,6 +53,11 @@ def handler(monitor, port, connections=None):
                 if connections:
                     data['connections'] = connections.snapshot()
                 return self.send(200, json.dumps(data, allow_nan=False).encode())
+            if self.path == '/api/desktop':
+                with monitor.lock:
+                    prefs = monitor.settings_vault.load() if monitor.settings_vault else {}
+                keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'wpfFloatingLeft', 'wpfFloatingTop')
+                return self.send(200, json.dumps({key: prefs[key] for key in keys if key in prefs}, allow_nan=False).encode())
             files = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8'), '/icon.svg': ('icon.svg', 'image/svg+xml')}
             if self.path not in files:
                 return self.send(404, b'{}')
@@ -62,6 +67,36 @@ def handler(monitor, port, connections=None):
         def do_POST(self):
             if not self.safe(True):
                 return self.send(403, b'{}')
+            if self.path == '/api/shutdown':
+                self.send(202, b'{"accepted":true}')
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
+            if self.path == '/api/desktop':
+                try:
+                    size = int(self.headers.get('Content-Length', '0'))
+                    if not 0 < size <= 32768 or self.headers.get('Content-Type') != 'application/json':
+                        raise ValueError()
+                    self.connection.settimeout(5)
+                    data = json.loads(self.rfile.read(size))
+                    if not isinstance(data, dict): raise ValueError()
+                    for key, value in data.items():
+                        if key == 'desktopFloating' and isinstance(value, bool): continue
+                        if key in ('desktopOpacity', 'wpfFloatingLeft', 'wpfFloatingTop') and type(value) in (int, float):
+                            import math
+                            if math.isfinite(value) and (35 <= value <= 100 if key == 'desktopOpacity' else -100000 <= value <= 100000): continue
+                        values = [value] if key == 'desktopSelection' else value if key == 'desktopFloatingSelections' else None
+                        if isinstance(values, list) and len(values) <= 100 and all(isinstance(v, dict) and set(v) == {'accountId', 'groupId', 'bucketId'} and all(isinstance(s, str) and len(s) <= 512 for s in v.values()) for v in values): continue
+                        raise ValueError()
+                    with monitor.lock:
+                        if not monitor.settings_vault: raise ValueError()
+                        prefs = monitor.settings_vault.load()
+                        prefs.update(data)
+                        monitor.settings_vault.save(prefs)
+                    return self.send(200, b'{"saved":true}')
+                except (ValueError, TypeError, TimeoutError):
+                    return self.send(400, b'{}')
+                except Exception:
+                    return self.send(503, b'{"error":"Could not save desktop preferences"}')
             if self.path in ('/api/accounts/remove', '/api/accounts/restore', '/api/accounts/layout', '/api/connections/start', '/api/connections/cancel', '/api/providers'):
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
@@ -124,10 +159,11 @@ def main():
     monitor = Monitor(Vault(), desired_google=desired, settings_vault=settings)
     connections = Connections(monitor)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections))
+    stop = threading.Event()
     def poll():
-        while True:
+        while not stop.is_set():
             monitor.refresh()
-            threading.Event().wait(60)
+            stop.wait(60)
     threading.Thread(target=poll, daemon=True).start()
     print(f'Quota Dashboard running at http://127.0.0.1:{args.port}', flush=True)
     try:
@@ -135,6 +171,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        stop.set()
         connections.close()
         server.server_close()
 

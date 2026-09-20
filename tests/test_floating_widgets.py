@@ -43,13 +43,17 @@ class FloatingWidgetDrawTests(unittest.TestCase):
         self.addCleanup(strip.destroy)
         return strip
 
-    def test_full_quota_and_time_draw_complete_colored_ovals(self):
-        strip = self.make_strip([{'numeric': 100, 'remaining': '100%', 'timeRemaining': 100,
-                                  'status': 'live', 'provider': 'codex', 'window': '7d'}])
-        ovals = [(strip.itemcget(item, 'outline'), float(strip.itemcget(item, 'width')))
-                 for item in strip.find_all() if strip.type(item) == 'oval']
-        self.assertIn(('#468567', 6.0), ovals)
-        self.assertIn(('#506579', 2.0), ovals)
+    def test_ring_images_survive_redraw(self):
+        rows = [{'numeric': 100, 'remaining': '100%', 'timeRemaining': 100,
+                 'status': 'live', 'provider': 'codex', 'window': '7d'}]
+        strip = self.make_strip(rows)
+        for _ in range(2):
+            strip.set_rows(rows)
+            self.root.update_idletasks()
+            images = [item for item in strip.find_all() if strip.type(item) == 'image']
+            self.assertEqual(len(images), 1)
+            name = strip.itemcget(images[0], 'image')
+            self.assertGreater(int(self.root.tk.call('image', 'width', name)), 0)
 
     def test_unknown_unlimited_and_stale_are_drawn_honestly(self):
         strip = self.make_strip([
@@ -63,9 +67,7 @@ class FloatingWidgetDrawTests(unittest.TestCase):
         self.assertIn('∞', texts)
         self.assertEqual(texts.count('unknown'), 1)
         self.assertIn('stale', texts)
-        stale_outlines = [strip.itemcget(item, 'outline') for item in strip.find_withtag('quota-2')
-                          if strip.type(item) in ('oval', 'arc')]
-        self.assertIn('#8b949c', stale_outlines)
+        self.assertTrue(any(strip.type(item) == 'image' for item in strip.find_withtag('quota-2')))
 
     def test_empty_strip_reserves_message_width(self):
         strip = self.make_strip([])

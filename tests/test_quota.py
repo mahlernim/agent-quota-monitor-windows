@@ -154,5 +154,26 @@ class HTTPTests(unittest.TestCase):
         self.assertIn("frame-ancestors 'none'",headers['Content-Security-Policy'])
         self.assertEqual(json.loads(data)['accounts'],[])
 
+    def test_desktop_preferences_are_allowlisted_and_preserve_existing_settings(self):
+        vault = MemoryVault()
+        vault.load = lambda: {'enabledProviders': ['codex'], 'notForBrowser': 'private-value'}
+        self.monitor.settings_vault = vault
+        status, _, data = self.request('/api/desktop')
+        self.assertEqual(status, 200)
+        self.assertNotIn(b'private-value', data)
+        def post(value):
+            req = urllib.request.Request(f'http://127.0.0.1:{self.port}/api/desktop', data=json.dumps(value).encode(),
+                headers={'Origin':f'http://127.0.0.1:{self.port}', 'X-Quota-Request':'refresh', 'Content-Type':'application/json'}, method='POST')
+            try:
+                with urllib.request.urlopen(req) as response: return response.status
+            except urllib.error.HTTPError as error: return error.code
+        self.assertEqual(post({'desktopFloatingSelections':[], 'desktopOpacity':70}), 200)
+        self.assertEqual(vault.data['enabledProviders'], ['codex'])
+        self.assertEqual(vault.data['desktopFloatingSelections'], [])
+        for invalid in ({'auth':'bad'}, {'desktopOpacity':0}, {'desktopOpacity':True}, {'desktopSelection':{'accountId':'a'}}, {'wpfFloatingLeft':float('nan')}):
+            self.assertEqual(post(invalid), 400)
+        self.assertEqual(self.request('/api/desktop', method='POST')[0], 403)
+        self.assertEqual(self.request('/api/shutdown', method='POST')[0], 403)
+
 
 if __name__=='__main__':unittest.main()

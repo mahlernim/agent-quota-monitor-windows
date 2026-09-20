@@ -1,6 +1,8 @@
 """Compact, presentation-only Tk widgets for selected quota windows."""
 import math
 import tkinter as tk
+from PIL import ImageTk
+from .ring_render import render_rings
 
 
 PROVIDER_CODES = {'codex': 'CX', 'claude': 'CL', 'copilot': 'CP'}
@@ -81,6 +83,7 @@ class FloatingQuotaStrip(tk.Canvas):
 
     def _draw(self):
         self.delete('all')
+        self._ring_images = []
         if not self.rows:
             self.create_text(self.requested_width / 2, self.HEIGHT / 2, text='No pinned quotas',
                              fill='#727d86', font=('Segoe UI', 8))
@@ -101,21 +104,12 @@ class FloatingQuotaStrip(tk.Canvas):
         track = '#e2e6e9'
         quota_color = '#8b949c' if stale else ('#b67925' if quota is not None and quota <= 10 else '#468567')
         time_color = '#8b949c' if stale else '#506579'
-        outer = (x - half, y - half, x + half, y + half)
-        self.create_oval(*outer, outline=track, width=6, tags=tag)
-        if quota == 100:
-            self.create_oval(*outer, outline=quota_color, width=6, tags=tag)
-        elif quota is not None and quota > 0:
-            self.create_arc(*outer, start=90, extent=-3.6 * quota, style='arc',
-                            outline=quota_color, width=6, tags=tag)
-        inner = (x - half + 7, y - half + 7, x + half - 7, y + half - 7)
-        if time_remaining is not None:
-            self.create_oval(*inner, outline='#edf0f2', width=2, tags=tag)
-            if time_remaining == 100:
-                self.create_oval(*inner, outline=time_color, width=2, tags=tag)
-            elif time_remaining > 0:
-                self.create_arc(*inner, start=90, extent=-3.6 * time_remaining, style='arc',
-                                outline=time_color, width=2, tags=tag)
+        image = ImageTk.PhotoImage(render_rings(
+            self.RING_SIZE + 8, quota, time_remaining if not stale else None,
+            stale=stale, background=self.cget('background'),
+            quota_color=quota_color, time_color=time_color), master=self)
+        self._ring_images.append(image)
+        self.create_image(x, y, image=image, tags=tag)
         center = '∞' if unlimited else ('?' if quota is None else f'{quota:.0f}%')
         self.create_text(x, y, text=center, fill='#69747d' if stale or quota is None else '#20262d',
                          font=('Segoe UI Semibold', 8), tags=tag)

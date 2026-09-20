@@ -1,4 +1,4 @@
-param([string]$Version = '0.1.0-beta.2')
+param([string]$Version = '0.1.0-beta.3')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$') { throw 'Use a simple semantic version.' }
 Push-Location $PSScriptRoot

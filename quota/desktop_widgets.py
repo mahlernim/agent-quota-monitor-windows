@@ -1,5 +1,6 @@
 """Small native Tk widgets for the desktop quota monitor."""
 import tkinter as tk
+from .ring_render import render_rings
 
 
 def _number(value):
@@ -22,7 +23,7 @@ class QuotaGrid(tk.Frame):
         self.rowconfigure(0, weight=1)
         self.inner = tk.Frame(self.canvas, background='#f8fafc')
         self.window = self.canvas.create_window((0, 0), window=self.inner, anchor='nw')
-        self.rows, self.cards, self.selected, self.pinned = [], [], None, set()
+        self.rows, self.cards, self.selected, self.pinned, self.ring_images = [], [], None, set(), []
         self.inner.bind('<Configure>', self._sync_scroll)
         self.canvas.bind('<Configure>', self._resize)
         self.canvas.bind_all('<MouseWheel>', self._wheel, add='+')
@@ -56,6 +57,7 @@ class QuotaGrid(tk.Frame):
         for child in self.inner.winfo_children():
             child.destroy()
         self.cards = []
+        self.ring_images = []
         if not self.rows:
             tk.Label(self.inner, text='No readable quota windows yet. Open the full dashboard to connect an official client.',
                      background='#f8fafc', foreground='#4b5563', anchor='w').pack(fill='x', padx=10, pady=10)
@@ -95,19 +97,10 @@ class QuotaGrid(tk.Frame):
         inner = _number(row.get('timeRemaining'))
         stale = row.get('status') != 'live'
         ring = '#94a3b8' if stale or outer is None else '#22a06b' if outer >= 30 else '#d18a17' if outer >= 10 else '#c2413b'
-        card.create_oval(24, 5, 76, 57, outline='#d7dee7', width=6)
-        if outer == 100 and not stale:
-            card.create_oval(24, 5, 76, 57, outline=ring, width=6)
-        elif outer is not None and not stale:
-            card.create_arc(24, 5, 76, 57, start=90, extent=-outer * 3.6, style='arc', outline=ring, width=6)
-        else:
-            card.create_arc(24, 5, 76, 57, start=90, extent=250, style='arc', outline='#94a3b8', width=6, dash=(4, 3))
-        if inner is not None and not stale:
-            card.create_oval(32, 13, 68, 49, outline='#d7dee7', width=2)
-            if inner == 100:
-                card.create_oval(32, 13, 68, 49, outline='#4777ad', width=2)
-            else:
-                card.create_arc(32, 13, 68, 49, start=90, extent=-inner * 3.6, style='arc', outline='#4777ad', width=2)
+        from PIL import ImageTk
+        image = ImageTk.PhotoImage(render_rings(60, outer, inner, stale=stale, quota_color=ring), master=card)
+        self.ring_images.append(image)
+        card.create_image(50, 31, image=image)
         center = '∞' if row.get('exact') == 'Unlimited' else row.get('remaining', '?') if outer is not None else '?'
         card.create_text(50, 31, text=center, fill='#263442', font=('Segoe UI', 10, 'bold'))
         card.create_text(50, 64, text=row.get('window', 'Window'), fill='#25374a', font=('Segoe UI', 9, 'bold'))
