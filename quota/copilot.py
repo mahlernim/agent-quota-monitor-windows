@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 from . import model
 from .providers import ReadError, account
 from .vault import Vault
@@ -11,6 +12,12 @@ from .vault import Vault
 
 def descriptor_vault():
     return Vault(Path(os.environ['LOCALAPPDATA']) / 'QuotaDashboard/copilot-account.dpapi')
+
+
+def bundled_path(*parts):
+    """Resolve the non-secret bridge shipped beside a frozen application."""
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    return root.joinpath(*parts)
 
 
 def command():
@@ -21,9 +28,11 @@ def command():
     if not cli:
         cli = next((str(p) for p in (local / 'Microsoft/WinGet/Packages').glob('GitHub.Copilot_*/copilot.exe')), None)
     sdk = local / 'QuotaDashboard/copilot-runtime/node_modules/@github/copilot-sdk/dist/index.js'
-    if not node or not cli or not gh or not sdk.is_file():
+    bridge = bundled_path('quota', 'copilot_bridge.mjs')
+    bridge_data = bundled_path('quota', 'copilot_bridge_data.mjs')
+    if not node or not cli or not gh or not sdk.is_file() or not bridge.is_file() or not bridge_data.is_file():
         raise ReadError('copilot_setup_required')
-    return [node, str(Path(__file__).with_name('copilot_bridge.mjs')), cli, gh]
+    return [node, str(bridge), cli, gh]
 
 
 def stop_reader(process):

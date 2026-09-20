@@ -1,8 +1,9 @@
 import unittest
+import importlib.util
 from datetime import datetime, timedelta, timezone
 
 from quota.desktop_views import compact_group, compact_window, display_remaining, exact_remaining, last_success_label, popup_rows, reset_label, selected_window, tray_code
-from quota.desktop import DesktopSettings
+from quota.desktop import DARK_TRAY_TEXT, LIGHT_TRAY_TEXT, DesktopApplication, DesktopSettings, tray_text_color
 
 
 class Vault:
@@ -65,6 +66,22 @@ class DesktopViewTests(unittest.TestCase):
         self.assertEqual(exact_remaining({'remaining': float('nan')}), 'Unknown')
         self.assertEqual(exact_remaining({'remaining': 12.3456789}), '12.3456789%')
         self.assertEqual(last_success_label(0), '1970-01-01 00:00 UTC')
+
+    def test_tray_palette_follows_windows_light_theme_with_safe_fallback(self):
+        self.assertEqual(tray_text_color(lambda: 1), DARK_TRAY_TEXT)
+        self.assertEqual(tray_text_color(lambda: 0), LIGHT_TRAY_TEXT)
+        self.assertEqual(tray_text_color(lambda: (_ for _ in ()).throw(OSError())), LIGHT_TRAY_TEXT)
+
+    @unittest.skipUnless(importlib.util.find_spec('PIL'), 'Pillow optional desktop dependency')
+    def test_tray_icon_keeps_the_code_center_transparent_except_for_glyphs(self):
+        app = DesktopApplication.__new__(DesktopApplication)
+        account = {'provider': 'codex', 'status': 'live'}
+        group = {'label': 'Codex'}
+        bucket = {'remaining': 50}
+        app._selected = lambda: ((account, group, bucket), None)
+        icon = app._icon_image()
+        # This interior point was formerly covered by an opaque black disk.
+        self.assertEqual(icon.getpixel((20, 20))[3], 0)
 
     def test_reset_label_does_not_claim_replenishment(self):
         now = datetime(2026, 9, 20, tzinfo=timezone.utc)

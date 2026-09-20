@@ -24,6 +24,30 @@ from .vault import Vault
 APP_DIR = Path(os.environ.get('LOCALAPPDATA', '.')) / 'QuotaDashboard'
 MUTEX_NAME = 'Local\\AgentQuotaMonitorWindows.Singleton'
 ACTIVATION_EVENT = 'Local\\AgentQuotaMonitorWindows.Activate'
+LIGHT_TRAY_TEXT = '#f2f2f2'
+DARK_TRAY_TEXT = '#1f2933'
+
+
+def tray_text_color(theme_reader=None):
+    """Choose a code color for the Windows notification-area theme.
+
+    The registry read is optional and failures use the light-text fallback so
+    a missing or locked Personalize key cannot prevent the tray from starting.
+    """
+    try:
+        if theme_reader is None:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize')
+            try:
+                theme_reader = lambda: winreg.QueryValueEx(key, 'SystemUsesLightTheme')[0]
+                value = theme_reader()
+            finally:
+                winreg.CloseKey(key)
+        else:
+            value = theme_reader()
+        return DARK_TRAY_TEXT if value == 1 else LIGHT_TRAY_TEXT
+    except (ImportError, OSError, ValueError, TypeError):
+        return LIGHT_TRAY_TEXT
 
 
 class DesktopSettings:
@@ -166,14 +190,12 @@ class DesktopApplication:
             for start in range(-90, 270, 60):
                 draw.arc((5, 5, 59, 59), start=start, end=start + 34, fill='#a0a0a0', width=7)
         code = tray_code(found[0], found[1]) if found else '?'
-        # Keep text legible against both dark and light Windows tray themes.
-        draw.ellipse((16, 16, 48, 48), fill='#24313d')
         try:
             font = ImageFont.truetype(str(Path(os.environ.get('WINDIR', r'C:\Windows')) / 'Fonts' / 'segoeuib.ttf'), 24)
         except OSError:
             font = ImageFont.load_default()
         x0, y0, x1, y1 = draw.textbbox((0, 0), code, font=font)
-        draw.text(((64 - (x1 - x0)) / 2 - x0, (64 - (y1 - y0)) / 2 - y0 - 1), code, fill='#f2f2f2', font=font)
+        draw.text(((64 - (x1 - x0)) / 2 - x0, (64 - (y1 - y0)) / 2 - y0 - 1), code, fill=tray_text_color(), font=font)
         return image
 
     def _update_tray(self):

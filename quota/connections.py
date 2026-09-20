@@ -12,18 +12,33 @@ PROVIDERS = ('codex', 'claude', 'antigravity')
 ACTIVE = ('starting', 'waiting', 'verifying')
 
 
+def _environment_path(name):
+    value = os.environ.get(name)
+    return Path(value) if value else None
+
+
+def _newest(root, pattern):
+    try:
+        paths = list(root.glob(pattern))
+        return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        # Client updates can replace their install tree during discovery.
+        return []
+
+
 def client_command(provider):
-    local = Path(os.environ.get('LOCALAPPDATA', ''))
-    roaming = Path(os.environ.get('APPDATA', ''))
+    local = _environment_path('LOCALAPPDATA')
+    roaming = _environment_path('APPDATA')
     if provider == 'antigravity':
-        candidates = [local / 'Programs/Antigravity/Antigravity.exe']
+        candidates = [local / 'Programs/Antigravity/Antigravity.exe'] if local else []
         args = []
     elif provider == 'claude':
         candidates = [Path.home() / '.local/bin/claude.exe']
-        candidates += sorted((local / 'npm-cache/_npx').glob('*/node_modules/@anthropic-ai/claude-code-win32-*/claude.exe'), key=lambda p: p.stat().st_mtime, reverse=True)
+        if local:
+            candidates += _newest(local / 'npm-cache/_npx', '*/node_modules/@anthropic-ai/claude-code-win32-*/claude.exe')
         args = ['auth', 'login', '--claudeai']
     elif provider == 'codex':
-        candidates = sorted((roaming / 'npm/node_modules/@openai/codex').glob('**/codex.exe'), key=lambda p: p.stat().st_mtime, reverse=True)
+        candidates = _newest(roaming / 'npm/node_modules/@openai/codex', '**/codex.exe') if roaming else []
         args = ['login']
     else:
         raise ValueError('Unknown provider')

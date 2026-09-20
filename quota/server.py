@@ -3,12 +3,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import sys
 import threading
 from .monitor import Monitor
 from .vault import Vault
 from .connections import Connections
 
-WEB = Path(__file__).resolve().parents[1] / 'web'
+def bundled_path(*parts):
+    """Resolve read-only assets in source, one-folder, and one-file builds."""
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    return root.joinpath(*parts)
+
+
+WEB = bundled_path('web')
 
 
 def handler(monitor, port, connections=None):
