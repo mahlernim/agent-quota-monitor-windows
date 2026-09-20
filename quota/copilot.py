@@ -103,13 +103,19 @@ def copilot_account():
                    'Official Copilot SDK / existing GitHub CLI session',read)
 
 
-def main():
+def bind_current_account(stop=None):
     raw = read_snapshot()
     groups = model.copilot(raw)
     if not groups:
         raise ReadError('quota_not_reported')
+    if stop is not None and stop.is_set():
+        raise ReadError('connection_cancelled')
     descriptor_vault().save({'id':raw['id'],'login':raw['login']})
-    print(json.dumps({'connected':raw['login'],'groups':groups}))
+    return {'connected':raw['login'],'groups':groups}
+
+
+def main():
+    print(json.dumps(bind_current_account()))
 
 
 if __name__ == '__main__':

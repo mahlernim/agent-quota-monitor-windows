@@ -127,7 +127,6 @@ public sealed class AccountsWindow : Window
             };
             _providerChecks[provider] = check;
             row.Children.Add(check);
-            if (provider != "copilot")
             {
                 var signIn = new Button
                 {
@@ -146,7 +145,7 @@ public sealed class AccountsWindow : Window
         }
 
         body.Children.Add(new TextBlock {
-            Text = "Copilot setup uses GitHub CLI sign-in: gh auth login --hostname github.com --web. Then run Setup-Copilot.ps1 from the source repository once.",
+            Text = "Copilot Sign in opens the official GitHub CLI and browser. Its optional runtime must first be installed with Setup-Copilot.ps1 from the source repository.",
             TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 5, 0, 0)
         });
         _saveProviders.Click += async (_, _) => await SaveProvidersAsync();

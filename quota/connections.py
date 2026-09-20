@@ -8,7 +8,7 @@ import threading
 import time
 import uuid
 
-PROVIDERS = ('codex', 'claude', 'antigravity')
+PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
 ACTIVE = ('starting', 'waiting', 'verifying')
 
 
@@ -29,6 +29,9 @@ def _newest(root, pattern):
 def client_command(provider):
     local = _environment_path('LOCALAPPDATA')
     roaming = _environment_path('APPDATA')
+    if provider == 'copilot':
+        executable = shutil.which('gh.exe') or shutil.which('gh')
+        return [executable, 'auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web'] if executable else None
     if provider == 'antigravity':
         candidates = [local / 'Programs/Antigravity/Antigravity.exe'] if local else []
         args = []
@@ -54,6 +57,9 @@ def client_command(provider):
 def launch(command):
     # Launch only resolved local executables with fixed arguments, never a shell.
     # Output may contain auth URLs or codes, so discard it rather than logging it.
+    if Path(command[0]).name.lower() in ('gh.exe', 'gh'):
+        # GitHub's device code and interactive confirmation stay in its own console.
+        return subprocess.Popen(command, cwd=Path.home(), creationflags=getattr(subprocess, 'CREATE_NEW_CONSOLE', 0))
     return subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, cwd=Path.home(),
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
@@ -86,6 +92,12 @@ class Connections:
             command = self.resolver(provider)
             if not command:
                 raise ValueError('Official client not found. Install it, then restart the dashboard.')
+            if provider == 'copilot':
+                from .copilot import command as quota_command
+                try:
+                    quota_command()
+                except Exception:
+                    raise ValueError('Copilot setup is required. Run Setup-Copilot.ps1 from the source repository, then retry.') from None
             self.stop = threading.Event()
             now = self.clock()
             self.job = dict(id=uuid.uuid4().hex, provider=provider, accountId=account_id,
@@ -136,7 +148,7 @@ class Connections:
             rediscovered = False
             with self.lock:
                 self.process = process
-            self._set(job_id, 'waiting', 'Complete sign-in in Antigravity, then leave the app open.' if desktop else 'Complete sign-in in the browser opened by the official client. This renews that client’s session too.')
+            self._set(job_id, 'waiting', 'Follow the GitHub CLI sign-in window and browser. The monitor verifies the quota afterward.' if job['provider'] == 'copilot' else 'Complete sign-in in Antigravity, then leave the app open.' if desktop else 'Complete sign-in in the browser opened by the official client. This renews that client’s session too.')
             while not stop.wait(1):
                 if self.clock() >= job['deadline']:
                     self._set(job_id, 'timed_out', 'Connection timed out. Existing sign-ins are preserved. Retry when ready.')
@@ -149,6 +161,11 @@ class Connections:
                     self._set(job_id, 'verifying', 'Sign-in finished. Waiting for an account-verified quota read. Provider cooldowns still apply.')
                 if desktop or status == 0:
                     if not rediscovered:
+                        if job['provider'] == 'copilot':
+                            from .copilot import bind_current_account
+                            bind_current_account(stop=stop)
+                            if stop.is_set():
+                                return
                         self.monitor.next_discovery = 0
                         rediscovered = True
                     self.monitor.refresh()

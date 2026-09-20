@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import copy
 import threading
 import unittest
@@ -40,6 +41,29 @@ class ConnectionTests(unittest.TestCase):
         self.connection.close()
         if self.connection.worker:
             self.connection.worker.join(3)
+
+    def test_copilot_command_uses_official_github_browser_flow(self):
+        from quota.connections import client_command
+        with patch('quota.connections.shutil.which', return_value='C:/tools/gh.exe'):
+            self.assertEqual(client_command('copilot'), ['C:/tools/gh.exe', 'auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web'])
+
+    def test_copilot_binds_only_after_successful_login(self):
+        self.process.status = 0
+        observed = threading.Event()
+        self.monitor.refresh = observed.set
+        with patch('quota.copilot.command', return_value=['reader']), patch('quota.copilot.bind_current_account') as bind:
+            job = self.connection.start('copilot')
+            self.assertTrue(observed.wait(3))
+            bind.assert_called_once()
+            self.assertEqual(self.connection.job['state'], 'verifying')
+            self.connection.cancel(job['id'])
+            self.connection.worker.join(3)
+
+    def test_copilot_setup_missing_never_launches_login(self):
+        with patch('quota.copilot.command', side_effect=RuntimeError('missing')):
+            with self.assertRaisesRegex(ValueError, 'setup is required'):
+                self.connection.start('copilot')
+        self.assertIsNone(self.connection.worker)
 
     def test_invalid_provider_and_account_never_launch(self):
         for provider in ('shell', None, ['claude']):

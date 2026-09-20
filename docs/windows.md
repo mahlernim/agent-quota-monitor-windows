@@ -17,3 +17,5 @@ For source development, install a .NET 8 SDK and use `Start-Windows.ps1`. The de
 The native main window groups quotas by account. Click a ring to select the system-tray quota, shown by the Tray marker. Corner stars pin quotas to the floating monitor. Right-click the floating monitor for Size (75–200%) and Opacity (35–100%). Both settings persist. Outer rings keep agent colors, including burnt orange for direct Claude. Gray time rings sit immediately inside quota rings. Pace warnings color the percentage text.
 
 In Settings, Start with Windows launches the monitor in the tray when you sign in. It is off by default, needs no administrator rights, and can be disabled there. Keep the portable folder in a permanent location. Disable startup before moving or deleting it, then re-enable it from the new location. Windows Task Manager can independently disable startup entries.
+
+Copilot Sign in in Settings launches the official GitHub CLI browser flow in its own console. Complete its prompts there. After the optional runtime setup, the monitor binds the returned account only after a verified quota read. Existing GitHub CLI authentication is managed by GitHub CLI.
