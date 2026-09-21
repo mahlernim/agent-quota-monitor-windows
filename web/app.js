@@ -1,7 +1,9 @@
 const $ = s => document.querySelector(s);
 const names = {codex:'OpenAI Codex',claude:'Anthropic Claude',antigravity:'Google Antigravity',copilot:'GitHub Copilot'};
+const cliErrors = {antigravity_cli_timeout:'Antigravity CLI quota read timed out. Waiting to retry.',antigravity_cli_failed:'Run agy -p /usage in the official CLI, then refresh.',antigravity_cli_auth_unsupported:'Use the official Antigravity CLI Google sign-in for subscription quotas.'};
 const errors = {sign_in_required:'Session expired or rejected. Reconnect through the official client.',local_session_unavailable:'Local session unavailable.',independent_sign_in_needed:'Official sign-in needed.',rate_limited:'Provider rate limit. Waiting to retry.',identity_changed:'Account changed. Waiting for discovery.',quota_not_reported:'No quota reported.',copilot_setup_required:'Run Setup-Copilot.ps1 to verify the existing GitHub CLI account.',copilot_auth_source_unsupported:'This reader requires the existing github.com GitHub CLI sign-in.',copilot_read_timeout:'Copilot quota read timed out.'};
 let latest=null, editing=false, draft=[], removed=[], busy=false, dragged=null, alerts=false, notice='';
+Object.assign(errors, cliErrors);
 const expanded=new Set(), previous=new Map(), lastNotification=new Map(), openMetrics=new Set();
 try{$('#mode').value=localStorage.getItem('quotaDisplayMode')==='used'?'used':'remaining'}catch{}
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}

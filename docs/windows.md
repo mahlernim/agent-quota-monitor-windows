@@ -14,6 +14,8 @@ Accounts opens native provider, sign-in, removal, and restore controls. Codex an
 
 Settings and cache are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Existing pinned selections are migrated automatically. The monitor binds only to 127.0.0.1 and has no startup service or telemetry.
 
+Antigravity can also refresh through the official `agy` CLI while its desktop app is closed. Sign in to the CLI and run `agy -p /usage`, then refresh the monitor and pin the account marked CLI. This independently verified account stays separate from desktop cards. Remove an unwanted desktop card in Settings if you only need the CLI source. Neither removal nor this reader logs you out.
+
 This is an unsigned beta. Clean-machine, screen-reader, mixed-DPI multi-monitor, and sleep/resume testing is still limited. Source and build instructions are available in the repository.
 
 For source development, install a .NET 8 SDK and use `Start-Windows.ps1`. The development reader uses `.venv-desktop`. `Build-Windows.ps1` creates the self-contained WPF archive. The earlier Tk prototype remains available through `Start-Desktop.ps1` for comparison, but should not run alongside the WPF monitor.

@@ -123,6 +123,21 @@ def powershell(script):
 
 
 def antigravity_accounts():
+    from .antigravity_cli import cli_account
+    try:
+        cli = cli_account()
+    except (ReadError, OSError, ValueError):
+        cli = None
+    try:
+        desktop = antigravity_desktop_accounts()
+    except ReadError:
+        if cli is None:
+            raise
+        desktop = []
+    return desktop + ([cli] if cli else [])
+
+
+def antigravity_desktop_accounts():
     # Process command lines contain a local RPC secret. They never leave this function.
     script = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; @(Get-CimInstance Win32_Process -Filter \"Name='language_server.exe' OR Name='language_server_windows_x64.exe'\" | Select-Object ProcessId,CommandLine) | ConvertTo-Json -Compress"
     rows = json.loads(powershell(script) or '[]')

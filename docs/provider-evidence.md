@@ -14,7 +14,11 @@ Reads the official Claude Code session. `/api/oauth/profile` verifies account id
 
 Discovers a running official local language service and reads `GetUserStatus` and `RetrieveUserQuotaSummary`. Checks the account label before and after the quota read. Local source plus email supplies a local identity only because a stable Google provider subject is not returned. Google Gemini and Claude/GPT quota groups remain separate. Missing five-hour windows are unreported.
 
-[Official CLI authentication](https://antigravity.google/docs/cli/install) is initiated at startup when a saved session is absent. No dedicated login command is advertised by the tested CLI. Anonymous CLI quota output is not attached to a named account.
+[Official CLI authentication](https://antigravity.google/docs/cli/install) is initiated at startup when a saved session is absent. No dedicated login command is advertised by the tested CLI. The separate CLI reader runs the built-in `agy -p /usage --print-timeout 20s` command, which [the official documentation](https://antigravity.google/docs/cli/headless/) identifies as CLI-handled rather than a model prompt. Windows CLI 1.1.27 returned tab-separated group, window, remaining percentage, and reset timestamp with the desktop app closed.
+
+The CLI reader reads the existing `gemini:antigravity` Windows Credential Manager session and verifies its Google subject and verified email through the [Google UserInfo endpoint](https://developers.google.com/identity/openid-connect/reference). It binds that identity in an app-owned DPAPI descriptor containing identity metadata and a one-way session fingerprint, never raw credentials. It checks the session before running the command and verifies identity again after reading quotas. Only the official CLI renews its own credentials. API-key/custom-provider mode is excluded.
+
+CLI cards have stable IDs derived from the Google subject in a separate CLI namespace. They are never merged into a desktop card by email. Both sources can coexist, and removing one does not remove the other. The monitor's normal five-minute interval, failure backoff, and stale-value behavior apply. Initial identity discovery also honors backoff. Missing windows stay absent, and malformed or changed CLI output is rejected rather than guessed. A fresh CLI sign-in and `agy -p /usage` may be needed before initial identity binding if its saved access token has expired.
 
 ## GitHub Copilot
 
