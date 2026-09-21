@@ -171,9 +171,14 @@ class Monitor:
             order = {key: i for i, key in enumerate(self.order)}
             enabled = self.enabled.copy() if self.enabled is not None else None
         now = self.clock()
+        # Keep the established CLI card on failures rather than revive desktop duplicates.
+        # Legacy rows and pins remain on disk without merging identities by email.
+        if any(r['provider'] == 'antigravity' and r.get('source', '').startswith('Official Antigravity CLI')
+               and r.get('lastSuccess') and r['id'] not in hidden for r in rows):
+            rows = [r for r in rows if r.get('source') != 'Official running Antigravity local service']
         for label in self.desired_google:
             # This is a requested connection, not a verified or merged account.
-            if not any(r['provider'] == 'antigravity' and r['label'] == label for r in rows):
+            if not any(r['provider'] == 'antigravity' and (r['label'] == label or r.get('accountEmail') == label) for r in rows):
                 rows.append(dict(id=model.identity('requested-google', label), provider='antigravity', label=label,
                                  source='Requested Google account', identityStatus='Not connected; identity unverified',
                                  groups=[], status='pending', error='independent_sign_in_needed', lastSuccess=None))
