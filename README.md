@@ -38,7 +38,7 @@ Any combination works, and one provider is enough. The monitor reads quotas thro
 
 If an existing session is already recognized, you do not need to sign in again.
 
-For Antigravity background monitoring, install and sign in to the [official CLI](https://antigravity.google/docs/cli/install), then run `agy -p /usage` once and press Refresh in the monitor. The account marked **CLI** can refresh while the desktop app is closed. Pin its quotas for continuous monitoring. Desktop and CLI cards stay separate because the desktop service does not report a stable Google account ID. You can remove an unwanted desktop card without affecting the CLI card or signing out. CLI failures preserve the last reading as stale. API-key mode is not supported for subscription monitoring.
+For Antigravity background monitoring, install and sign in to the [official CLI](https://antigravity.google/docs/cli/install), then run `agy -p /usage` once and press Refresh in the monitor. The account marked **CLI** can refresh while the desktop app is closed. Pin its quotas for continuous monitoring. Once the CLI has returned verified quotas, the monitor shows its card and suppresses old desktop-source cards. Existing CLI pins stay intact. Desktop monitoring remains a fallback for installations without a working CLI connection. CLI failures preserve the last reading as stale. API-key mode is not supported for subscription monitoring.
 
 Copilot needs a one-time optional setup with PowerShell 7, Node and npm, Python, and the GitHub CLI, using `Setup-Copilot.ps1` from the source repository. See [Copilot setup](docs/copilot-setup.md).
 

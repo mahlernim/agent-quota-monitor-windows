@@ -149,8 +149,21 @@ class IdentityTests(unittest.TestCase):
         with patch.object(providers, 'antigravity_desktop_accounts', return_value=['desktop']):
             self.assertEqual(providers.antigravity_accounts(), ['desktop'])
 
-    def test_both_clients_keep_independent_sources(self):
-        with patch.object(providers, 'antigravity_desktop_accounts', return_value=[{'id': 'desktop'}]):
+    def test_cli_is_preferred_without_polling_desktop(self):
+        with patch.object(providers, 'antigravity_desktop_accounts', return_value=[{'id': 'desktop'}]) as desktop:
             found = providers.antigravity_accounts()
-        self.assertEqual(len(found), 2)
-        self.assertNotEqual(found[0]['id'], found[1]['id'])
+        self.assertEqual(len(found), 1)
+        desktop.assert_not_called()
+
+    def test_successful_cli_suppresses_legacy_card_even_when_stale(self):
+        monitor = Monitor(Store(), clock=lambda: 1000, desired_google=['same@example.com'])
+        legacy = providers.account('antigravity', 'legacy', 'same@example.com',
+                                   'Official running Antigravity local service',
+                                   lambda: (cli.parse_usage(USAGE), 'same@example.com'))
+        monitor.refresh_one(legacy)
+        account = cli.cli_account()
+        monitor.refresh_one(account)
+        self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [account['id']])
+        monitor.rows[account['id']]['status'] = 'stale'
+        self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [account['id']])
+        self.assertIn(legacy['id'], monitor.rows)

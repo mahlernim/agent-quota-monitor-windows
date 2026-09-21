@@ -171,4 +171,5 @@ def cli_account():
                      'Official Antigravity CLI /usage (desktop app not required)', read,
                      'Google account ID verified; independent CLI session')
     result['sessionRevision'] = revision
+    result['accountEmail'] = binding['email']
     return result

@@ -125,16 +125,9 @@ def powershell(script):
 def antigravity_accounts():
     from .antigravity_cli import cli_account
     try:
-        cli = cli_account()
+        return [cli_account()]
     except (ReadError, OSError, ValueError):
-        cli = None
-    try:
-        desktop = antigravity_desktop_accounts()
-    except ReadError:
-        if cli is None:
-            raise
-        desktop = []
-    return desktop + ([cli] if cli else [])
+        return antigravity_desktop_accounts()
 
 
 def antigravity_desktop_accounts():
