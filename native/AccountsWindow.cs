@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -318,7 +317,7 @@ public sealed class AccountsWindow : Window
     {
         try
         {
-            using HttpResponseMessage response = await _http.PostAsJsonAsync(path, payload);
+            using HttpResponseMessage response = await BackendRequests.PostAsync(_http, path, payload);
             if (!response.IsSuccessStatusCode)
             {
                 ShowError(await BackendErrorAsync(response));
