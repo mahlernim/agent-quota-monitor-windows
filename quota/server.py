@@ -74,7 +74,7 @@ def handler(monitor, port, connections=None):
             if self.path == '/api/desktop':
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
-                    if not 0 < size <= 32768 or self.headers.get('Content-Type') != 'application/json':
+                    if not 0 < size <= 32768 or self.headers.get_content_type() != 'application/json':
                         raise ValueError()
                     self.connection.settimeout(5)
                     data = json.loads(self.rfile.read(size))
@@ -100,7 +100,7 @@ def handler(monitor, port, connections=None):
             if self.path in ('/api/accounts/remove', '/api/accounts/restore', '/api/accounts/layout', '/api/connections/start', '/api/connections/cancel', '/api/providers'):
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
-                    if not 0 < size <= 32768 or self.headers.get('Content-Type') != 'application/json':
+                    if not 0 < size <= 32768 or self.headers.get_content_type() != 'application/json':
                         return self.send(400, b'{}')
                     self.connection.settimeout(5)
                     payload = json.loads(self.rfile.read(size))

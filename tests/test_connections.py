@@ -32,6 +32,18 @@ class Process:
 
 
 class ConnectionTests(unittest.TestCase):
+    def test_claude_npm_install_is_detected_without_exe_on_path(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from quota.connections import client_command
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / 'npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe'
+            executable.parent.mkdir(parents=True)
+            executable.touch()
+            with patch('quota.connections._environment_path', return_value=root), patch('quota.connections.Path.home', return_value=root), patch('quota.connections.shutil.which', return_value=None):
+                self.assertEqual(client_command('claude'), [str(executable.resolve()), 'auth', 'login', '--claudeai'])
+
     def setUp(self):
         self.monitor = Monitor()
         self.process = Process()

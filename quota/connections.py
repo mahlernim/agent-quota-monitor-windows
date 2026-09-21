@@ -37,6 +37,9 @@ def client_command(provider):
         args = []
     elif provider == 'claude':
         candidates = [Path.home() / '.local/bin/claude.exe']
+        if roaming:
+            candidates.append(roaming / 'npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe')
+            candidates += _newest(roaming / 'npm/node_modules/@anthropic-ai/claude-code/node_modules', '@anthropic-ai/claude-code-win32-*/claude.exe')
         if local:
             candidates += _newest(local / 'npm-cache/_npx', '*/node_modules/@anthropic-ai/claude-code-win32-*/claude.exe')
         args = ['auth', 'login', '--claudeai']

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true)][string]$BundleDirectory,
-    [string]$Version = '0.2.0-beta.5'
+    [string]$Version = '0.2.0-beta.6'
 )
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$') { throw 'Use a semantic version.' }
