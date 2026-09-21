@@ -16,6 +16,7 @@ node --check web/app.js
 node tests/test_pace.mjs
 node tests/test_copilot_bridge.mjs
 dotnet build native/AgentQuotaMonitor.csproj -c Release
+python tests/check_native_requests.py dotnet
 ```
 
 Clean-machine, accessibility, mixed-DPI, and sleep/resume testing remains limited. Startup command checks do not replace a real Windows sign-in test.

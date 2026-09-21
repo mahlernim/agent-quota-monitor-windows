@@ -22,3 +22,5 @@ native/obj/
 
 tests/native-updates/bin/
 tests/native-updates/obj/
+tests/native-requests/bin/
+tests/native-requests/obj/

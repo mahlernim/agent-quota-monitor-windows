@@ -131,7 +131,7 @@ public sealed class App : Application
     private void HideFloating() { floating?.Hide(); _ = Post("/api/desktop", new { desktopFloating = false }); }
     private async Task Post(string path, object value)
     {
-        try { using var response = await http.PostAsync(path, new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json")); response.EnsureSuccessStatusCode(); }
+        try { using var response = await BackendRequests.PostAsync(http, path, value); response.EnsureSuccessStatusCode(); }
         catch { if (main != null) main.Title = "Agent Quota Monitor · could not save or refresh"; }
     }
     private async Task Quit()
