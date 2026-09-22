@@ -9,7 +9,7 @@
 - Preserve existing official application sessions, credentials, and settings. Avoid refresh-token races with official clients.
 - Use supported read-only interfaces where available. Never send model prompts merely to check usage or start quota windows.
 - Store app-owned secrets with Windows encryption outside the repository. Never log tokens, cookies, authorization headers, or credential contents.
-- Bind the dashboard to loopback by default. Keep secrets out of browser responses and browser storage.
+- Bind the quota API to loopback by default. Keep secrets out of API responses and browser storage.
 - Poll conservatively and honor rate limits. Preserve stale values with clear timestamps after failures.
 - Keep sample data visibly separate from live data. Validate using meaningful parser, account-isolation, and failure-handling tests.
 - Do not add account switching, proxy routing, publishing, paid API usage, or startup services as part of the first milestone.

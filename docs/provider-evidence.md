@@ -8,7 +8,7 @@ Reads the official Codex session and its account-scoped `/wham/usage` response. 
 
 ## Direct Claude
 
-Reads the official Claude Code session. `/api/oauth/profile` verifies account identity before `/api/oauth/usage` is accepted. Product attribution is excluded from quota windows. [Official Claude Code login](https://code.claude.com/docs/en/cli-reference) can be launched by the dashboard. Tokens are never logged or refreshed by the monitor.
+Reads the official Claude Code session. `/api/oauth/profile` verifies account identity before `/api/oauth/usage` is accepted. Product attribution is excluded from quota windows. [Official Claude Code login](https://code.claude.com/docs/en/cli-reference) can be launched from Settings. Tokens are never logged or refreshed by the monitor.
 
 ## Antigravity
 

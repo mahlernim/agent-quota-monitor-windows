@@ -97,6 +97,16 @@ class IdentityTests(unittest.TestCase):
         self.profile.return_value = ('google-b', 'same@example.com')
         self.assertNotEqual(cli.cli_account()['id'], first['id'])
 
+    def test_unrepresentable_identity_wait_never_retries_early(self):
+        self.profile.side_effect = providers.ReadError('rate_limited', 10 ** 400)
+        with patch.object(cli.time, 'monotonic', return_value=1000):
+            with self.assertRaises(providers.ReadError):
+                cli.cli_account()
+        with patch.object(cli.time, 'monotonic', return_value=1000000):
+            with self.assertRaises(providers.ReadError):
+                cli.cli_account()
+        self.profile.assert_called_once()
+
     def test_account_switch_before_read_never_launches_quota_command(self):
         account = cli.cli_account()
         self.credential.return_value = ('other', 'revision-b')

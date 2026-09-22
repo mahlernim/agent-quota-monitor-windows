@@ -7,6 +7,7 @@ import subprocess
 import urllib.error
 import urllib.request
 from . import model
+from .retry import MAX_TIMESTAMP, delay_seconds
 
 HOME = Path.home()
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,9 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ReadError(Exception):
     def __init__(self, code, retry_after=0):
-        self.code = code
-        self.retry_after = retry_after
-        super().__init__(code)
+        self.code = code if isinstance(code, str) and re.fullmatch(r'[a-z][a-z0-9_]{0,95}', code) else 'reader_failed'
+        self.retry_after = delay_seconds(retry_after)
+        super().__init__(self.code)
 
 
 def request(url, headers=None, body=None):
@@ -39,7 +40,9 @@ def request(url, headers=None, body=None):
     except urllib.error.HTTPError as err:
         retry = err.headers.get('Retry-After', '')
         try:
-            wait = max(0, int(retry))
+            # Avoid Python's integer-string limit without losing a valid huge wait.
+            digits = retry.strip().lstrip('0') or '0'
+            wait = MAX_TIMESTAMP + 1 if digits.isascii() and digits.isdigit() and len(digits) > 12 else max(0, int(retry))
         except ValueError:
             from email.utils import parsedate_to_datetime
             import time

@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Shell;
 
 namespace AgentQuotaMonitor;
@@ -13,6 +15,8 @@ namespace AgentQuotaMonitor;
 public sealed class MainWindow : Window
 {
     private readonly WrapPanel _updateBanner = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(8, 0, 8, 4) };
+    private readonly TextBlock _backendError = new() { Visibility = Visibility.Collapsed, TextWrapping = TextWrapping.Wrap,
+        Foreground = Brushes.Firebrick, Margin = new Thickness(8, 0, 8, 6) };
     private readonly Action<QuotaItem> _selectTray;
     private readonly Action<QuotaItem> _togglePin;
     private readonly WrapPanel _groups = new() { Margin = new Thickness(6) };
@@ -23,7 +27,7 @@ public sealed class MainWindow : Window
     private ISet<string> _pins = new HashSet<string>();
 
     public MainWindow(Action<QuotaItem> selectTray, Action<QuotaItem> togglePin, Action showFloating,
-        Action refresh, Action openWeb, Action quit, Action accounts)
+        Action refresh, Action quit, Action accounts)
     {
         _selectTray = selectTray;
         _togglePin = togglePin;
@@ -39,13 +43,19 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(toolbar, Dock.Top);
         root.Children.Add(toolbar);
         toolbar.Children.Add(Button("Refresh", refresh));
-        toolbar.Children.Add(Button("Web", openWeb));
         toolbar.Children.Add(Button("Floating", showFloating));
         toolbar.Children.Add(Button("Settings", accounts));
         toolbar.Children.Add(Button("Quit", quit));
         DockPanel.SetDock(_updateBanner, Dock.Top); root.Children.Add(_updateBanner);
+        DockPanel.SetDock(_backendError, Dock.Top); root.Children.Add(_backendError);
         _scroll.Content = _groups;
         root.Children.Add(_scroll);
+    }
+
+    internal void ShowBackendError(string message)
+    {
+        _backendError.Text = message;
+        _backendError.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     internal void SetUpdate(UpdateService updates)
@@ -99,7 +109,7 @@ public sealed class MainWindow : Window
             _groups.Children.Add(section);
         }
         if (_groups.Children.Count == 0)
-            _groups.Children.Add(Label("No readable quota windows yet. Open the full dashboard to connect an official client.", false));
+            _groups.Children.Add(Label("No readable quota windows yet. Open Settings to connect an official client.", false));
         Dispatcher.BeginInvoke(() =>
         {
             _scroll.ScrollToVerticalOffset(offset);
@@ -125,12 +135,10 @@ public sealed class MainWindow : Window
         var window = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, FontSize = 11, FontWeight = FontWeights.SemiBold };
         var status = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, FontSize = 8 };
         stack.Children.Add(window); stack.Children.Add(status);
-        var pin = new Button { Content = "☆", HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top, Width = 19, Height = 19, FontSize = 16,
-            Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent,
-            ToolTip = "Pin to floating monitor" };
+        var glyph = PinGlyph();
+        var pin = PinButton(glyph);
         overlay.Children.Add(pin);
-        var card = new CardView(item, border, donut, select, window, status, pin);
+        var card = new CardView(item, border, donut, select, window, status, pin, glyph);
         select.Click += (_, _) => _selectTray(card.Item);
         pin.Click += (_, _) => _togglePin(card.Item);
         _cards.Add(item.Key, card);
@@ -151,15 +159,21 @@ public sealed class MainWindow : Window
         card.Status.Text = item.Stale ? (selected ? "STALE · Tray" : "STALE") : selected ? "Tray" : "";
         card.Status.Visibility = card.Status.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         card.Status.Foreground = item.Stale ? Brushes.DarkGoldenrod : Brushes.SlateGray;
-        card.Pin.Content = _pins.Contains(item.Key) ? "★" : "☆";
-        card.Pin.Foreground = _pins.Contains(item.Key) ? Brushes.Teal : Brushes.SlateGray;
-        card.Pin.ToolTip = _pins.Contains(item.Key) ? "Unpin from floating monitor" : "Pin to floating monitor";
+        // Filled violet means pinned, hollow slate means not pinned. Neither reuses a
+        // provider identity color or the blue tray selection.
+        var pinned = _pins.Contains(item.Key);
+        card.PinGlyph.Stroke = pinned ? PinnedBrush : UnpinnedBrush;
+        card.PinGlyph.Fill = pinned ? PinnedBrush : null;
+        card.Pin.ToolTip = pinned ? "Unpin from floating monitor" : "Pin to floating monitor";
+        AutomationProperties.SetName(card.Pin, (pinned ? "Unpin " : "Pin ") + item.Provider + " " + item.Account + " " + item.Group + " " + item.Window
+            + (pinned ? " from the floating monitor" : " to the floating monitor"));
+        AutomationProperties.SetHelpText(card.Pin, "Changes the floating monitor without changing the tray selection.");
     }
 
     private sealed class CardView
     {
-        public CardView(QuotaItem item, Border border, Donut donut, Button select, TextBlock window, TextBlock status, Button pin) =>
-            (Item, Border, Donut, Select, Window, Status, Pin) = (item, border, donut, select, window, status, pin);
+        public CardView(QuotaItem item, Border border, Donut donut, Button select, TextBlock window, TextBlock status, Button pin, Path pinGlyph) =>
+            (Item, Border, Donut, Select, Window, Status, Pin, PinGlyph) = (item, border, donut, select, window, status, pin, pinGlyph);
         public QuotaItem Item { get; set; }
         public Border Border { get; }
         public Donut Donut { get; }
@@ -167,6 +181,69 @@ public sealed class MainWindow : Window
         public TextBlock Window { get; }
         public TextBlock Status { get; }
         public Button Pin { get; }
+        public Path PinGlyph { get; }
+    }
+
+    // Lucide "pin", ISC licensed, drawn on its original 24 unit grid inside a Viewbox
+    // so the stroke scales with the glyph.
+    private const string PinPath = "M12 17v5 M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z";
+
+    private static readonly Brush PinnedBrush = Freeze(Color.FromRgb(124, 58, 237));
+    private static readonly Brush UnpinnedBrush = Freeze(Color.FromRgb(100, 116, 139));
+
+    private static Brush Freeze(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static Path PinGlyph() => new()
+    {
+        Data = Geometry.Parse(PinPath),
+        StrokeThickness = 2,
+        StrokeStartLineCap = PenLineCap.Round,
+        StrokeEndLineCap = PenLineCap.Round,
+        StrokeLineJoin = PenLineJoin.Round,
+        Width = 24,
+        Height = 24,
+        Stretch = Stretch.None
+    };
+
+    /// <summary>
+    /// A 19 unit hit target whose visible chrome is inset to 13 units, so the glyph and any
+    /// hover highlight stay in the card corner outside the quota ring.
+    /// </summary>
+    private static Button PinButton(Path glyph)
+    {
+        var button = new Button
+        {
+            Content = new Viewbox { Width = 12, Height = 12, Child = glyph },
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Width = 19, Height = 19, Margin = new Thickness(0, -3, -3, 0),
+            Padding = new Thickness(0), BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent, Cursor = Cursors.Hand,
+            ToolTip = "Pin to floating monitor"
+        };
+        var template = new ControlTemplate(typeof(Button));
+        var hitTarget = new FrameworkElementFactory(typeof(Grid));
+        hitTarget.SetValue(Panel.BackgroundProperty, Brushes.Transparent);
+        var chrome = new FrameworkElementFactory(typeof(Border));
+        chrome.SetValue(Border.MarginProperty, new Thickness(3));
+        chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(3));
+        chrome.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+        var content = new FrameworkElementFactory(typeof(ContentPresenter));
+        content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+        chrome.AppendChild(content);
+        hitTarget.AppendChild(chrome);
+        template.VisualTree = hitTarget;
+        var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
+        hover.Setters.Add(new Setter(Control.BackgroundProperty, Freeze(Color.FromRgb(226, 232, 240))));
+        template.Triggers.Add(hover);
+        button.Template = template;
+        return button;
     }
 
     private static TextBlock Label(string text, bool strong) => new()

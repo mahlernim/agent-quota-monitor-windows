@@ -3,20 +3,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
-import sys
 import threading
-from .monitor import Monitor
+from .monitor import Monitor, poll_monitor
 from .vault import Vault
 from .connections import Connections
-
-def bundled_path(*parts):
-    """Resolve read-only assets in source, one-folder, and one-file builds."""
-    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
-    return root.joinpath(*parts)
-
-
-WEB = bundled_path('web')
-
 
 def handler(monitor, port, connections=None):
     expected = f'127.0.0.1:{port}'
@@ -50,6 +40,7 @@ def handler(monitor, port, connections=None):
                 return self.send(403, b'{}')
             if self.path == '/api/status':
                 data = monitor.snapshot()
+                data['backend'] = dict(name='agent-quota-monitor', protocolVersion=1, processId=os.getpid())
                 if connections:
                     data['connections'] = connections.snapshot()
                 return self.send(200, json.dumps(data, allow_nan=False).encode())
@@ -58,16 +49,14 @@ def handler(monitor, port, connections=None):
                     prefs = monitor.settings_vault.load() if monitor.settings_vault else {}
                 keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop')
                 return self.send(200, json.dumps({key: prefs[key] for key in keys if key in prefs}, allow_nan=False).encode())
-            files = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8'), '/icon.svg': ('icon.svg', 'image/svg+xml')}
-            if self.path not in files:
-                return self.send(404, b'{}')
-            path, mime = files[self.path]
-            self.send(200, (WEB/path).read_bytes(), mime)
+            return self.send(404, b'{}')
 
         def do_POST(self):
             if not self.safe(True):
                 return self.send(403, b'{}')
             if self.path == '/api/shutdown':
+                if self.headers.get('X-Quota-Process-Id') != str(os.getpid()):
+                    return self.send(409, b'{"error":"Quota reader process changed"}')
                 self.send(202, b'{"accepted":true}')
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
@@ -160,12 +149,8 @@ def main():
     connections = Connections(monitor)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections))
     stop = threading.Event()
-    def poll():
-        while not stop.is_set():
-            monitor.refresh()
-            stop.wait(60)
-    threading.Thread(target=poll, daemon=True).start()
-    print(f'Quota Dashboard running at http://127.0.0.1:{args.port}', flush=True)
+    threading.Thread(target=poll_monitor, args=(monitor, stop), daemon=True).start()
+    print(f'Quota backend listening on 127.0.0.1:{args.port}', flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

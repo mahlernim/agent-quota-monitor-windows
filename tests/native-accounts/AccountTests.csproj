@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF><Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../native/AccountsWindow.cs" Link="AccountsWindow.cs" />
+    <Compile Include="../../native/AccountSettingsState.cs" Link="AccountSettingsState.cs" />
+    <Compile Include="../../native/BackendRequests.cs" Link="BackendRequests.cs" />
+    <Compile Include="../../native/StartupRegistration.cs" Link="StartupRegistration.cs" />
+    <Compile Include="../../native/UpdateService.cs" Link="UpdateService.cs" />
+  </ItemGroup>
+</Project>

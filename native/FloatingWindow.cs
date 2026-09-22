@@ -13,6 +13,7 @@ public sealed class FloatingWindow : Window
     private readonly Action _openMain;
     private readonly Action _hideRequested;
     private readonly StackPanel _items;
+    private bool _closingForShutdown;
     public event Action? ScaleChanged;
     public double MonitorScale { get; private set; } = 1;
     public void SetScale(double value) {
@@ -154,8 +155,15 @@ public sealed class FloatingWindow : Window
 
     private void HideInsteadOfClose(object? sender, CancelEventArgs eventArgs)
     {
+        if (_closingForShutdown) return;
         eventArgs.Cancel = true;
         RequestHide();
+    }
+
+    internal void CloseForShutdown()
+    {
+        _closingForShutdown = true;
+        Close();
     }
 
     private void RequestHide()

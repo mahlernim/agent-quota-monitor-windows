@@ -25,7 +25,7 @@ try {
     if ($LASTEXITCODE) { throw 'WPF build failed.' }
     & $python -m PyInstaller --clean --windowed --onedir --noupx --name quota-backend `
         --paths $PSScriptRoot --distpath (Join-Path $destination 'reader') --workpath build/backend --specpath build `
-        --add-data "${PSScriptRoot}/web:web" --add-data "${PSScriptRoot}/quota/copilot_bridge.mjs:quota" `
+        --add-data "${PSScriptRoot}/quota/copilot_bridge.mjs:quota" `
         --add-data "${PSScriptRoot}/quota/copilot_bridge_data.mjs:quota" (Join-Path $PSScriptRoot 'packaging/backend_entry.py')
     if ($LASTEXITCODE) { throw 'Reader build failed.' }
     Copy-Item -LiteralPath (Join-Path $destination 'reader/quota-backend') -Destination (Join-Path $bundle 'backend') -Recurse

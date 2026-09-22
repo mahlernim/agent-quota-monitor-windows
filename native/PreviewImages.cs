@@ -26,7 +26,7 @@ internal static class PreviewImages
         Add("antigravity", "CG", "Claude and GPT models", "5h", 91, 70); Add("antigravity", "CG", "Claude and GPT models", "7d", 17, 80);
         Add("copilot", "CP", "Included AI credits", "Month", 88, 0);
         var pins = new HashSet<string> { "CX5h", "CL7d", "GM5h", "CG7d" };
-        var main = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {}, () => {});
+        var main = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {});
         main.SetData(rows, "CX5h", pins);
         Save((FrameworkElement)main.Content, 744, 292, Path.Combine(directory, "main-window.png"));
         var floating = new FloatingWindow(() => {}, () => {});

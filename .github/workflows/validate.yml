@@ -48,10 +48,10 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r requirements-build.txt
       - name: Run Python tests
         run: python -m unittest discover -s tests -v
-      - name: Check dashboard JavaScript
-        run: node --check web/app.js
-      - name: Test quota pace
-        run: node tests/test_pace.mjs
+      - name: Check Copilot bridge JavaScript
+        run: |
+          node --check quota/copilot_bridge.mjs
+          node --check quota/copilot_bridge_data.mjs
       - name: Test Copilot bridge
         run: node tests/test_copilot_bridge.mjs
       - name: Generate native icon
@@ -69,5 +69,11 @@ jobs:
           if (-not $result.passed -or $result.providerReads -ne 0) { throw 'Native rendering check must pass without provider reads.' }
       - name: Test native backend requests
         run: python tests/check_native_requests.py dotnet
+      - name: Test native account controls
+        run: dotnet run --project tests/native-accounts/AccountTests.csproj -c Release
+      - name: Test backend compatibility and ownership
+        run: dotnet run --project tests/native-backend/BackendTests.csproj -c Release
+      - name: Test native startup and shutdown
+        run: dotnet run --project tests/native-lifecycle/LifecycleTests.csproj -c Release
       - name: Test update policy
         run: dotnet run --project tests/native-updates/UpdateTests.csproj
