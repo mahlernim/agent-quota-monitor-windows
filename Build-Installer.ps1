@@ -1,8 +1,12 @@
 param(
     [Parameter(Mandatory=$true)][string]$BundleDirectory,
-    [string]$Version = '0.2.0-beta.6'
+    [string]$Version
 )
 $ErrorActionPreference = 'Stop'
+if (-not $PSBoundParameters.ContainsKey('Version')) {
+    [xml]$project = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'native/AgentQuotaMonitor.csproj') -Raw
+    $Version = [string]$project.Project.PropertyGroup.Version
+}
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$') { throw 'Use a semantic version.' }
 $bundle = (Resolve-Path -LiteralPath $BundleDirectory).Path
 if (-not (Test-Path -LiteralPath (Join-Path $bundle 'agent-quota-monitor-windows.exe'))) { throw 'Portable build is missing.' }

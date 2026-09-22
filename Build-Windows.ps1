@@ -1,5 +1,9 @@
-param([string]$Version = '0.2.0-beta.6')
+param([string]$Version)
 $ErrorActionPreference = 'Stop'
+if (-not $PSBoundParameters.ContainsKey('Version')) {
+    [xml]$project = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'native/AgentQuotaMonitor.csproj') -Raw
+    $Version = [string]$project.Project.PropertyGroup.Version
+}
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$') { throw 'Use a simple semantic version.' }
 Push-Location $PSScriptRoot
 try {
@@ -13,7 +17,8 @@ try {
     }
     & $python -m pip install --disable-pip-version-check -r requirements-build.txt
     if ($LASTEXITCODE) { throw 'Build dependencies failed.' }
-    & $python -c "import runpy; runpy.run_path('packaging/make_icon.py')"
+    & $python packaging/make_icon.py
+    if ($LASTEXITCODE) { throw 'Icon generation failed.' }
     $destination = Join-Path $PSScriptRoot "dist/wpf-$Version-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     $bundle = Join-Path $destination 'agent-quota-monitor-windows'
     & $sdk publish native/AgentQuotaMonitor.csproj -c Release -r win-x64 --self-contained true -p:Version=$Version -o $bundle --nologo
