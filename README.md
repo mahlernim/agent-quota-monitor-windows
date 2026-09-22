@@ -2,7 +2,7 @@
 
 Keep an eye on your AI coding quotas, reset times, and how fast you are spending them, straight from the Windows tray.
 
-**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0-beta.6/agent-quota-monitor-windows-0.2.0-beta.6-setup-win-x64.exe)** · [Portable ZIP and release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.0-beta.6)
+**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0/agent-quota-monitor-windows-0.2.0-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0/agent-quota-monitor-windows-0.2.0-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.0)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -17,13 +17,13 @@ Keep an eye on your AI coding quotas, reset times, and how fast you are spending
 1. Download and run the Windows x64 installer above.
 2. Follow the setup wizard. No administrator rights are needed.
 3. Open **Agent Quota Monitor** from the Start menu.
-4. Open **Settings**, choose the providers you want, and connect any that are not detected yet.
+4. Open **Settings**, choose the providers you want, and click **Save monitored providers**. Connect any that are not detected yet.
 
 The installer creates a Start menu shortcut and optionally a desktop shortcut. Python and .NET runtimes are bundled. You still need the official coding clients for the providers you use.
 
 Prefer a portable app? Download the ZIP, extract **all** files into a permanent folder, and run `agent-quota-monitor-windows.exe`. Do not run it from inside the ZIP.
 
-This beta is unsigned. Windows may display an unknown-publisher warning.
+The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
 ## Providers
 
@@ -32,17 +32,17 @@ Any combination works, and one provider is enough. The monitor reads quotas thro
 | Provider | How to connect | Notes |
 | --- | --- | --- |
 | OpenAI Codex | Settings, then **Sign in** | Launches the official Codex client sign-in |
-| Anthropic Claude (direct) | Settings, then **Sign in** | Launches the official Claude Code sign-in |
+| Anthropic Claude (direct) | Settings, then **Sign in** | Launches the official Claude Code subscription sign-in |
 | Google Antigravity | Sign in to the official `agy` CLI, or **Open official client** in Settings | The CLI account keeps refreshing with the desktop app closed |
 | GitHub Copilot (optional) | Settings, then **Sign in** | Opens `gh auth login` in a console and your browser |
 
 If an existing session is already recognized, you do not need to sign in again.
 
-For Antigravity background monitoring, install and sign in to the [official CLI](https://antigravity.google/docs/cli/install), then run `agy -p /usage` once and press Refresh in the monitor. The account marked **CLI** can refresh while the desktop app is closed. Pin its quotas for continuous monitoring. Once the CLI has returned verified quotas, the monitor shows its card and suppresses old desktop-source cards. Existing CLI pins stay intact. Desktop monitoring remains a fallback for installations without a working CLI connection. CLI failures preserve the last reading as stale. API-key mode is not supported for subscription monitoring.
+For Antigravity background monitoring, install and sign in to the [official CLI](https://antigravity.google/docs/cli/install), run `agy -p /usage` once, then press **Refresh** in the monitor. Pin quotas on the account marked **CLI** to monitor them while the desktop app is closed. After a successful CLI reading, the monitor uses that account instead of desktop-source cards. If no CLI connection has been established, the running desktop app can supply readings. Failed reads preserve the last value as stale. API-key mode is not supported for subscription monitoring.
 
 Copilot needs a one-time optional setup with PowerShell 7, Node and npm, Python, and the GitHub CLI, using `Setup-Copilot.ps1` from the source repository. See [Copilot setup](docs/copilot-setup.md).
 
-To switch accounts, sign in to the other account through the provider's own client. The monitor follows whichever account the official client reports and never switches for you.
+Accounts stay separate, even when their email labels match. Direct Claude subscriptions are separate from Claude or GPT allowance supplied by Antigravity. To change accounts, use the provider's own client. The monitor follows the verified client identity and never switches accounts automatically.
 
 **Remove** hides an account and stops monitoring it. It does not log you out of the provider or touch your credentials. **Restore hidden accounts** brings it back.
 
@@ -55,7 +55,7 @@ To switch accounts, sign in to the other account through the provider's own clie
 - **Close** hides the main window to the tray. **Quit** exits, and stops the quota reader if this app started it.
 - **Web** opens the full local dashboard. Reordering accounts is done there with its edit controls, not by dragging rings in the native window.
 
-Floating monitor: right-click it for **Size** (75, 100, 125, 150, 200%) and **Opacity** (35, 50, 70, 85, 100%). Drag it to move it, and double-click it to bring back the main window. Both preferences are remembered.
+Right-click the floating monitor for **Size** (75, 100, 125, 150, 200%) and **Opacity** (35, 50, 70, 85, 100%). Drag it to move it, and double-click it to bring back the main window. Its size, opacity, and position are remembered.
 
 ## Reading a quota ring
 
@@ -63,17 +63,17 @@ The thick outer ring is quota remaining, in a color that identifies the provider
 
 The number turns **amber** when quota remaining falls below half of time remaining, and **red** below one quarter. For example, with 80% of the window left, amber starts under 40% quota and red under 20%. Without timing data there is no pace warning at all.
 
-A gray, stale reading means the value could not be refreshed. It does not mean zero, and a missing window never means unlimited.
+A gray, stale reading is the last available value and could not be refreshed. It does not mean zero, and a missing window never means unlimited. Reaching the displayed reset time does not confirm replenishment until the provider returns a new reading.
 
 ## Start with Windows
 
-Settings has an optional **Start with Windows (in the tray)** switch. It is off by default and needs no administrator rights. Because the app is portable, keep its folder in a permanent place. If you need to move or delete the folder, turn the switch off first, then turn it on again from the new location.
+Settings has an optional **Start with Windows (in the tray)** switch. It is off by default and needs no administrator rights. If you use the portable ZIP, keep its folder in a permanent place. Turn the switch off before moving the folder, then turn it on again from the new location.
 
 ## Updates
 
-The monitor checks GitHub shortly after startup and at most once every 24 hours. A quiet banner offers **Download update**, **Later**, **Skip this version**, and **Release notes**. It never interrupts your work or installs anything automatically.
+Automatic update checks contact GitHub shortly after startup, with at most one attempt every 24 hours, including failed attempts. A banner offers **Download update**, **Later**, **Skip this version**, and **Release notes**. Nothing is installed automatically.
 
-Later postpones reminders for a day. Skip this version hides that release across restarts. **Check for updates** in Settings lets you reconsider skipped releases. Settings also lets you disable automatic checks. Stable builds ignore betas; beta builds can receive newer betas or stable releases.
+**Later** postpones reminders for a day. **Skip this version** hides that release across restarts. **Check for updates** in Settings checks immediately and reconsiders skipped releases. Settings also lets you disable automatic checks. This stable release offers stable updates only.
 
 Download update opens the official release page. Quit the monitor, run the new installer, and keep the same installation folder. Settings and account bindings are preserved. Portable users should quit before replacing their extracted files.
 
@@ -82,16 +82,16 @@ Uninstall through Windows Installed apps. App files, shortcuts, and this install
 ## Troubleshooting
 
 - **An account is missing.** Sign in through the provider's own client, then press Refresh. A browser-only login may not create the session the monitor reads.
-- **Everything looks stale.** Press Refresh. If it persists, confirm the provider's client still has a valid session.
+- **A reading is stale.** Press Refresh and confirm the provider's client still has a valid session. Refresh respects provider cooldowns. The Web dashboard shows when an account can be retried.
 - **Copilot shows nothing.** Complete the one-time setup in [Copilot setup](docs/copilot-setup.md), then use Copilot **Sign in** and finish the prompts in the console window that opens.
 - **Nothing happens when launching.** Confirm you extracted the whole ZIP, including the `backend` folder, next to the executable.
-- **Values seem frozen after a move.** Run only one monitor at a time against the same account cache.
+- **An update check failed.** Use **Check for updates** in Settings to retry immediately. Automatic checks wait until the next daily attempt.
 
 ## Privacy
 
 - Credentials stay with the official clients. The monitor reads local sessions and never logs you out, switches accounts, or routes traffic through a proxy.
-- Settings and cached snapshots are encrypted for your Windows user account.
-- The local server listens on loopback only.
+- Quota settings and cached snapshots are encrypted for your Windows user account. Non-secret update preferences are stored in your user registry.
+- The local dashboard listens on loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 - No telemetry, automatic public uploads, or prompts sent to a model to estimate quotas.
 
 Provider interfaces are internal to those products and can change without notice, which may interrupt readings.
@@ -99,7 +99,6 @@ Provider interfaces are internal to those products and can change without notice
 ## More
 
 - [Windows details](docs/windows.md)
-- [Provider interfaces](docs/provider-evidence.md)
 - [Building and contributing](docs/development.md)
 - [Third-party notices](THIRD-PARTY-NOTICES.md)
 

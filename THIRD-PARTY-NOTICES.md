@@ -1,8 +1,10 @@
 # Third-party notices
 
-References were inspected under the following licenses. The browser dashboard uses Python standard-library modules. The optional desktop shell uses Pillow (HPND) and pystray (LGPL-3.0), installed separately with their upstream license files. No dependency binaries are distributed in this source repository.
+The quota backend uses Python standard-library modules, and the native application uses WPF. Pillow (HPND) generates the application icon during the build. No dependency binaries are distributed in this source repository.
 
-WPF portable archives bundle the .NET Windows Desktop runtime and Python backend. Microsoft runtime notices are included under `licenses/dotnet/`. Legacy Tk portable archives bundle the Python runtime, Tcl/Tk, Pillow, pystray, and six. Their installed license notices are copied into `licenses/`. Unmodified pystray Python source is included under `dependency-source/` and can be used with the application's published build script to rebuild the bundle with a modified library. PyInstaller's bootloader notice is also included. Build dependencies are pinned in `requirements-build.txt` and desktop dependencies in `requirements-desktop.txt`.
+Windows downloads bundle the .NET Windows Desktop runtime and Python backend. Microsoft runtime notices are included under `licenses/dotnet/`. Python, Pillow, and PyInstaller notices are included under `licenses/`, including PyInstaller's bootloader notice. Build dependencies are pinned in `requirements-build.txt`.
+
+The following projects were used as references. Their applicable notices are reproduced below.
 
 ## shuvquota
 

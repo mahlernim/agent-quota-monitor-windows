@@ -24,3 +24,6 @@ tests/native-updates/bin/
 tests/native-updates/obj/
 tests/native-requests/bin/
 tests/native-requests/obj/
+
+# Private system design, decisions, and issue review notes for local agent work.
+/docs/system-design.local.md

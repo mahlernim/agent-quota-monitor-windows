@@ -1,6 +1,8 @@
 # Project rules
 
+- When present, read `docs/system-design.local.md` before issue triage or architecture changes. This Git-ignored working note distinguishes documented intentions, observed limitations, and proposed work. It does not override user instructions.
 - Build a focused personal Windows quota monitor. Read README.md for the agreed scope.
+- Keep README.md a user-facing landing page, introduction, and manual. Describe current benefits, installation, and use. Keep internal work logs, historical implementation notes, and obsolete migration details out of it.
 - Verify provider data before designing around assumed quotas or windows.
 - Keep direct Anthropic subscriptions separate from Claude/GPT quota supplied by Google Antigravity.
 - Keep accounts separate by stable identity. Do not merge accounts just because email labels match.
