@@ -4,9 +4,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 ## Install and launch
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-setup-win-x64.exe) for a Start menu shortcut and optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-setup-win-x64.exe) for a Start menu shortcut and optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -62,6 +62,8 @@ Quota settings and cached snapshots are encrypted for your Windows user under `%
 
 Provider interfaces can change and interrupt readings. If an account is missing or stale, confirm that its official client has a valid session, then press **Refresh**. For launch failures with the portable version, confirm that the complete archive was extracted.
 
-See the [project README](https://github.com/mahlernim/agent-quota-monitor-windows#readme) for screenshots and the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.1) for downloads and release notes. Source contributors can use the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md).
+If the quota reader is unavailable, click **Retry connection** in the toolbar. This reconnects or starts the reader without changing accounts. If it stays unavailable, use **Quit** and reopen the monitor. Closing the window only hides it to the tray.
+
+See the [project README](https://github.com/mahlernim/agent-quota-monitor-windows#readme) for screenshots and the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.2) for downloads and release notes. Source contributors can use the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md).
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

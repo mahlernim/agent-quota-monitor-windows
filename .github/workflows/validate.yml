@@ -75,5 +75,7 @@ jobs:
         run: dotnet run --project tests/native-backend/BackendTests.csproj -c Release
       - name: Test native startup and shutdown
         run: dotnet run --project tests/native-lifecycle/LifecycleTests.csproj -c Release
+      - name: Test real Windows reader startup
+        run: python tests/check_native_startup.py dotnet
       - name: Test update policy
         run: dotnet run --project tests/native-updates/UpdateTests.csproj

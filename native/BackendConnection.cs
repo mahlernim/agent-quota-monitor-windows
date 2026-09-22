@@ -26,6 +26,7 @@ public sealed class BackendConnection : IDisposable
     private readonly TimeSpan probeTimeout;
     private readonly TimeSpan retryDelay;
     private readonly TimeSpan shutdownTimeout;
+    private readonly SemaphoreSlim connectionGate = new(1, 1);
     private IBackendProcess? owned;
     private int? acceptedProcessId;
     public bool OwnsBackend => owned != null;
@@ -41,29 +42,44 @@ public sealed class BackendConnection : IDisposable
         this.http = http;
         this.launch = launch;
         this.startupTimeout = startupTimeout ?? TimeSpan.FromSeconds(15);
-        this.probeTimeout = probeTimeout ?? TimeSpan.FromSeconds(2);
+        // Windows can take just over two seconds to report a refused loopback connection.
+        // Leave room for that result while retaining the overall startup deadline.
+        this.probeTimeout = probeTimeout ?? TimeSpan.FromSeconds(5);
         this.retryDelay = retryDelay ?? TimeSpan.FromMilliseconds(250);
         this.shutdownTimeout = shutdownTimeout ?? TimeSpan.FromSeconds(6);
     }
 
     public async Task EnsureAsync(CancellationToken cancellationToken)
     {
-        if (owned != null) throw new InvalidOperationException("Backend startup has already been attempted.");
+        await connectionGate.WaitAsync(cancellationToken);
+        try { await EnsureCoreAsync(cancellationToken); }
+        finally { connectionGate.Release(); }
+    }
+
+    private async Task EnsureCoreAsync(CancellationToken cancellationToken)
+    {
+        bool launchedThisAttempt = false;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(startupTimeout);
         try
         {
+            acceptedProcessId = null;
+            if (owned?.HasExited == true) ReleaseOwned();
             var initial = await ProbeAsync(deadline.Token);
             if (initial.ProcessId.HasValue)
             {
+                if (owned != null && initial.ProcessId != owned.Id) throw Conflict();
                 deadline.Token.ThrowIfCancellationRequested();
                 acceptedProcessId = initial.ProcessId;
                 return;
             }
             if (initial.TimedOut)
-                throw new BackendConnectionException("The local quota reader did not respond. Quit any other monitor instance and try again. No additional reader was started.");
+                throw new BackendConnectionException("The local quota reader did not respond in time. Click Retry connection to try again. No additional reader was started.");
+            if (owned != null)
+                throw new BackendConnectionException("The quota reader is still running but is not accepting connections. Click Retry connection to try again. If this continues, use Quit and reopen the monitor.");
             deadline.Token.ThrowIfCancellationRequested();
             owned = launch();
+            launchedThisAttempt = true;
             while (true)
             {
                 deadline.Token.ThrowIfCancellationRequested();
@@ -73,7 +89,7 @@ public sealed class BackendConnection : IDisposable
                 if (result.ProcessId.HasValue)
                 {
                     if (result.ProcessId != owned.Id)
-                        throw new BackendConnectionException("Another local quota reader is using port 8765. Quit the other monitor instance and try again.");
+                        throw new BackendConnectionException("Another local quota reader is using port 8765. Quit the other monitor instance, then click Retry connection.");
                     if (owned.HasExited)
                         throw new BackendConnectionException("The quota reader exited during startup. Try launching the monitor again.");
                     deadline.Token.ThrowIfCancellationRequested();
@@ -85,12 +101,12 @@ public sealed class BackendConnection : IDisposable
         }
         catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
         {
-            ReleaseOwned();
-            throw new BackendConnectionException("The quota reader did not become ready within the startup time limit. Check that port 8765 is free and try again.", error);
+            if (launchedThisAttempt) ReleaseOwned();
+            throw new BackendConnectionException("The quota reader did not become ready within the startup time limit. Click Retry connection to try again. Check that the complete application folder is available if this continues.", error);
         }
         catch
         {
-            ReleaseOwned();
+            if (launchedThisAttempt) ReleaseOwned();
             throw;
         }
     }
@@ -149,7 +165,7 @@ public sealed class BackendConnection : IDisposable
         catch (Exception error) when (error is JsonException or InvalidOperationException or KeyNotFoundException)
         { throw Conflict(error); }
         catch (HttpRequestException error)
-        { throw new BackendConnectionException("The local quota reader could not be reached. Check port 8765 and try again.", error); }
+        { throw new BackendConnectionException("The local quota reader could not be reached. Click Retry connection to try again.", error); }
     }
 
     public void ValidatePeer(JsonElement root)
@@ -212,7 +228,7 @@ public sealed class BackendConnection : IDisposable
     }
 
     private static BackendConnectionException Conflict(Exception? inner = null) => new(
-        "Port 8765 is being used by an incompatible service or an older quota reader. Quit any other monitor instance before opening this version.", inner);
+        "Port 8765 is being used by an incompatible service or an older quota reader. Quit an older monitor if one is running, then click Retry connection.", inner);
 
     private void ReleaseOwned()
     {

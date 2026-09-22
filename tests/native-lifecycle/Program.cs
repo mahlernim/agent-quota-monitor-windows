@@ -12,6 +12,7 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using AgentQuotaMonitor;
 
@@ -20,7 +21,8 @@ namespace LifecycleTests;
 internal static class Program
 {
     private static int checks;
-    private static readonly string[] Cases = { "late-status", "late-preferences", "late-startup", "snapshots", "owned-quit", "external-quit", "cleanup-failure", "instances" };
+    private static readonly string[] Cases = { "late-status", "late-preferences", "late-startup", "snapshots", "owned-quit", "external-quit", "cleanup-failure", "instances",
+        "retry-success", "retry-parallel", "retry-quit", "retry-poll" };
     [STAThread]
     private static int Main(string[] args)
     {
@@ -51,9 +53,19 @@ internal static class Program
         using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:1"), Timeout = TimeSpan.FromSeconds(10) };
         var starting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken startupToken = default;
-        int stops = 0, exits = 0;
-        Func<CancellationToken, Task> ensure = args[0] == "late-startup"
-            ? token => { startupToken = token; return starting.Task; } : _ => Task.CompletedTask;
+        int stops = 0, exits = 0, ensureCalls = 0;
+        Func<CancellationToken, Task> ensure = token =>
+        {
+            ++ensureCalls;
+            startupToken = token;
+            if (args[0] == "late-startup") return starting.Task;
+            if (args[0] is "retry-success" or "retry-parallel" or "retry-quit")
+            {
+                if (ensureCalls == 1) throw new BackendConnectionException("Synthetic initial failure. Choose Retry connection to try again.");
+                if (args[0] != "retry-success") return starting.Task;
+            }
+            return Task.CompletedTask;
+        };
         Func<CancellationToken, Task> stop = _ => { ++stops; if (args[0] == "cleanup-failure") throw new InvalidOperationException("Synthetic stop failure"); return Task.CompletedTask; };
         BackendConnection? connection = null;
         var processFixture = new ProcessFixture();
@@ -69,7 +81,7 @@ internal static class Program
         int result = 1;
         app.Dispatcher.BeginInvoke(new Action(async () =>
         {
-            var main = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {})
+            var main = new MainWindow(item => Invoke(app, "SelectTray", item), item => Invoke(app, "TogglePin", item), () => {}, () => _ = Call(app, "RefreshAsync"), () => {}, () => {})
                 { Left = -32000, Top = -32000, ShowActivated = false, ShowInTaskbar = false };
             int hides = 0;
             var floating = new FloatingWindow(() => {}, () => { ++hides; Invoke(app, "HideFloating"); })
@@ -78,6 +90,8 @@ internal static class Program
             Set(app, "main", main); Set(app, "floating", floating); Set(app, "tray", tray);
             Set(app, "preferencesLoaded", args[0] != "late-preferences");
             var cached = new List<QuotaItem> { new() { Key = QuotaItem.MakeKey("kept", "g", "b"), AccountId = "kept", GroupId = "g", BucketId = "b", Status = "live", Remaining = 77, Code = "CL" } };
+            if (args[0] is "retry-success" or "retry-parallel")
+                cached.Add(new QuotaItem { Key = QuotaItem.MakeKey("other", "g", "b"), AccountId = "other", GroupId = "g", BucketId = "b", Status = "live", Remaining = 60, Code = "CL" });
             Set(app, "items", cached);
             Set(app, "selected", cached[0].Key);
             Field<HashSet<string>>(app, "pins").Add(cached[0].Key);
@@ -85,6 +99,88 @@ internal static class Program
             {
                 switch (args[0])
                 {
+                    case "retry-success":
+                    {
+                        await Call(app, "StartServices");
+                        object updateService = Field<object>(app, "updates"), updateClock = Field<object>(app, "updateTimer");
+                        Button refresh = Field<Button>(main, "_refresh");
+                        Check(!Field<bool>(app, "backendReady") && Field<object?>(app, "timer") is null && (string)refresh.Content == "Retry connection",
+                            "Initial failure leaves a usable retry action and no provider polling");
+                        Check(updateService is UpdateService && updateClock is DispatcherTimer, "Update controls remain available after initial failure");
+                        main.SetData(cached.AsEnumerable().Reverse().ToList(), cached[0].Key, Field<HashSet<string>>(app, "pins"));
+                        CheckPreferenceControlsLocked(app, main, handler, cached, "Failed connection disables rebuilt cards and rejects pin and tray changes");
+                        refresh.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        await Field<Task>(app, "startupTask");
+                        object pollClock = Field<object>(app, "timer");
+                        Check(ensureCalls == 2 && Field<bool>(app, "backendReady") && ((DispatcherTimer)pollClock).IsEnabled && (string)refresh.Content == "Refresh",
+                            "The retry toolbar action reconnects and starts polling");
+                        Check(handler.Posts.Count == 0 && Field<HashSet<string>>(app, "pins").SetEquals(new[] { cached[0].Key }) && Field<string>(app, "selected") == cached[0].Key,
+                            "Reconnect reads cached status without requesting providers or changing pins and selections");
+                        var recovered = CardButtons(main, Field<List<QuotaItem>>(app, "items")[0].Key);
+                        Check(recovered.Select.IsEnabled && recovered.Pin.IsEnabled, "Successful reconnection enables tray selection and pins");
+                        Set(app, "backendReady", false);
+                        await Call(app, "RefreshAsync");
+                        Check(ReferenceEquals(pollClock, Field<object>(app, "timer")) && ReferenceEquals(updateService, Field<object>(app, "updates")) && ReferenceEquals(updateClock, Field<object>(app, "updateTimer")),
+                            "Further reconnects reuse the poll timer and update service");
+                        await Call(app, "RefreshAsync");
+                        Check(handler.Posts.SequenceEqual(new[] { "/api/refresh" }), "A healthy Refresh retains the explicit provider refresh action");
+                        await Call(app, "Quit");
+                        break;
+                    }
+                    case "retry-parallel":
+                    {
+                        await Call(app, "StartServices");
+                        object updateService = Field<object>(app, "updates");
+                        Task first = Call(app, "RefreshAsync"), second = Call(app, "RefreshAsync"), third = Call(app, "RefreshAsync");
+                        await Call(app, "Poll");
+                        Check(ensureCalls == 2 && handler.Requests == 0 && !Field<Button>(main, "_refresh").IsEnabled && (string)Field<Button>(main, "_refresh").Content == "Connecting",
+                            "Rapid retries share one connection attempt and suppress ordinary polls");
+                        CheckPreferenceControlsLocked(app, main, handler, cached, "Pending reconnection disables cards and rejects pin and tray changes");
+                        starting.SetResult();
+                        await Task.WhenAll(first, second, third).WaitAsync(TimeSpan.FromSeconds(3));
+                        Check(ensureCalls == 2 && handler.Requests == 1 && handler.Posts.Count == 0 && Field<bool>(app, "backendReady"),
+                            "A shared retry performs one cached read and no provider refresh");
+                        Check(ReferenceEquals(updateService, Field<object>(app, "updates")) && Field<DispatcherTimer>(app, "timer").IsEnabled,
+                            "Concurrent retries do not duplicate services or polling");
+                        await Call(app, "Quit");
+                        break;
+                    }
+                    case "retry-quit":
+                    {
+                        await Call(app, "StartServices");
+                        Task retry = Call(app, "RefreshAsync");
+                        await Call(app, "Quit").WaitAsync(TimeSpan.FromSeconds(6));
+                        Check(startupToken.IsCancellationRequested && exits == 1 && stops == 1, "Quit cancels the retry and completes cleanup once");
+                        starting.SetResult();
+                        await retry.WaitAsync(TimeSpan.FromSeconds(2));
+                        Check(handler.Requests == 0 && !Field<bool>(app, "backendReady") && Field<object?>(app, "timer") is null && !Field<DispatcherTimer>(app, "updateTimer").IsEnabled,
+                            "A late retry cannot create polling or reactivate updates after Quit");
+                        break;
+                    }
+                    case "retry-poll":
+                    {
+                        await Call(app, "StartServices");
+                        object pollClock = Field<object>(app, "timer");
+                        string valid = handler.Status;
+                        handler.Status = "{}";
+                        await Call(app, "Poll");
+                        Check(!Field<bool>(app, "backendReady"), "A failed status read makes reconnect available");
+                        handler.Status = valid;
+                        var delayed = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        handler.DelayPath = "/api/status";
+                        handler.Delayed = delayed.Task;
+                        Task previousPoll = Call(app, "Poll");
+                        Task retry = Call(app, "RefreshAsync");
+                        Check(handler.DelayedToken.IsCancellationRequested && ensureCalls == 1 && !Field<DispatcherTimer>(app, "timer").IsEnabled,
+                            "Reconnect cancels and drains an in-flight poll before changing the backend peer");
+                        handler.DelayPath = null;
+                        delayed.SetResult(BackendFixture.Json(valid));
+                        await Task.WhenAll(previousPoll, retry).WaitAsync(TimeSpan.FromSeconds(3));
+                        Check(ensureCalls == 2 && Field<bool>(app, "backendReady") && ReferenceEquals(pollClock, Field<object>(app, "timer")) && handler.Posts.Count == 0,
+                            "Reconnect resumes the same timer after the old poll completes without provider refresh");
+                        await Call(app, "Quit");
+                        break;
+                    }
                     case "late-status":
                     case "late-preferences":
                     {
@@ -227,6 +323,19 @@ internal static class Program
         abandoned?.Dispose();
     }
     private static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); ++checks; }
+    private static (Button Select, Button Pin) CardButtons(MainWindow main, string key)
+    {
+        object card = Field<System.Collections.IDictionary>(main, "_cards")[key]!;
+        return ((Button)card.GetType().GetProperty("Select")!.GetValue(card)!, (Button)card.GetType().GetProperty("Pin")!.GetValue(card)!);
+    }
+    private static void CheckPreferenceControlsLocked(App app, MainWindow main, BackendFixture handler, List<QuotaItem> cached, string message)
+    {
+        var controls = CardButtons(main, cached[1].Key);
+        controls.Select.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        controls.Pin.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(!controls.Select.IsEnabled && !controls.Pin.IsEnabled && handler.Posts.Count == 0 &&
+            Field<string>(app, "selected") == cached[0].Key && Field<HashSet<string>>(app, "pins").SetEquals(new[] { cached[0].Key }), message);
+    }
     private static async Task Until(Func<bool> predicate)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));

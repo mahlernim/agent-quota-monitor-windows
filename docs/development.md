@@ -31,6 +31,7 @@ python tests/check_native_requests.py dotnet
 dotnet run --project tests/native-accounts/AccountTests.csproj -c Release
 dotnet run --project tests/native-backend/BackendTests.csproj -c Release
 dotnet run --project tests/native-lifecycle/LifecycleTests.csproj -c Release
+python tests/check_native_startup.py dotnet
 dotnet run --project tests/native-updates/UpdateTests.csproj
 ```
 
@@ -45,6 +46,8 @@ Documentation images render the same native controls with synthetic sample data.
 The native account tests exercise ordering, draft conflicts, account controls, and separate operation and connection feedback through synthetic HTTP responses. Append `-- <output.png>` to their command to render a sample Settings window without connecting provider accounts.
 
 Backend tests cover compatibility, startup deadlines, cancellation, and process ownership. Lifecycle tests exercise delayed responses during shutdown, malformed snapshots, floating-window preferences, and simultaneous launches. The backend identity marker prevents accidental connection to a different service but does not authenticate local callers.
+
+The real startup test uses Windows sockets and the native connection flow to launch and stop a Python reader. It creates isolated encrypted settings with all providers disabled. To check a packaged reader, append `--backend <path-to-quota-backend.exe>` to the startup test command.
 
 ## Contributions
 
