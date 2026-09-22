@@ -138,13 +138,14 @@ def cli_account():
     if binding.get('revision') != revision or not binding.get('subject') or not binding.get('email'):
         fingerprint = hashlib.sha256(access.encode()).hexdigest()
         retry = _identity_retry.get(fingerprint)
-        if retry and time.monotonic() < retry[0]:
+        if retry and (retry[0] is None or time.monotonic() < retry[0]):
             raise ReadError(retry[1])
         try:
             subject, email = profile(access)
         except ReadError as err:
             _identity_retry.clear()
-            _identity_retry[fingerprint] = (time.monotonic() + max(300, err.retry_after), err.code)
+            from .retry import deadline, delay_seconds
+            _identity_retry[fingerprint] = (deadline(time.monotonic(), max(300, delay_seconds(err.retry_after))), err.code)
             raise
         _identity_retry.clear()
         if credential()[1] != revision:

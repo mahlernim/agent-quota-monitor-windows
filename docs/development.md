@@ -1,6 +1,6 @@
 # Building and contributing
 
-The native shell uses WPF on .NET 8. A separate Python backend reads quotas and serves the optional loopback dashboard.
+The Windows application uses WPF on .NET 8. A separate Python backend reads quotas and exposes a loopback API for the native app. It does not serve a browser dashboard.
 
 ## Build
 
@@ -22,12 +22,15 @@ The backend uses Python's standard library. Its development environment must be 
 
 ```powershell
 python -m unittest discover -s tests -v
-node --check web/app.js
-node tests/test_pace.mjs
+node --check quota/copilot_bridge.mjs
+node --check quota/copilot_bridge_data.mjs
 node tests/test_copilot_bridge.mjs
 .\.venv-build\Scripts\python.exe packaging/make_icon.py
 dotnet build native/AgentQuotaMonitor.csproj -c Release
 python tests/check_native_requests.py dotnet
+dotnet run --project tests/native-accounts/AccountTests.csproj -c Release
+dotnet run --project tests/native-backend/BackendTests.csproj -c Release
+dotnet run --project tests/native-lifecycle/LifecycleTests.csproj -c Release
 dotnet run --project tests/native-updates/UpdateTests.csproj
 ```
 
@@ -38,6 +41,10 @@ The Windows validation workflow runs these checks for pull requests and pushes t
 Clean-machine, accessibility, mixed-DPI, and sleep/resume testing remains limited. Startup command checks do not replace a real Windows sign-in test.
 
 Documentation images render the same native controls with synthetic sample data. Run the executable with `--screenshots-output` followed by an output directory to regenerate them. This does not start provider readers.
+
+The native account tests exercise ordering, draft conflicts, account controls, and separate operation and connection feedback through synthetic HTTP responses. Append `-- <output.png>` to their command to render a sample Settings window without connecting provider accounts.
+
+Backend tests cover compatibility, startup deadlines, cancellation, and process ownership. Lifecycle tests exercise delayed responses during shutdown, malformed snapshots, floating-window preferences, and simultaneous launches. The backend identity marker prevents accidental connection to a different service but does not authenticate local callers.
 
 ## Contributions
 

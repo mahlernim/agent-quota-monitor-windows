@@ -36,7 +36,7 @@ public sealed class QuotaItem
         value.TryGetProperty(key, out var item) && item.ValueKind == JsonValueKind.String ? item.GetString() ?? fallback : fallback;
     public static double? Number(JsonElement value, string key) =>
         value.TryGetProperty(key, out var item) && item.TryGetDoubleSafe(out var number) && double.IsFinite(number) ? number : null;
-    public static List<QuotaItem> Parse(JsonElement root)
+    public static List<QuotaItem> Parse(JsonElement root, DateTimeOffset? now = null)
     {
         var result = new List<QuotaItem>();
         if (!root.TryGetProperty("accounts", out var accounts)) return result;
@@ -54,7 +54,7 @@ public sealed class QuotaItem
             double? time = null; var resetText = "Reset unknown";
             if (DateTimeOffset.TryParse(Text(b, "resetsAt"), out var reset))
             {
-                var left = reset - DateTimeOffset.UtcNow;
+                var left = reset - (now ?? DateTimeOffset.UtcNow);
                 resetText = left.TotalSeconds > 0 ? $"Resets in {(int)left.TotalHours}h {left.Minutes}m · {reset.LocalDateTime:g}" : "Reset due · awaiting provider";
                 if (status == "live" && remaining.HasValue && duration is 18000 or 604800 && left.TotalSeconds > 0 && left.TotalSeconds <= duration &&
                     !(b.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.False)) time = left.TotalSeconds / duration * 100;

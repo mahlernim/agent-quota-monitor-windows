@@ -91,10 +91,10 @@ class Connections:
             rows = self.monitor.snapshot()['accounts']
             target = next((a for a in rows if a['id'] == account_id and a['provider'] == provider), None)
             if account_id is not None and target is None:
-                raise ValueError('This account is no longer visible. Refresh the dashboard.')
+                raise ValueError('This account is no longer visible. Refresh the monitor.')
             command = self.resolver(provider)
             if not command:
-                raise ValueError('Official client not found. Install it, then restart the dashboard.')
+                raise ValueError('Official client not found. Install it, then restart the monitor.')
             if provider == 'copilot':
                 from .copilot import command as quota_command
                 try:

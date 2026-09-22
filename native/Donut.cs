@@ -46,20 +46,22 @@ public sealed class Donut : FrameworkElement
             DrawTrack(dc, center, innerRadius, 2, track);
             DrawProgress(dc, center, innerRadius, 2, Clamp(time), Brushes.Gray);
         }
-        var text = item.Unlimited ? "∞" : item.Remaining is double value ? value.ToString("0.#", CultureInfo.InvariantCulture) + "%" : "?";
+        var text = LabelFor(item);
         var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         var dip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         var fontSize = text.Length >= 5 ? 8.0 : 10.0;
-        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface,
+        var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface,
             fontSize, ToBrush(item.NumberColor, Colors.Black), dip);
         while (formatted.Width > innerRadius * 2 - 3 && fontSize > 6)
         {
             fontSize -= 1;
-            formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface,
+            formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface,
                 fontSize, ToBrush(item.NumberColor, Colors.Black), dip);
         }
         dc.DrawText(formatted, new Point(center.X - formatted.Width / 2, center.Y - formatted.Height / 2));
     }
+
+    internal static string LabelFor(QuotaItem item) => item.Unlimited ? "∞" : item.Remaining is double value ? QuotaItem.Percent(value) : "?";
 
     private static double Clamp(double value) => Math.Max(0, Math.Min(100, value));
 

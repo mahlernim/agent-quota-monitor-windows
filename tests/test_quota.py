@@ -153,6 +153,22 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(headers['Cache-Control'],'no-store')
         self.assertIn("frame-ancestors 'none'",headers['Content-Security-Policy'])
         self.assertEqual(json.loads(data)['accounts'],[])
+        self.assertEqual(json.loads(data)['backend'], {'name': 'agent-quota-monitor', 'protocolVersion': 1, 'processId': os.getpid()})
+
+    def test_browser_dashboard_is_not_served(self):
+        for path in ('/', '/app.js', '/style.css', '/icon.svg', '/index.html', '/web/index.html'):
+            with self.subTest(path=path):
+                status, headers, data = self.request(path)
+                self.assertEqual(status, 404)
+                self.assertEqual(headers['Content-Type'], 'application/json')
+                self.assertEqual(data, b'{}')
+
+    def test_shutdown_rejects_missing_or_changed_process_identity(self):
+        headers = {'Origin': f'http://127.0.0.1:{self.port}', 'X-Quota-Request': 'refresh'}
+        self.assertEqual(self.request('/api/shutdown', headers, 'POST')[0], 409)
+        headers['X-Quota-Process-Id'] = str(os.getpid() + 1)
+        self.assertEqual(self.request('/api/shutdown', headers, 'POST')[0], 409)
+        self.assertEqual(self.request('/api/status')[0], 200)
 
     def test_desktop_preferences_are_allowlisted_and_preserve_existing_settings(self):
         vault = MemoryVault()

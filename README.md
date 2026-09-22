@@ -2,7 +2,7 @@
 
 Keep an eye on your AI coding quotas, reset times, and how fast you are spending them, straight from the Windows tray.
 
-**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0/agent-quota-monitor-windows-0.2.0-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0/agent-quota-monitor-windows-0.2.0-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.0)
+**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.1)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -49,11 +49,13 @@ Accounts stay separate, even when their email labels match. Direct Claude subscr
 ## Everyday controls
 
 - **Click a ring** in the main window to pick the quota shown in the system tray. The chosen one is labelled **Tray**.
-- **Click a corner star** to pin or unpin a quota on the floating monitor.
-- **Toolbar**, at the top right, has Refresh, Web, Floating, Settings, and Quit.
+- **Click the pin at the top-right corner of a ring** to pin or unpin that quota on the floating monitor. Filled violet means pinned. A hollow slate pin means unpinned.
+- **Toolbar**, at the top right, has Refresh, Floating, Settings, and Quit.
 - **Hover a ring** for exact percentages, reset times, and pace details.
 - **Close** hides the main window to the tray. **Quit** exits, and stops the quota reader if this app started it.
-- **Web** opens the full local dashboard. Reordering accounts is done there with its edit controls, not by dragging rings in the native window.
+- **Reorder accounts** in Settings. Choose **Edit order**, use **Move up** and **Move down**, then click **Save order**. **Cancel** discards the unsaved order.
+
+Settings also shows each account's identity, reading source, and retry status. Account controls and quota details are available in the Windows app.
 
 Right-click the floating monitor for **Size** (75, 100, 125, 150, 200%) and **Opacity** (35, 50, 70, 85, 100%). Drag it to move it, and double-click it to bring back the main window. Its size, opacity, and position are remembered.
 
@@ -82,7 +84,7 @@ Uninstall through Windows Installed apps. App files, shortcuts, and this install
 ## Troubleshooting
 
 - **An account is missing.** Sign in through the provider's own client, then press Refresh. A browser-only login may not create the session the monitor reads.
-- **A reading is stale.** Press Refresh and confirm the provider's client still has a valid session. Refresh respects provider cooldowns. The Web dashboard shows when an account can be retried.
+- **A reading is stale.** Press Refresh and confirm the provider's client still has a valid session. Refresh respects provider cooldowns. Settings shows when an account can be retried.
 - **Copilot shows nothing.** Complete the one-time setup in [Copilot setup](docs/copilot-setup.md), then use Copilot **Sign in** and finish the prompts in the console window that opens.
 - **Nothing happens when launching.** Confirm you extracted the whole ZIP, including the `backend` folder, next to the executable.
 - **An update check failed.** Use **Check for updates** in Settings to retry immediately. Automatic checks wait until the next daily attempt.
@@ -91,7 +93,7 @@ Uninstall through Windows Installed apps. App files, shortcuts, and this install
 
 - Credentials stay with the official clients. The monitor reads local sessions and never logs you out, switches accounts, or routes traffic through a proxy.
 - Quota settings and cached snapshots are encrypted for your Windows user account. Non-secret update preferences are stored in your user registry.
-- The local dashboard listens on loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
+- The quota reader communicates with the Windows app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 - No telemetry, automatic public uploads, or prompts sent to a model to estimate quotas.
 
 Provider interfaces are internal to those products and can change without notice, which may interrupt readings.

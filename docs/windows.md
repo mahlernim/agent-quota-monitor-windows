@@ -4,9 +4,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 ## Install and launch
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0/agent-quota-monitor-windows-0.2.0-setup-win-x64.exe) for a Start menu shortcut and optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-setup-win-x64.exe) for a Start menu shortcut and optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.0/agent-quota-monitor-windows-0.2.0-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -25,18 +25,20 @@ Accounts remain separate by verified identity. Direct Claude subscriptions are s
 ## Use the monitor
 
 - Click a ring in the main window to choose the system-tray quota. Its label shows **Tray**.
-- Click a corner star to pin or unpin a quota on the floating monitor.
+- Click the pin at the top-right corner of a ring to pin or unpin that quota on the floating monitor. Filled violet means pinned. A hollow slate pin means unpinned.
 - Hover a ring for percentages, reset times, and pace details.
 - Use **Floating** to show or hide the floating monitor. Drag it to move it, and double-click it to show the main window.
 - Right-click the floating monitor for **Size** (75, 100, 125, 150, 200%) and **Opacity** (35, 50, 70, 85, 100%). Size, opacity, and position are remembered.
-- Use **Web** to open the local dashboard, including its account ordering controls.
+- Reorder accounts in **Settings**. Choose **Edit order**, use **Move up** and **Move down**, then click **Save order**. **Cancel** discards the unsaved order.
 - **Close** hides the main window to the tray. **Quit** exits and stops the quota reader if this app started it.
+
+Settings shows each account's identity, reading source, and retry status. Account controls and quota details are available in the Windows app.
 
 The thick outer ring shows quota remaining in the provider's color. The thin gray inner ring shows time remaining when the reset timing is known. Percentages show at most one decimal.
 
 Percentage text turns amber when quota remaining falls below half of time remaining, and red below one quarter. With 80% of the window left, amber starts below 40% quota and red below 20%. Missing timing data produces no pace warning.
 
-A stale reading preserves the last available value. It does not mean zero, and a missing window never means unlimited. A passed reset time does not confirm replenishment until the provider returns a new reading. **Refresh** respects provider cooldowns. The Web dashboard shows retry eligibility.
+A stale reading preserves the last available value. It does not mean zero, and a missing window never means unlimited. A passed reset time does not confirm replenishment until the provider returns a new reading. **Refresh** respects provider cooldowns. Settings shows when an account can be retried.
 
 ## Start with Windows
 
@@ -56,10 +58,10 @@ Uninstall the installed version through Windows Installed apps. This removes app
 
 The monitor reads official client sessions without taking over sign-in or renewal. It sends no model prompts to estimate quotas and has no telemetry or automatic public uploads.
 
-Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The local dashboard listens only on loopback. It is intended for a trusted personal computer and does not isolate access from other local processes.
+Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the Windows app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 
 Provider interfaces can change and interrupt readings. If an account is missing or stale, confirm that its official client has a valid session, then press **Refresh**. For launch failures with the portable version, confirm that the complete archive was extracted.
 
-See the [project README](https://github.com/mahlernim/agent-quota-monitor-windows#readme) for screenshots and the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.0) for downloads and release notes. Source contributors can use the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md).
+See the [project README](https://github.com/mahlernim/agent-quota-monitor-windows#readme) for screenshots and the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.1) for downloads and release notes. Source contributors can use the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md).
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

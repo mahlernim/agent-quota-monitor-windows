@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -25,6 +28,7 @@ public sealed class AccountsWindow : Window
     private readonly UpdateService? _updates;
     private readonly HttpClient _http;
     private readonly Action _changed;
+    private readonly Func<bool> _backendReady;
     private readonly Dictionary<string, CheckBox> _providerChecks = [];
     private readonly Dictionary<string, Button> _signInButtons = [];
     private readonly StackPanel _accounts = new();
@@ -38,6 +42,14 @@ public sealed class AccountsWindow : Window
         Visibility = Visibility.Collapsed
     };
     private readonly TextBlock _message = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _health = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Firebrick };
+    private readonly TextBlock _layoutMessage = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 7) };
+    private readonly Button _editOrder = new() { Content = "Edit order", Padding = new Thickness(8, 3, 8, 3), IsEnabled = false };
+    private readonly Button _saveOrder = new() { Content = "Save order", Padding = new Thickness(8, 3, 8, 3), Visibility = Visibility.Collapsed };
+    private readonly Button _cancelOrder = new() { Content = "Cancel", Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(6, 0, 0, 0), Visibility = Visibility.Collapsed };
+    private readonly Button _restore = new() { Content = "Restore hidden accounts", Padding = new Thickness(8, 3, 8, 3) };
+    private readonly AccountLayoutState _layout = new();
+    private readonly HashSet<string> _expandedAccounts = new(StringComparer.Ordinal);
     private readonly Button _saveProviders = new()
     {
         Content = "Save monitored providers",
@@ -49,20 +61,24 @@ public sealed class AccountsWindow : Window
     private readonly DispatcherTimer _timer;
     private bool _providersLoaded;
     private bool _polling;
+    private bool _closed;
+    private bool _savingLayout;
+    private int _mutationRevision;
     private string? _activeJobId;
     private string _accountsSignature = string.Empty;
 
-    internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null)
+    internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null, Func<bool>? backendReady = null)
     {
         _updates = updates;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _changed = changed ?? throw new ArgumentNullException(nameof(changed));
+        _backendReady = backendReady ?? (() => true);
         Title = "Settings and accounts";
         Icon = owner.Icon;
-        Width = 560;
-        MinWidth = 460;
-        Height = 520;
+        Width = 660;
+        MinWidth = 520;
+        Height = 640;
         MinHeight = 430;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Content = BuildContent();
@@ -72,9 +88,9 @@ public sealed class AccountsWindow : Window
         Loaded += async (_, _) =>
         {
             await PollAsync();
-            _timer.Start();
+            if (!_closed) _timer.Start();
         };
-        Closed += (_, _) => _timer.Stop();
+        Closed += (_, _) => { _closed = true; _timer.Stop(); };
     }
 
     private UIElement BuildContent()
@@ -87,6 +103,7 @@ public sealed class AccountsWindow : Window
         _message.Foreground = Brushes.Firebrick;
         _message.Margin = new Thickness(0, 5, 0, 0);
         footer.Children.Add(_message);
+        footer.Children.Add(_health);
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
 
@@ -174,18 +191,26 @@ public sealed class AccountsWindow : Window
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         });
-        var restore = new Button { Content = "Restore hidden accounts", Padding = new Thickness(8, 3, 8, 3) };
-        restore.Click += async (_, _) => await RestoreAsync();
-        DockPanel.SetDock(restore, Dock.Right);
-        accountHeader.Children.Add(restore);
+        _restore.Click += async (_, _) => await RestoreAsync();
+        DockPanel.SetDock(_restore, Dock.Right);
+        accountHeader.Children.Add(_restore);
         body.Children.Add(accountHeader);
         body.Children.Add(new TextBlock
         {
-            Text = "Remove hides an account from this monitor. It does not sign out or delete the official client account.",
+            Text = "Edit order changes the account order in the main monitor. Move accounts, then Save order or Cancel. Remove hides an account without signing out or deleting its official client account.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brushes.DimGray,
             Margin = new Thickness(0, 4, 0, 7)
         });
+        var orderActions = new StackPanel { Orientation = Orientation.Horizontal };
+        _editOrder.Click += (_, _) => { _layout.Begin(); RenderAccounts(true); };
+        _saveOrder.Click += async (_, _) => await SaveOrderAsync();
+        _cancelOrder.Click += (_, _) => { _layout.Cancel(); ShowSuccess("Order changes discarded."); RenderAccounts(true); };
+        orderActions.Children.Add(_editOrder);
+        orderActions.Children.Add(_saveOrder);
+        orderActions.Children.Add(_cancelOrder);
+        body.Children.Add(orderActions);
+        body.Children.Add(_layoutMessage);
         body.Children.Add(_accounts);
 
         var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -195,24 +220,32 @@ public sealed class AccountsWindow : Window
 
     private async Task PollAsync()
     {
-        if (_polling || !IsVisible)
+        if (_closed || _polling || _savingLayout || !IsVisible)
             return;
+        if (!_backendReady())
+        {
+            _health.Text = "Quota reader unavailable. Startup and update settings are still available.";
+            return;
+        }
         _polling = true;
+        int revision = _mutationRevision;
         try
         {
             using HttpResponseMessage response = await _http.GetAsync("/api/status");
             if (!response.IsSuccessStatusCode)
             {
-                ShowError("Could not read account status.");
+                _health.Text = "Could not read account status. Displayed information may be stale.";
                 return;
             }
             using JsonDocument document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+            if (_closed || !_backendReady() || revision != _mutationRevision) return;
             RenderStatus(document.RootElement);
-            _message.Text = string.Empty;
+            _health.Text = document.RootElement.TryGetProperty("storageError", out JsonElement storageError) && storageError.ValueKind == JsonValueKind.True
+                ? "Encrypted cache unavailable. Changes may not be saved." : string.Empty;
         }
         catch (Exception)
         {
-            ShowError("Could not read account status.");
+            _health.Text = "Could not read account status. Displayed information may be stale.";
         }
         finally
         {
@@ -222,6 +255,7 @@ public sealed class AccountsWindow : Window
 
     private void RenderStatus(JsonElement status)
     {
+        AccountStatus[] accountRows = AccountStatus.Parse(status);
         if (!_providersLoaded && status.TryGetProperty("enabledProviders", out JsonElement enabled))
         {
             HashSet<string?> selected = enabled.ValueKind == JsonValueKind.Array
@@ -257,35 +291,128 @@ public sealed class AccountsWindow : Window
             }
         }
 
-        if (!status.TryGetProperty("accounts", out JsonElement accounts) || accounts.ValueKind != JsonValueKind.Array)
-            return;
-        var accountRows = accounts.EnumerateArray().Select(account => new
-        {
-            Id = Text(account, "id"),
-            Provider = Text(account, "provider"),
-            Label = Text(account, "label"),
-            Status = Text(account, "status")
-        }).ToArray();
-        string signature = string.Join("\u001f", accountRows.Select(row =>
-            string.Join("\u001e", row.Id, row.Provider, row.Label, row.Status)));
-        if (signature == _accountsSignature)
+        _layout.Observe(accountRows);
+        RenderAccounts();
+    }
+
+    private void RenderAccounts(bool force = false)
+    {
+        bool editing = _layout.Editing;
+        bool conflict = _layout.HasConflict;
+        _editOrder.Visibility = editing ? Visibility.Collapsed : Visibility.Visible;
+        _editOrder.IsEnabled = _layout.Loaded && _layout.Displayed.Count > 1;
+        _saveOrder.Visibility = _cancelOrder.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        _saveOrder.IsEnabled = !_savingLayout && !conflict;
+        _cancelOrder.IsEnabled = !_savingLayout;
+        _restore.IsEnabled = !editing;
+        _saveProviders.IsEnabled = _providersLoaded && !editing;
+        _layoutMessage.Text = conflict ? "The account list changed. Cancel editing and try again. Your draft order has been kept."
+            : editing ? "Order changes are not saved yet." : "";
+        _layoutMessage.Foreground = conflict ? Brushes.Firebrick : Brushes.DimGray;
+        var rows = _layout.Displayed;
+        string signature = JsonSerializer.Serialize(new { rows, editing, conflict, _savingLayout });
+        if (!force && signature == _accountsSignature)
             return;
         _accountsSignature = signature;
+        object? focusedTag = (Keyboard.FocusedElement as FrameworkElement)?.Tag;
         _accounts.Children.Clear();
-        foreach (var account in accountRows)
+        foreach ((AccountStatus account, int index) in rows.Select((account, index) => (account, index)))
         {
-            var row = new DockPanel { Margin = new Thickness(0, 2, 0, 2) };
-            var remove = new Button { Content = "Remove", Tag = account.Id, Padding = new Thickness(7, 2, 7, 2) };
-            remove.Click += async (_, _) => await RemoveAsync(account.Id);
-            DockPanel.SetDock(remove, Dock.Right);
-            row.Children.Add(remove);
+            string label = $"{ProviderNames.GetValueOrDefault(account.Provider, account.Provider)} · {account.Label}";
+            var card = new StackPanel { Margin = new Thickness(0, 4, 0, 7) };
+            var row = new DockPanel();
+            var controls = new StackPanel { Orientation = Orientation.Horizontal };
+            if (editing)
+            {
+                foreach ((string caption, int direction) in new[] { ("Move up", -1), ("Move down", 1) })
+                {
+                    var move = new Button { Content = caption, Tag = (account.Id, direction), Padding = new Thickness(6, 2, 6, 2),
+                        IsEnabled = !_savingLayout && !conflict && (direction < 0 ? index > 0 : index < rows.Count - 1) };
+                    AutomationProperties.SetName(move, caption + " " + label);
+                    move.Click += (_, _) =>
+                    {
+                        if (_layout.Move(account.Id, direction))
+                        {
+                            RenderAccounts(true);
+                            FocusMove(account.Id, direction);
+                        }
+                    };
+                    controls.Children.Add(move);
+                }
+            }
+            else
+            {
+                var remove = new Button { Content = "Remove", Tag = (account.Id, 0), Padding = new Thickness(7, 2, 7, 2) };
+                AutomationProperties.SetName(remove, "Remove " + label);
+                remove.Click += async (_, _) => await RemoveAsync(account.Id);
+                controls.Children.Add(remove);
+            }
+            DockPanel.SetDock(controls, Dock.Right);
+            row.Children.Add(controls);
             row.Children.Add(new TextBlock
             {
-                Text = $"{ProviderNames.GetValueOrDefault(account.Provider, account.Provider)} · {account.Label} · {account.Status}",
+                Text = $"{label} · {account.Status}",
                 TextWrapping = TextWrapping.Wrap,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0)
             });
-            _accounts.Children.Add(row);
+            card.Children.Add(row);
+            if (!string.IsNullOrEmpty(account.Guidance))
+                card.Children.Add(new TextBlock { Text = account.Guidance, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Firebrick, Margin = new Thickness(0, 3, 0, 0) });
+            string retry = account.RetryState == "suspended" ? "Paused pending a usable provider retry time" : AccountStatus.Timestamp(account.NextAttempt, "Not reported");
+            string details = $"Source · {EmptyFallback(account.Source)}\nIdentity · {EmptyFallback(account.Identity)}\nAccount ID · {account.Id}\nLast successful read · {AccountStatus.Timestamp(account.LastSuccess, "Never")}\nNext eligible read · {retry}";
+            if (!string.IsNullOrEmpty(account.QuotaDetails)) details += "\n" + account.QuotaDetails;
+            var detail = new Expander { Header = "Details", Tag = account.Id, IsExpanded = _expandedAccounts.Contains(account.Id),
+                Content = new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(14, 3, 0, 3) } };
+            AutomationProperties.SetName(detail, "Details for " + label);
+            detail.Expanded += (_, _) => _expandedAccounts.Add(account.Id);
+            detail.Collapsed += (_, _) => _expandedAccounts.Remove(account.Id);
+            card.Children.Add(detail);
+            _accounts.Children.Add(card);
+        }
+        if (rows.Count == 0)
+            _accounts.Children.Add(new TextBlock { Text = "No accounts displayed. Restore hidden accounts or enable a provider.", TextWrapping = TextWrapping.Wrap });
+        if (focusedTag is ValueTuple<string, int> key) FocusMove(key.Item1, key.Item2);
+    }
+
+    private void FocusMove(string id, int direction)
+    {
+        var candidates = _accounts.Children.OfType<StackPanel>().SelectMany(card => card.Children.OfType<DockPanel>())
+            .SelectMany(row => row.Children.OfType<StackPanel>()).SelectMany(row => row.Children.OfType<Button>())
+            .Where(button => button.IsEnabled && button.Tag is ValueTuple<string, int> key && key.Item1 == id).ToArray();
+        (candidates.FirstOrDefault(button => button.Tag is ValueTuple<string, int> key && key.Item2 == direction) ?? candidates.FirstOrDefault())?.Focus();
+    }
+
+    private static string EmptyFallback(string value) => string.IsNullOrWhiteSpace(value) ? "Not reported" : value;
+
+    private async Task SaveOrderAsync()
+    {
+        if (_closed) return;
+        if (!_backendReady()) { ShowError("Quota reader unavailable. The account order has not been saved."); return; }
+        if (!_layout.Editing || _layout.HasConflict || _savingLayout) return;
+        _savingLayout = true;
+        ++_mutationRevision;
+        RenderAccounts(true);
+        try
+        {
+            using HttpResponseMessage response = await BackendRequests.PostAsync(_http, "/api/accounts/layout", new { order = _layout.Order, removed = Array.Empty<string>() });
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == HttpStatusCode.Conflict) _layout.Reject();
+                ShowError(await BackendErrorAsync(response));
+                return;
+            }
+            _layout.Commit();
+            ShowSuccess("Account order saved.");
+            _changed();
+        }
+        catch (Exception) { ShowError("The account order could not be saved. Your draft order has been kept."); }
+        finally
+        {
+            ++_mutationRevision;
+            _savingLayout = false;
+            RenderAccounts(true);
+            await PollAsync();
         }
     }
 
@@ -315,6 +442,8 @@ public sealed class AccountsWindow : Window
 
     private async Task PostAsync(string path, object payload, string success)
     {
+        if (_closed) return;
+        if (!_backendReady()) { ShowError("Quota reader unavailable. The request was not sent."); return; }
         try
         {
             using HttpResponseMessage response = await BackendRequests.PostAsync(_http, path, payload);
@@ -323,8 +452,7 @@ public sealed class AccountsWindow : Window
                 ShowError(await BackendErrorAsync(response));
                 return;
             }
-            _message.Foreground = Brushes.DarkGreen;
-            _message.Text = success;
+            ShowSuccess(success);
             _changed();
             await PollAsync();
         }
@@ -337,6 +465,12 @@ public sealed class AccountsWindow : Window
     private void ShowError(string message)
     {
         _message.Foreground = Brushes.Firebrick;
+        _message.Text = message;
+    }
+
+    private void ShowSuccess(string message)
+    {
+        _message.Foreground = Brushes.DarkGreen;
         _message.Text = message;
     }
 

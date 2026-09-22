@@ -12,16 +12,16 @@ public sealed class TrayController : IDisposable
     private Icon? _ownedIcon;
     private bool _disposed;
 
-    public TrayController(Action showMain, Action showWeb, Action toggleFloating, Action quit)
+    public TrayController(Action showMain, Action showSettings, Action toggleFloating, Action quit)
     {
         ArgumentNullException.ThrowIfNull(showMain);
-        ArgumentNullException.ThrowIfNull(showWeb);
+        ArgumentNullException.ThrowIfNull(showSettings);
         ArgumentNullException.ThrowIfNull(toggleFloating);
         ArgumentNullException.ThrowIfNull(quit);
 
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Show monitor", null, (_, _) => showMain());
-        menu.Items.Add("Open web dashboard", null, (_, _) => showWeb());
+        menu.Items.Add("Settings", null, (_, _) => showSettings());
         menu.Items.Add("Toggle floating monitor", null, (_, _) => toggleFloating());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => quit());
@@ -94,7 +94,7 @@ public sealed class TrayController : IDisposable
             try { lightTaskbar = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0) is int theme && theme == 1; }
             catch (Exception) { }
             using var brush = new SolidBrush(lightTaskbar ? System.Drawing.Color.FromArgb(34, 43, 51) : System.Drawing.Color.WhiteSmoke);
-            var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             graphics.DrawString(label, font, brush, bounds, format);
         }
 
@@ -125,11 +125,11 @@ public sealed class TrayController : IDisposable
     private static double? ValidPercent(double? value) =>
         value is >= 0 and <= 100 && double.IsFinite(value.Value) ? value : null;
 
-    private static string BuildTooltip(QuotaItem? item)
+    internal static string BuildTooltip(QuotaItem? item)
     {
         if (item is null)
             return "Agent Quota Monitor · No quota selected";
-        string percent = item.Unlimited ? "Unlimited" : ValidPercent(item.Remaining) is double value ? $"{value:0.#}%" : "Unknown";
+        string percent = item.Unlimited ? "Unlimited" : ValidPercent(item.Remaining) is double value ? QuotaItem.Percent(value) : "Unknown";
         string status = item.Stale ? "stale" : item.Status ?? "unknown status";
         string primary = $"{item.Code}{item.Window} {percent} {status}";
         string account = string.IsNullOrWhiteSpace(item.Account) ? string.Empty : " · " + item.Account;

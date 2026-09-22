@@ -16,6 +16,7 @@ credentials/
 secrets/
 runtime/
 work/
+/quarantine/
 .dotnet/
 native/bin/
 native/obj/
@@ -24,6 +25,12 @@ tests/native-updates/bin/
 tests/native-updates/obj/
 tests/native-requests/bin/
 tests/native-requests/obj/
+tests/native-accounts/bin/
+tests/native-accounts/obj/
+tests/native-backend/bin/
+tests/native-backend/obj/
+tests/native-lifecycle/bin/
+tests/native-lifecycle/obj/
 
 # Private system design, decisions, and issue review notes for local agent work.
 /docs/system-design.local.md

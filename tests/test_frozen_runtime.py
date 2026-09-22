@@ -5,15 +5,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from quota import copilot, server
+from quota import copilot
 from quota.connections import client_command
 
 
 class FrozenRuntimeTests(unittest.TestCase):
-    def test_static_assets_resolve_from_pyinstaller_bundle(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(sys, '_MEIPASS', directory, create=True):
-            self.assertEqual(server.bundled_path('web', 'index.html'), Path(directory) / 'web' / 'index.html')
-
     def test_copilot_command_uses_bundled_bridge_and_external_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

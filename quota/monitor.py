@@ -3,9 +3,41 @@ import threading
 import time
 from . import providers, model
 from .copilot import copilot_account
+from .retry import MAX_TIMESTAMP, deadline, delay_seconds, finite_number
 
 INTERVAL = 300
 SUPPORTED_PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
+
+
+def poll_monitor(monitor, stop):
+    """Keep the scheduler alive after an unexpected failure without leaking it."""
+    while not stop.is_set():
+        try:
+            monitor.refresh()
+            monitor.polling_error = False
+        except Exception:
+            monitor.polling_error = True
+        stop.wait(60)
+
+
+def repair_retry_state(row, now):
+    """Repair only scheduling metadata, leaving saved identity and quotas intact."""
+    if row.get('retryState') == 'suspended':
+        row['nextAttempt'] = None
+    elif 'nextAttempt' in row:
+        value = row['nextAttempt']
+        if finite_number(value) and value > MAX_TIMESTAMP:
+            row.update(nextAttempt=None, retryState='suspended', retryReason='provider_cooldown_unrepresentable')
+        elif not finite_number(value) or value < 0:
+            row.update(nextAttempt=deadline(now, INTERVAL), retryReason='invalid_saved_retry')
+    failures = row.get('failures', 0)
+    row['failures'] = min(failures, 1000000) if type(failures) is int and failures >= 0 else 0
+    for key in ('lastAttempt', 'lastSuccess'):
+        value = row.get(key)
+        if value is not None and (not finite_number(value) or not 0 <= value <= MAX_TIMESTAMP):
+            row[key] = None
+    if 'providerCooldown' in row:
+        row['providerCooldown'] = row['providerCooldown'] is True
 
 
 class Monitor:
@@ -26,10 +58,12 @@ class Monitor:
         self.lock = threading.RLock()
         self.refresh_lock = threading.Lock()
         self.storage_error = False
+        self.polling_error = False
         try:
             self.rows = vault.load()
             # Early preview snapshots included product attribution as a quota.
             for row in self.rows.values():
+                repair_retry_state(row, self.clock())
                 if row.get('provider') == 'claude':
                     for group in row.get('groups', []):
                         group['buckets'] = [b for b in group.get('buckets', []) if not b.get('id', '').endswith('_breakdown')]
@@ -102,8 +136,15 @@ class Monitor:
             if key in self.hidden or (self.enabled is not None and account['provider'] not in self.enabled):
                 return
             old = copy.deepcopy(self.rows.get(key, {}))
-        renewed = old.get('error') == 'sign_in_required' and account.get('sessionRevision') != old.get('sessionRevision')
+        repair_retry_state(old, now)
+        if old.get('retryState') == 'suspended':
+            with self.lock:
+                self.rows[key] = old
+            return
+        renewed = old.get('error') == 'sign_in_required' and not old.get('providerCooldown') and account.get('sessionRevision') != old.get('sessionRevision')
         if not renewed and now < old.get('nextAttempt', 0):
+            with self.lock:
+                self.rows[key] = old
             return
         row = {k: v for k, v in account.items() if k != 'read'}
         row.update(groups=old.get('groups', []), lastSuccess=old.get('lastSuccess'), lastAttempt=now)
@@ -112,13 +153,17 @@ class Monitor:
             if not groups or not any(b.get('remaining') is not None or b.get('unlimited') is True or b.get('amountRemaining') is not None or b.get('entitlement') is not None for g in groups for b in g['buckets']):
                 raise providers.ReadError('quota_not_reported')
             row.update(groups=groups, label=label, lastSuccess=now, status='live', error=None,
-                       failures=0, nextAttempt=now+INTERVAL)
+                       failures=0, nextAttempt=deadline(now, INTERVAL))
         except Exception as err:
             code = err.code if isinstance(err, providers.ReadError) else 'reader_failed'
             failures = old.get('failures', 0)+1
-            delay = max(min(3600, INTERVAL * 2 ** min(failures-1, 4)), getattr(err, 'retry_after', 0))
+            provider_delay = delay_seconds(getattr(err, 'retry_after', 0))
+            delay = max(min(3600, INTERVAL * 2 ** min(failures-1, 4)), provider_delay)
+            next_attempt = deadline(now, delay)
             row.update(status='stale' if row['lastSuccess'] else 'pending', error=code, failures=failures,
-                       nextAttempt=now+delay)
+                       nextAttempt=next_attempt, providerCooldown=provider_delay > 0)
+            if next_attempt is None:
+                row.update(retryState='suspended', retryReason='provider_cooldown_unrepresentable')
         with self.lock:
             self.rows[key] = row
 
@@ -153,7 +198,14 @@ class Monitor:
                     elif self.enabled is not None and provider in self.enabled and not any(r['provider'] == provider for r in self.rows.values()):
                         self.rows[placeholder] = dict(id=placeholder, provider=provider, label='Sign-in needed', source='No readable official session', identityStatus='Unverified', groups=[], status='pending', error=discovery_errors.get(provider, 'local_session_unavailable'), lastSuccess=None)
             for account in {a['id']: a for a in found}.values():
-                self.refresh_one(account)
+                try:
+                    self.refresh_one(account)
+                except Exception:
+                    # A bad account must not prevent unrelated readers progressing.
+                    with self.lock:
+                        old = self.rows.get(account['id'])
+                        if old:
+                            old.update(status='stale' if old.get('lastSuccess') else 'pending', error='reader_failed')
             with self.lock:
                 try:
                     self.vault.save(self.rows)
@@ -187,11 +239,11 @@ class Monitor:
         for row in rows:
             age = now-row['lastSuccess'] if row.get('lastSuccess') else None
             row['ageSeconds'] = age
-            if row['status'] == 'live' and (age is None or age > INTERVAL*2):
+            if row['status'] == 'live' and (self.polling_error or age is None or age > INTERVAL*2):
                 row['status'] = 'stale'
         return dict(accounts=sorted(rows, key=lambda r: (order.get(r['id'], len(order)), r['provider'], r['id'])), now=now,
                     hasRemovedAccounts=bool(hidden),
                     supportedProviders=list(SUPPORTED_PROVIDERS),
                     enabledProviders=sorted(enabled if enabled is not None else {r['provider'] for r in rows}),
-                    refreshing=self.refresh_lock.locked(), pollSeconds=INTERVAL, storageError=self.storage_error,
+                    refreshing=self.refresh_lock.locked(), pollSeconds=INTERVAL, storageError=self.storage_error, pollingError=self.polling_error,
                     googleVerifiedCount=0, googleRequestedCount=len(self.desired_google), googleSessionCount=sum(r['provider']=='antigravity' and r['status']=='live' for r in rows))
