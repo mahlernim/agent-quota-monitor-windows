@@ -26,6 +26,7 @@ public sealed class MainWindow : Window
     private IReadOnlyList<QuotaItem> _items = Array.Empty<QuotaItem>();
     private string? _selectedKey;
     private ISet<string> _pins = new HashSet<string>();
+    private bool _preferencesEnabled = true;
 
     public MainWindow(Action<QuotaItem> selectTray, Action<QuotaItem> togglePin, Action showFloating,
         Action refresh, Action quit, Action accounts)
@@ -62,6 +63,9 @@ public sealed class MainWindow : Window
 
     internal void SetConnectionState(bool ready, bool connecting)
     {
+        _preferencesEnabled = ready && !connecting;
+        foreach (var card in _cards.Values)
+            card.Select.IsEnabled = card.Pin.IsEnabled = _preferencesEnabled;
         _refresh.Content = connecting ? "Connecting" : ready ? "Refresh" : "Retry connection";
         _refresh.IsEnabled = !connecting;
         _refresh.ToolTip = ready ? "Refresh quotas while respecting provider cooldowns."
@@ -159,6 +163,7 @@ public sealed class MainWindow : Window
     private void UpdateCard(CardView card, QuotaItem item)
     {
         card.Item = item;
+        card.Select.IsEnabled = card.Pin.IsEnabled = _preferencesEnabled;
         var selected = item.Key == _selectedKey;
         card.Border.BorderBrush = selected ? Brushes.DodgerBlue : new SolidColorBrush(Color.FromRgb(203, 213, 225));
         card.Border.BorderThickness = new Thickness(selected ? 2 : 1);

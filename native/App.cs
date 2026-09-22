@@ -263,10 +263,10 @@ public sealed class App : Application
         try { main?.SetData(items, selected, pins); floating?.SetData(items.Where(q => pins.Contains(q.Key)).ToList()); tray?.SetQuota(items.FirstOrDefault(q => q.Key == selected)); return true; }
         catch { if (!stopping && main is not null) main.Title = "Agent Quota Monitor · display unavailable"; return false; }
     }
-    private void SelectTray(QuotaItem item) { if (stopping) return; selected = item.Key; Render(); _ = Post("/api/desktop", new { desktopSelection = item.Selection }); }
+    private void SelectTray(QuotaItem item) { if (stopping || !backendReady || connecting) return; selected = item.Key; Render(); _ = Post("/api/desktop", new { desktopSelection = item.Selection }); }
     private void TogglePin(QuotaItem item)
     {
-        if (stopping) return;
+        if (stopping || !backendReady || connecting) return;
         if (!pins.Add(item.Key)) pins.Remove(item.Key); Render();
         var values = pins.Select(key => { var ids = JsonSerializer.Deserialize<string[]>(key)!; return new { accountId = ids[0], groupId = ids[1], bucketId = ids[2] }; }).ToArray();
         _ = Post("/api/desktop", new { desktopFloatingSelections = values });
