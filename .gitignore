@@ -31,6 +31,8 @@ tests/native-backend/bin/
 tests/native-backend/obj/
 tests/native-lifecycle/bin/
 tests/native-lifecycle/obj/
+tests/native-startup/bin/
+tests/native-startup/obj/
 
 # Private system design, decisions, and issue review notes for local agent work.
 /docs/system-design.local.md

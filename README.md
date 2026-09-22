@@ -2,7 +2,7 @@
 
 Keep an eye on your AI coding quotas, reset times, and how fast you are spending them, straight from the Windows tray.
 
-**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.1/agent-quota-monitor-windows-0.2.1-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.1)
+**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.2)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -87,6 +87,7 @@ Uninstall through Windows Installed apps. App files, shortcuts, and this install
 - **A reading is stale.** Press Refresh and confirm the provider's client still has a valid session. Refresh respects provider cooldowns. Settings shows when an account can be retried.
 - **Copilot shows nothing.** Complete the one-time setup in [Copilot setup](docs/copilot-setup.md), then use Copilot **Sign in** and finish the prompts in the console window that opens.
 - **Nothing happens when launching.** Confirm you extracted the whole ZIP, including the `backend` folder, next to the executable.
+- **The quota reader is unavailable.** Click **Retry connection** in the toolbar. This reconnects or starts the reader without changing your accounts. If it stays unavailable, use **Quit** and reopen the monitor. Closing the window only hides it to the tray.
 - **An update check failed.** Use **Check for updates** in Settings to retry immediately. Automatic checks wait until the next daily attempt.
 
 ## Privacy

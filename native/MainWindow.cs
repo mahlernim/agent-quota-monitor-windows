@@ -19,6 +19,7 @@ public sealed class MainWindow : Window
         Foreground = Brushes.Firebrick, Margin = new Thickness(8, 0, 8, 6) };
     private readonly Action<QuotaItem> _selectTray;
     private readonly Action<QuotaItem> _togglePin;
+    private readonly Button _refresh;
     private readonly WrapPanel _groups = new() { Margin = new Thickness(6) };
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly Dictionary<string, CardView> _cards = new();
@@ -42,7 +43,8 @@ public sealed class MainWindow : Window
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(4, 3, 4, 2) };
         DockPanel.SetDock(toolbar, Dock.Top);
         root.Children.Add(toolbar);
-        toolbar.Children.Add(Button("Refresh", refresh));
+        _refresh = Button("Refresh", refresh);
+        toolbar.Children.Add(_refresh);
         toolbar.Children.Add(Button("Floating", showFloating));
         toolbar.Children.Add(Button("Settings", accounts));
         toolbar.Children.Add(Button("Quit", quit));
@@ -56,6 +58,14 @@ public sealed class MainWindow : Window
     {
         _backendError.Text = message;
         _backendError.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    internal void SetConnectionState(bool ready, bool connecting)
+    {
+        _refresh.Content = connecting ? "Connecting" : ready ? "Refresh" : "Retry connection";
+        _refresh.IsEnabled = !connecting;
+        _refresh.ToolTip = ready ? "Refresh quotas while respecting provider cooldowns."
+            : "Connect to the local quota reader and show its cached readings.";
     }
 
     internal void SetUpdate(UpdateService updates)

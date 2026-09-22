@@ -19,7 +19,7 @@ public sealed class App : Application
         { BaseAddress = new Uri("http://127.0.0.1:8765"), Timeout = TimeSpan.FromSeconds(8) };
     private MainWindow? main; private FloatingWindow? floating; private TrayController? tray;
     private List<QuotaItem> items = new(); private string? selected; private readonly HashSet<string> pins = new();
-    private bool stopping; private bool polling; private bool preferencesLoaded; private bool backendReady;
+    private bool stopping; private bool polling; private bool preferencesLoaded; private bool backendReady; private bool connecting;
     private SingleInstance? instance; private DispatcherTimer? timer;
     private readonly CancellationTokenSource lifetime = new();
     private readonly BackendConnection? backendConnection;
@@ -27,6 +27,7 @@ public sealed class App : Application
     private readonly Func<CancellationToken, Task> stopBackend;
     private readonly Action? exitOverride;
     private Task startupTask = Task.CompletedTask, pollTask = Task.CompletedTask, activationTask = Task.CompletedTask;
+    private CancellationTokenSource? pollCancellation;
     private Task? quitTask;
     private double opacity = 0.85;
     private DispatcherTimer? placementSave;
@@ -39,12 +40,13 @@ public sealed class App : Application
         ensureBackend = backendConnection.EnsureAsync;
         stopBackend = backendConnection.StopOwnedAsync;
     }
-    internal App(HttpClient client, Func<CancellationToken, Task> ensure, Func<CancellationToken, Task> stop, Action exited)
+    internal App(HttpClient client, Func<CancellationToken, Task> ensure, Func<CancellationToken, Task> stop, Action exited, BackendConnection? connection = null)
     {
         http.Dispose();
         http = client;
         ensureBackend = ensure;
         stopBackend = stop;
+        backendConnection = connection;
         exitOverride = exited;
         offlineCheck = true;
     }
@@ -70,7 +72,7 @@ public sealed class App : Application
         });
         http.DefaultRequestHeaders.Add("Origin", "http://127.0.0.1:8765");
         http.DefaultRequestHeaders.Add("X-Quota-Request", "refresh");
-        main = new MainWindow(SelectTray, TogglePin, ToggleFloating, () => _ = Post("/api/refresh", new {}), () => _ = Quit(), ShowAccounts);
+        main = new MainWindow(SelectTray, TogglePin, ToggleFloating, () => _ = RefreshAsync(), () => _ = Quit(), ShowAccounts);
         main.Closing += (_, ev) => { if (!stopping) { ev.Cancel = true; main.Hide(); } };
         floating = new FloatingWindow(ShowMain, HideFloating);
         main.Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/robot-ring.ico"));
@@ -84,29 +86,72 @@ public sealed class App : Application
         if (!Environment.GetCommandLineArgs().Contains("--minimized")) main.Show();
         await StartServices();
     }
-    private Task StartServices() => startupTask = StartServicesCore();
-    private async Task StartServicesCore()
+    private Task StartServices()
     {
-        if (stopping) return;
-        bool connected = false;
+        if (stopping) return Task.CompletedTask;
+        if (connecting) return startupTask;
+        connecting = true;
+        backendReady = false;
+        timer?.Stop();
+        BestEffort(() => pollCancellation?.Cancel());
+        main?.SetConnectionState(false, true);
+        main?.ShowBackendError("Connecting to the quota reader. Please wait.");
+        return startupTask = ConnectBackendCore();
+    }
+    private async Task ConnectBackendCore()
+    {
+        bool peerConnected = false;
         try
         {
+            // Drain the cancelled poll before changing the accepted peer identity.
+            await pollTask.WaitAsync(lifetime.Token);
+            if (stopping) return;
             await ensureBackend(lifetime.Token);
             if (stopping) return;
+            peerConnected = true;
             backendReady = true;
-            await Poll();
-            connected = true;
+            pollTask = PollCore(true);
+            await pollTask;
         }
         catch (OperationCanceledException) when (stopping) { }
         catch (Exception error)
         {
-            if (!stopping && main is not null)
+            if (!stopping)
             {
-                main.Title = "Agent Quota Monitor · backend unavailable";
-                main.ShowBackendError(error is BackendConnectionException ? error.Message : "The quota backend could not be started. Close conflicting local services and restart the monitor.");
+                backendReady = false;
+                foreach (var item in items) item.MarkDisconnected();
+                Render();
+                if (main is not null)
+                {
+                    main.Title = "Agent Quota Monitor · backend unavailable";
+                    main.ShowBackendError(error is BackendConnectionException ? error.Message : "The quota reader could not be connected. Choose Retry connection to try again.");
+                }
             }
         }
+        finally
+        {
+            connecting = false;
+            if (!stopping)
+            {
+                InitializeUpdates();
+                if (peerConnected) StartPolling();
+                main?.SetConnectionState(backendReady, false);
+            }
+        }
+    }
+    private async Task RefreshAsync()
+    {
         if (stopping) return;
+        if (!backendReady || connecting)
+        {
+            await StartServices();
+            return;
+        }
+        await Post("/api/refresh", new {});
+    }
+    private void InitializeUpdates()
+    {
+        if (updates is not null || stopping) return;
         updates = new UpdateService();
         updates.Changed += () => { if (!stopping) main?.SetUpdate(updates); };
         updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
@@ -117,9 +162,14 @@ public sealed class App : Application
             await updates.Check();
         };
         updateTimer.Start();
-        if (!connected) return;
-        timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        timer.Tick += async (_, _) => await Poll();
+    }
+    private void StartPolling()
+    {
+        if (timer is null)
+        {
+            timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            timer.Tick += async (_, _) => await Poll();
+        }
         timer.Start();
     }
     private static Process LaunchBackend()
@@ -142,22 +192,24 @@ public sealed class App : Application
     }
     private Task Poll()
     {
-        if (polling || stopping) return Task.CompletedTask;
+        if (polling || stopping || connecting) return Task.CompletedTask;
         return pollTask = PollCore();
     }
-    private async Task PollCore()
+    private async Task PollCore(bool duringConnection = false)
     {
         polling = true;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        pollCancellation = cancellation;
         try
         {
-            using var data = JsonDocument.Parse(await http.GetStringAsync("/api/status", lifetime.Token));
-            if (stopping) return;
+            using var data = JsonDocument.Parse(await http.GetStringAsync("/api/status", cancellation.Token));
+            if (stopping || (connecting && !duringConnection)) return;
             backendConnection?.ValidatePeer(data.RootElement);
             List<QuotaItem> candidate = QuotaSnapshot.Parse(data.RootElement);
             if (!preferencesLoaded)
             {
-                using var prefs = JsonDocument.Parse(await http.GetStringAsync("/api/desktop", lifetime.Token));
-                if (stopping) return;
+                using var prefs = JsonDocument.Parse(await http.GetStringAsync("/api/desktop", cancellation.Token));
+                if (stopping || (connecting && !duringConnection)) return;
                 var p = prefs.RootElement;
                 if (p.TryGetProperty("desktopSelection", out var s)) selected = ReadKey(s);
                 if (p.TryGetProperty("desktopFloatingSelections", out var list) && list.ValueKind == JsonValueKind.Array)
@@ -170,17 +222,17 @@ public sealed class App : Application
                 preferencesLoaded = true;
                 if (p.TryGetProperty("desktopFloating", out var f) && f.ValueKind == JsonValueKind.True) { floating!.Opacity = opacity; floating.Show(); }
             }
-            if (stopping) return;
+            if (stopping || (connecting && !duringConnection)) return;
             items = candidate;
             backendReady = true;
             main?.ShowBackendError("");
             selected ??= items.FirstOrDefault()?.Key;
             if (Render() && main is not null) main.Title = "Agent Quota Monitor Windows";
         }
-        catch (OperationCanceledException) when (stopping) { }
+        catch (OperationCanceledException) when (stopping || (connecting && !duringConnection)) { }
         catch (BackendConnectionException error)
         {
-            if (stopping) return;
+            if (stopping || (connecting && !duringConnection)) return;
             backendReady = false;
             main?.ShowBackendError(error.Message);
             foreach (var item in items) item.MarkDisconnected();
@@ -188,15 +240,20 @@ public sealed class App : Application
         }
         catch
         {
-            if (stopping) return;
+            if (stopping || (connecting && !duringConnection)) return;
             bool wasReady = backendReady;
             backendReady = false;
-            if (wasReady) main?.ShowBackendError("The quota reader is unavailable or returned invalid data. Cached values are shown while reconnecting.");
+            if (wasReady) main?.ShowBackendError("The quota reader is unavailable or returned invalid data. Cached values are shown. Choose Retry connection to reconnect.");
             if (main is not null) main.Title = "Agent Quota Monitor · disconnected";
             foreach (var item in items) item.MarkDisconnected();
             Render();
         }
-        finally { polling = false; }
+        finally
+        {
+            polling = false;
+            if (ReferenceEquals(pollCancellation, cancellation)) pollCancellation = null;
+            if (!stopping && !connecting) main?.SetConnectionState(backendReady, false);
+        }
     }
     private static string? ReadKey(JsonElement e) => e.ValueKind != JsonValueKind.Object ? null :
         QuotaItem.MakeKey(QuotaItem.Text(e, "accountId"), QuotaItem.Text(e, "groupId"), QuotaItem.Text(e, "bucketId"));
@@ -221,14 +278,14 @@ public sealed class App : Application
         if (stopping) return;
         ShowMain();
         if (accounts != null) { accounts.Activate(); return; }
-        accounts = new AccountsWindow(main!, http, () => _ = Poll(), updates, () => backendReady && !stopping);
+        accounts = new AccountsWindow(main!, http, () => _ = Poll(), updates, () => backendReady && !stopping && !connecting);
         accounts.Closed += (_, _) => accounts = null; accounts.Show();
     }
     private void ToggleFloating() { if (stopping) return; if (floating!.IsVisible) HideFloating(); else { floating.Opacity = opacity; floating.Show(); _ = Post("/api/desktop", new { desktopFloating = true }); } }
     private void HideFloating() { if (stopping) return; floating?.Hide(); _ = Post("/api/desktop", new { desktopFloating = false }); }
     private async Task Post(string path, object value)
     {
-        if (stopping || !backendReady) return;
+        if (stopping || !backendReady || connecting) return;
         try { using var response = await BackendRequests.PostAsync(http, path, value, lifetime.Token); response.EnsureSuccessStatusCode(); }
         catch (OperationCanceledException) when (stopping) { }
         catch { if (!stopping && main != null) main.Title = "Agent Quota Monitor · could not save or refresh"; }

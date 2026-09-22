@@ -226,6 +226,85 @@ await Test("process wait fault still kills and releases the owned child", async 
     Check(process.Killed && process.Disposed && connection.CleanupFailed && !connection.OwnsBackend, "Wait fault cleanup");
 });
 
+await Test("reconnecting to an owned live reader reuses its process", async () =>
+{
+    var process = new FakeProcess(); var calls = 0; var launches = 0;
+    using var http = Client((r, ct) => ++calls == 1 ? throw Refused() : Task.FromResult(Json(Status())));
+    using var connection = Connection(http, () => { ++launches; return process; });
+    await connection.EnsureAsync(CancellationToken.None);
+    await connection.EnsureAsync(CancellationToken.None);
+    Check(launches == 1 && connection.OwnsBackend && !process.Disposed, "Live reader reuse");
+});
+
+await Test("an unresponsive owned reader is retained without launching a duplicate", async () =>
+{
+    var process = new FakeProcess(); var calls = 0; var launches = 0; bool retry = false;
+    using var http = Client(async (r, ct) =>
+    {
+        if (retry) await Task.Delay(Timeout.Infinite, ct);
+        if (++calls == 1) throw Refused();
+        return Json(Status());
+    });
+    using var connection = Connection(http, () => { ++launches; return process; });
+    await connection.EnsureAsync(CancellationToken.None);
+    retry = true;
+    await Expect<BackendConnectionException>(() => connection.EnsureAsync(CancellationToken.None));
+    Check(launches == 1 && connection.OwnsBackend && !process.Killed && !process.Disposed, "Timeout preserves owned reader");
+    retry = false;
+    await connection.EnsureAsync(CancellationToken.None);
+    Check(launches == 1, "A later successful retry reuses the reader");
+});
+
+await Test("an owned reader refusing connections is not duplicated", async () =>
+{
+    var process = new FakeProcess(); var calls = 0; var launches = 0; bool retry = false;
+    using var http = Client((r, ct) => retry || ++calls == 1 ? throw Refused() : Task.FromResult(Json(Status())));
+    using var connection = Connection(http, () => { ++launches; return process; });
+    await connection.EnsureAsync(CancellationToken.None);
+    retry = true;
+    await Expect<BackendConnectionException>(() => connection.EnsureAsync(CancellationToken.None));
+    Check(launches == 1 && connection.OwnsBackend && !process.Killed, "Refusal preserves live child ownership");
+});
+
+await Test("retry replaces an exited owned reader without terminating another process", async () =>
+{
+    var first = new FakeProcess(); var second = new FakeProcess(); var calls = 0; var launches = 0;
+    using var http = Client((r, ct) => ++calls is 1 or 3 ? throw Refused() : Task.FromResult(Json(Status())));
+    using var connection = Connection(http, () => ++launches == 1 ? first : second);
+    await connection.EnsureAsync(CancellationToken.None);
+    first.Exit();
+    await connection.EnsureAsync(CancellationToken.None);
+    Check(launches == 2 && first.Disposed && !first.Killed && !second.Disposed, "Exited reader replacement");
+});
+
+await Test("a listener replacing an owned reader is not adopted during retry", async () =>
+{
+    var process = new FakeProcess(); var calls = 0; var launches = 0;
+    using var http = Client((r, ct) => ++calls == 1 ? throw Refused() : Task.FromResult(Json(Status(calls > 2 ? 88 : 77))));
+    using var connection = Connection(http, () => { ++launches; return process; });
+    await connection.EnsureAsync(CancellationToken.None);
+    await Expect<BackendConnectionException>(() => connection.EnsureAsync(CancellationToken.None));
+    Check(launches == 1 && connection.OwnsBackend && !process.Killed, "Retry preserves original ownership");
+});
+
+await Test("concurrent connection requests serialize and launch only once", async () =>
+{
+    var process = new FakeProcess(); var calls = 0; var launches = 0;
+    var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    using var http = Client(async (r, ct) =>
+    {
+        if (++calls == 1) throw Refused();
+        await ready.Task.WaitAsync(ct);
+        return Json(Status());
+    });
+    using var connection = Connection(http, () => { ++launches; return process; }, 1000);
+    Task first = connection.EnsureAsync(CancellationToken.None);
+    Task second = connection.EnsureAsync(CancellationToken.None);
+    ready.SetResult();
+    await Task.WhenAll(first, second);
+    Check(launches == 1 && calls == 3 && connection.OwnsBackend, "Serialized connection attempts");
+});
+
 Console.WriteLine($"{passed} backend compatibility and ownership checks passed");
 
 HttpClient Client(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handle) =>
