@@ -56,12 +56,62 @@ internal static class PresentationChecks
         var reordered = Texts(window).Where(t => t.StartsWith("claude · Account ")).ToArray();
         Check(first.SequenceEqual(new[] { "claude · Account A", "claude · Account B" }), "Initial account order is rendered");
         Check(reordered.SequenceEqual(first.Reverse()), "Saved backend account order is rendered");
+        using (var orderedData = JsonDocument.Parse("""
+            {"ringOrder":[{"accountId":"a","groupId":"g","bucketId":"second"},
+                          {"accountId":"a","groupId":"g","bucketId":"first"}],
+             "accounts":[{"id":"a","provider":"claude","label":"A","status":"live",
+               "groups":[{"id":"g","label":"Quota","buckets":[{"id":"first","label":"First","remaining":70},
+                                                            {"id":"second","label":"Second","remaining":60}]}]}]}
+            """))
+        {
+            List<QuotaItem> orderedRings = QuotaSnapshot.Parse(orderedData.RootElement);
+            Check(orderedRings.Select(item => item.BucketId).SequenceEqual(new[] { "second", "first" }),
+                "Saved ring order changes the main monitor input");
+            var floating = new FloatingWindow(() => {}, () => {});
+            floating.SetData(orderedRings);
+            var cells = ((StackPanel)((Border)floating.Content).Child).Children.Cast<StackPanel>().ToArray();
+            Check(cells.Select(cell => cell.ToolTip?.ToString()).SequenceEqual(orderedRings.Select(item => item.Tooltip)),
+                "Floating monitor preserves the same saved ring order");
+        }
         Check(Texts(window).Count(t => t.Contains("Tray")) == 1 && pins.SetEquals(new[] { a.Key }),
             "Reordering retains a single tray selection and stable pins");
         window.SetData(Array.Empty<QuotaItem>(), a.Key, pins);
         Check(Texts(window).Any(t => t.Contains("Open Settings")), "Empty state points to native Settings");
         CheckPins(Check);
+        CheckArrange(Check);
         CheckPercentageFormatting(Check);
+    }
+
+    private static void CheckArrange(Action<bool, string> check)
+    {
+        var first = new QuotaItem { Key = "first", AccountId = "a", Provider = "claude", Account = "A", Group = "Quota", Window = "5h" };
+        var second = new QuotaItem { Key = "second", AccountId = "a", Provider = "claude", Account = "A", Group = "Quota", Window = "7d" };
+        QuotaItem? moved = null;
+        int direction = 0;
+        var window = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {},
+            (item, value) => { moved = item; direction = value; });
+        window.SetData(new[] { first, second }, null, new HashSet<string>());
+        var arrange = Elements<Button>(window).Single(button => button.Content is string text && text == "Reorder");
+        arrange.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var earlier = Elements<Button>(window).Single(button => AutomationProperties.GetName(button).StartsWith("Move earlier") &&
+            AutomationProperties.GetName(button).EndsWith("5h"));
+        check(!earlier.IsEnabled, "First ring cannot move before its account boundary");
+        var later = Elements<Button>(window).First(button => AutomationProperties.GetName(button).StartsWith("Move later"));
+        later.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        check(ReferenceEquals(moved, first) && direction == 1, "Main monitor move control sends the selected ring and direction");
+        var other = new QuotaItem { Key = "other", AccountId = "b", Provider = "codex", Account = "B", Group = "Quota", Window = "5h" };
+        string? movedAccount = null;
+        int accountDirection = 0;
+        var accountWindow = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {}, null,
+            (id, value) => { movedAccount = id; accountDirection = value; });
+        accountWindow.SetData(new[] { first, second, other }, null, new HashSet<string>());
+        Elements<Button>(accountWindow).Single(button => button.Content is string text && text == "Reorder")
+            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var firstUp = Elements<Button>(accountWindow).Single(button => AutomationProperties.GetName(button) == "Move account earlier claude A");
+        check(!firstUp.IsEnabled, "First account cannot move before the visible account boundary");
+        var firstDown = Elements<Button>(accountWindow).Single(button => AutomationProperties.GetName(button) == "Move account later claude A");
+        firstDown.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        check(movedAccount == "a" && accountDirection == 1, "Same Reorder mode sends the selected account and direction");
     }
 
     private static void CheckPercentageFormatting(Action<bool, string> check)

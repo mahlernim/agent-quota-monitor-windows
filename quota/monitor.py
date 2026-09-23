@@ -7,6 +7,21 @@ from .retry import MAX_TIMESTAMP, deadline, delay_seconds, finite_number
 
 INTERVAL = 300
 SUPPORTED_PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
+RING_FIELDS = {'accountId', 'groupId', 'bucketId'}
+
+
+def ring_ids(order):
+    if not isinstance(order, list) or len(order) > 100:
+        raise ValueError('Invalid ring order')
+    keys = []
+    for item in order:
+        if not isinstance(item, dict) or set(item) != RING_FIELDS or any(
+                not isinstance(item[field], str) or not item[field] or len(item[field]) > 512 for field in RING_FIELDS):
+            raise ValueError('Invalid ring identity')
+        keys.append((item['accountId'], item['groupId'], item['bucketId']))
+    if len(set(keys)) != len(keys):
+        raise ValueError('Duplicate ring identity')
+    return keys
 
 
 def poll_monitor(monitor, stop):
@@ -46,11 +61,17 @@ class Monitor:
         self.settings_vault = settings_vault
         self.hidden = set()
         self.order = []
+        self.ring_order = []
         self.enabled = None
         if settings_vault:
             preferences = settings_vault.load()
             self.hidden = set(preferences.get('hiddenAccountIds', []))
             self.order = preferences.get('accountOrder', [])
+            try:
+                ring_ids(preferences.get('ringOrder', []))
+                self.ring_order = preferences.get('ringOrder', [])
+            except ValueError:
+                self.ring_order = []
             configured = preferences.get('enabledProviders')
             if isinstance(configured, list):
                 self.enabled = set(configured) & set(SUPPORTED_PROVIDERS)
@@ -127,6 +148,22 @@ class Monitor:
                 settings.update(hiddenAccountIds=sorted(hidden), accountOrder=order)
                 self.settings_vault.save(settings)
             self.hidden, self.order = hidden, list(order)
+            return True
+
+    def save_ring_order(self, order):
+        keys = ring_ids(order)
+        with self.lock:
+            visible = {(account['id'], group['id'], bucket['id'])
+                       for account in self.snapshot()['accounts']
+                       for group in account.get('groups', [])
+                       for bucket in group.get('buckets', [])}
+            if set(keys) != visible:
+                return False
+            if self.settings_vault:
+                settings = self.settings_vault.load()
+                settings['ringOrder'] = order
+                self.settings_vault.save(settings)
+            self.ring_order = copy.deepcopy(order)
             return True
 
     def refresh_one(self, account):
@@ -241,7 +278,7 @@ class Monitor:
             row['ageSeconds'] = age
             if row['status'] == 'live' and (self.polling_error or age is None or age > INTERVAL*2):
                 row['status'] = 'stale'
-        return dict(accounts=sorted(rows, key=lambda r: (order.get(r['id'], len(order)), r['provider'], r['id'])), now=now,
+        return dict(accounts=sorted(rows, key=lambda r: (order.get(r['id'], len(order)), r['provider'], r['id'])), ringOrder=copy.deepcopy(self.ring_order), now=now,
                     hasRemovedAccounts=bool(hidden),
                     supportedProviders=list(SUPPORTED_PROVIDERS),
                     enabledProviders=sorted(enabled if enabled is not None else {r['provider'] for r in rows}),

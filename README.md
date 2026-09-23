@@ -2,7 +2,7 @@
 
 Keep an eye on your AI coding quotas, reset times, and how fast you are spending them, straight from the Windows tray.
 
-**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.2)
+**[Download Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.3/agent-quota-monitor-windows-0.2.3-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.3/agent-quota-monitor-windows-0.2.3-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.3)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -50,10 +50,10 @@ Accounts stay separate, even when their email labels match. Direct Claude subscr
 
 - **Click a ring** in the main window to pick the quota shown in the system tray. The chosen one is labelled **Tray**.
 - **Click the pin at the top-right corner of a ring** to pin or unpin that quota on the floating monitor. Filled violet means pinned. A hollow slate pin means unpinned.
-- **Toolbar**, at the top right, has Refresh, Floating, Settings, and Quit.
+- **Toolbar**, at the top right, has Refresh, Floating, Reorder, Settings, and Quit.
 - **Hover a ring** for exact percentages, reset times, and pace details.
 - **Close** hides the main window to the tray. **Quit** exits, and stops the quota reader if this app started it.
-- **Reorder accounts** in Settings. Choose **Edit order**, use **Move up** and **Move down**, then click **Save order**. **Cancel** discards the unsaved order.
+- **Reorder accounts and rings** together in the main monitor. Choose **Reorder**, use the up and down arrows beside account names or the left and right arrows on rings, then choose **Done reordering**. Each move saves immediately and changes the floating monitor too. Pins and the tray selection stay with their rings.
 
 Settings also shows each account's identity, reading source, and retry status. Account controls and quota details are available in the Windows app.
 

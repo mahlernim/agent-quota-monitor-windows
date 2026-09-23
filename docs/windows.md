@@ -4,9 +4,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 ## Install and launch
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-setup-win-x64.exe) for a Start menu shortcut and optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.3/agent-quota-monitor-windows-0.2.3-setup-win-x64.exe) for a Start menu shortcut and optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.2/agent-quota-monitor-windows-0.2.2-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.3/agent-quota-monitor-windows-0.2.3-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -29,7 +29,7 @@ Accounts remain separate by verified identity. Direct Claude subscriptions are s
 - Hover a ring for percentages, reset times, and pace details.
 - Use **Floating** to show or hide the floating monitor. Drag it to move it, and double-click it to show the main window.
 - Right-click the floating monitor for **Size** (75, 100, 125, 150, 200%) and **Opacity** (35, 50, 70, 85, 100%). Size, opacity, and position are remembered.
-- Reorder accounts in **Settings**. Choose **Edit order**, use **Move up** and **Move down**, then click **Save order**. **Cancel** discards the unsaved order.
+- Choose **Reorder** in the main window to move accounts up or down and rings left or right within their account. Each move saves immediately and changes the floating monitor order. Choose **Done reordering** when finished.
 - **Close** hides the main window to the tray. **Quit** exits and stops the quota reader if this app started it.
 
 Settings shows each account's identity, reading source, and retry status. Account controls and quota details are available in the Windows app.
@@ -64,6 +64,6 @@ Provider interfaces can change and interrupt readings. If an account is missing 
 
 If the quota reader is unavailable, click **Retry connection** in the toolbar. This reconnects or starts the reader without changing accounts. If it stays unavailable, use **Quit** and reopen the monitor. Closing the window only hides it to the tray.
 
-See the [project README](https://github.com/mahlernim/agent-quota-monitor-windows#readme) for screenshots and the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.2) for downloads and release notes. Source contributors can use the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md).
+See the [project README](https://github.com/mahlernim/agent-quota-monitor-windows#readme) for screenshots and the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.3) for downloads and release notes. Source contributors can use the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md).
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

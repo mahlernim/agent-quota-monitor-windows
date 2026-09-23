@@ -20,6 +20,8 @@ public sealed class App : Application
     private MainWindow? main; private FloatingWindow? floating; private TrayController? tray;
     private List<QuotaItem> items = new(); private string? selected; private readonly HashSet<string> pins = new();
     private bool stopping; private bool polling; private bool preferencesLoaded; private bool backendReady; private bool connecting;
+    private bool reorderBusy;
+    private List<string> accountIds = new();
     private SingleInstance? instance; private DispatcherTimer? timer;
     private readonly CancellationTokenSource lifetime = new();
     private readonly BackendConnection? backendConnection;
@@ -72,7 +74,9 @@ public sealed class App : Application
         });
         http.DefaultRequestHeaders.Add("Origin", "http://127.0.0.1:8765");
         http.DefaultRequestHeaders.Add("X-Quota-Request", "refresh");
-        main = new MainWindow(SelectTray, TogglePin, ToggleFloating, () => _ = RefreshAsync(), () => _ = Quit(), ShowAccounts);
+        main = new MainWindow(SelectTray, TogglePin, ToggleFloating, () => _ = RefreshAsync(), () => _ = Quit(), ShowAccounts,
+            (item, direction) => _ = MoveRingAsync(item, direction),
+            (accountId, direction) => _ = MoveAccountAsync(accountId, direction));
         main.Closing += (_, ev) => { if (!stopping) { ev.Cancel = true; main.Hide(); } };
         floating = new FloatingWindow(ShowMain, HideFloating);
         main.Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/robot-ring.ico"));
@@ -206,6 +210,8 @@ public sealed class App : Application
             if (stopping || (connecting && !duringConnection)) return;
             backendConnection?.ValidatePeer(data.RootElement);
             List<QuotaItem> candidate = QuotaSnapshot.Parse(data.RootElement);
+            List<string> candidateAccountIds = data.RootElement.GetProperty("accounts").EnumerateArray()
+                .Select(account => QuotaItem.Text(account, "id")).ToList();
             if (!preferencesLoaded)
             {
                 using var prefs = JsonDocument.Parse(await http.GetStringAsync("/api/desktop", cancellation.Token));
@@ -224,6 +230,7 @@ public sealed class App : Application
             }
             if (stopping || (connecting && !duringConnection)) return;
             items = candidate;
+            accountIds = candidateAccountIds;
             backendReady = true;
             main?.ShowBackendError("");
             selected ??= items.FirstOrDefault()?.Key;
@@ -270,6 +277,51 @@ public sealed class App : Application
         if (!pins.Add(item.Key)) pins.Remove(item.Key); Render();
         var values = pins.Select(key => { var ids = JsonSerializer.Deserialize<string[]>(key)!; return new { accountId = ids[0], groupId = ids[1], bucketId = ids[2] }; }).ToArray();
         _ = Post("/api/desktop", new { desktopFloatingSelections = values });
+    }
+    private async Task MoveRingAsync(QuotaItem item, int direction)
+    {
+        if (reorderBusy || stopping || !backendReady || connecting || direction is not (-1 or 1)) return;
+        var reordered = items.ToList();
+        int from = reordered.FindIndex(row => row.Key == item.Key), to = from + direction;
+        if (from < 0 || to < 0 || to >= reordered.Count || reordered[to].AccountId != item.AccountId) return;
+        (reordered[from], reordered[to]) = (reordered[to], reordered[from]);
+        reorderBusy = true;
+        main?.SetReorderBusy(true);
+        try
+        {
+            using var response = await BackendRequests.PostAsync(http, "/api/accounts/rings",
+                new { order = reordered.Select(row => row.Selection).ToArray() }, lifetime.Token);
+            response.EnsureSuccessStatusCode();
+            if (polling) await pollTask;
+            await Poll();
+        }
+        catch (OperationCanceledException) when (stopping) { }
+        catch { main?.ShowBackendError("Could not save ring order. Refresh and try again."); }
+        finally { reorderBusy = false; main?.SetReorderBusy(false); }
+    }
+    private async Task MoveAccountAsync(string accountId, int direction)
+    {
+        if (reorderBusy || stopping || !backendReady || connecting || direction is not (-1 or 1)) return;
+        var visible = items.Select(row => row.AccountId).Distinct(StringComparer.Ordinal).ToList();
+        int from = visible.IndexOf(accountId), to = from + direction;
+        if (from < 0 || to < 0 || to >= visible.Count) return;
+        var reordered = accountIds.ToList();
+        int sourceIndex = reordered.IndexOf(visible[from]), targetIndex = reordered.IndexOf(visible[to]);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+        (reordered[sourceIndex], reordered[targetIndex]) = (reordered[targetIndex], reordered[sourceIndex]);
+        reorderBusy = true;
+        main?.SetReorderBusy(true);
+        try
+        {
+            using var response = await BackendRequests.PostAsync(http, "/api/accounts/layout",
+                new { order = reordered, removed = Array.Empty<string>() }, lifetime.Token);
+            response.EnsureSuccessStatusCode();
+            if (polling) await pollTask;
+            await Poll();
+        }
+        catch (OperationCanceledException) when (stopping) { }
+        catch { main?.ShowBackendError("Could not save account order. Refresh and try again."); }
+        finally { reorderBusy = false; main?.SetReorderBusy(false); }
     }
     private void ShowMain() { if (stopping) return; main?.Show(); if (main != null) { main.WindowState = WindowState.Normal; main.Activate(); } }
     private AccountsWindow? accounts;

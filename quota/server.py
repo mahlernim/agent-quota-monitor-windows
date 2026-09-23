@@ -86,7 +86,7 @@ def handler(monitor, port, connections=None):
                     return self.send(400, b'{}')
                 except Exception:
                     return self.send(503, b'{"error":"Could not save desktop preferences"}')
-            if self.path in ('/api/accounts/remove', '/api/accounts/restore', '/api/accounts/layout', '/api/connections/start', '/api/connections/cancel', '/api/providers'):
+            if self.path in ('/api/accounts/remove', '/api/accounts/restore', '/api/accounts/layout', '/api/accounts/rings', '/api/connections/start', '/api/connections/cancel', '/api/providers'):
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
                     if not 0 < size <= 32768 or self.headers.get_content_type() != 'application/json':
@@ -114,6 +114,9 @@ def handler(monitor, port, connections=None):
                     if self.path.endswith('/layout'):
                         if not monitor.save_layout(payload.get('order'), payload.get('removed')):
                             return self.send(409, b'{"error":"Account list changed. Cancel editing and try again."}')
+                    elif self.path.endswith('/rings'):
+                        if not monitor.save_ring_order(payload.get('order')):
+                            return self.send(409, b'{"error":"Quota rings changed. Refresh and try again."}')
                     elif self.path.endswith('/remove'):
                         account_id = payload.get('accountId')
                         if not isinstance(account_id, str):

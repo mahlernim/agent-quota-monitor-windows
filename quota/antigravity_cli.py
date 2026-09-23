@@ -99,8 +99,10 @@ def parse_usage(text):
 def usage():
     try:
         # Fixed built-in command only. No model prompt, shell, or inherited workspace.
+        # Keep the monitor's quota read silent without changing the user's CLI update setting.
+        env = {**os.environ, 'AGY_CLI_DISABLE_AUTO_UPDATE': 'true'}
         result = subprocess.run(command(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, timeout=30, cwd=Path.home(),
+                                stderr=subprocess.DEVNULL, timeout=30, cwd=Path.home(), env=env,
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         if result.returncode:
             raise ReadError('antigravity_cli_failed')

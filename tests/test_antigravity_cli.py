@@ -47,6 +47,8 @@ class ParsingTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][2], '/usage')
             self.assertEqual(run.call_args.kwargs['stdin'], subprocess.DEVNULL)
             self.assertEqual(run.call_args.kwargs['timeout'], 30)
+            self.assertEqual(run.call_args.kwargs['env']['AGY_CLI_DISABLE_AUTO_UPDATE'], 'true')
+            self.assertEqual(run.call_args.kwargs['env'].get('PATH'), cli.os.environ.get('PATH'))
             for failure, expected in ((subprocess.TimeoutExpired('secret', 30), 'antigravity_cli_timeout'),
                                       (OSError('secret'), 'antigravity_cli_failed')):
                 run.side_effect = failure

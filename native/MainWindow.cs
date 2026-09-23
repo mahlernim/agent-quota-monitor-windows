@@ -19,20 +19,32 @@ public sealed class MainWindow : Window
         Foreground = Brushes.Firebrick, Margin = new Thickness(8, 0, 8, 6) };
     private readonly Action<QuotaItem> _selectTray;
     private readonly Action<QuotaItem> _togglePin;
+    private readonly Action<QuotaItem, int> _moveRing;
+    private readonly Action<string, int> _moveAccount;
     private readonly Button _refresh;
+    private readonly Button _arrange;
+    private readonly TextBlock _arrangeHint = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(9, 0, 9, 3),
+        Text = "Move account groups up or down and rings left or right. Each move saves immediately and updates the floating monitor.", Foreground = Brushes.DimGray };
     private readonly WrapPanel _groups = new() { Margin = new Thickness(6) };
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly Dictionary<string, CardView> _cards = new();
+    private readonly Dictionary<string, (Button Left, Button Right)> _ringMoves = new();
+    private readonly Dictionary<string, (Button Up, Button Down)> _accountMoves = new();
     private IReadOnlyList<QuotaItem> _items = Array.Empty<QuotaItem>();
     private string? _selectedKey;
     private ISet<string> _pins = new HashSet<string>();
     private bool _preferencesEnabled = true;
+    private bool _arranging;
+    private bool _reorderBusy;
 
     public MainWindow(Action<QuotaItem> selectTray, Action<QuotaItem> togglePin, Action showFloating,
-        Action refresh, Action quit, Action accounts)
+        Action refresh, Action quit, Action accounts, Action<QuotaItem, int>? moveRing = null,
+        Action<string, int>? moveAccount = null)
     {
         _selectTray = selectTray;
         _togglePin = togglePin;
+        _moveRing = moveRing ?? ((_, _) => { });
+        _moveAccount = moveAccount ?? ((_, _) => { });
         Title = "Agent Quota Monitor";
         Width = 760;
         Height = 360;
@@ -47,10 +59,13 @@ public sealed class MainWindow : Window
         _refresh = Button("Refresh", refresh);
         toolbar.Children.Add(_refresh);
         toolbar.Children.Add(Button("Floating", showFloating));
+        _arrange = Button("Reorder", ToggleArrange);
+        toolbar.Children.Add(_arrange);
         toolbar.Children.Add(Button("Settings", accounts));
         toolbar.Children.Add(Button("Quit", quit));
         DockPanel.SetDock(_updateBanner, Dock.Top); root.Children.Add(_updateBanner);
         DockPanel.SetDock(_backendError, Dock.Top); root.Children.Add(_backendError);
+        DockPanel.SetDock(_arrangeHint, Dock.Top); root.Children.Add(_arrangeHint);
         _scroll.Content = _groups;
         root.Children.Add(_scroll);
     }
@@ -66,10 +81,43 @@ public sealed class MainWindow : Window
         _preferencesEnabled = ready && !connecting;
         foreach (var card in _cards.Values)
             card.Select.IsEnabled = card.Pin.IsEnabled = _preferencesEnabled;
+        _arrange.IsEnabled = _preferencesEnabled;
+        UpdateRingMoves();
         _refresh.Content = connecting ? "Connecting" : ready ? "Refresh" : "Retry connection";
         _refresh.IsEnabled = !connecting;
         _refresh.ToolTip = ready ? "Refresh quotas while respecting provider cooldowns."
             : "Connect to the local quota reader and show its cached readings.";
+    }
+
+    internal void SetReorderBusy(bool busy) { _reorderBusy = busy; UpdateRingMoves(); }
+
+    private void ToggleArrange()
+    {
+        _arranging = !_arranging;
+        _arrange.Content = _arranging ? "Done reordering" : "Reorder";
+        _arrangeHint.Visibility = _arranging ? Visibility.Visible : Visibility.Collapsed;
+        RenderGroups();
+    }
+
+    private void UpdateRingMoves()
+    {
+        foreach (var group in _items.GroupBy(item => item.AccountId))
+        {
+            var rows = group.ToArray();
+            for (int index = 0; index < rows.Length; index++)
+                if (_ringMoves.TryGetValue(rows[index].Key, out var buttons))
+                {
+                    buttons.Left.IsEnabled = _preferencesEnabled && !_reorderBusy && index > 0;
+                    buttons.Right.IsEnabled = _preferencesEnabled && !_reorderBusy && index < rows.Length - 1;
+                }
+        }
+        string[] accounts = _items.Select(item => item.AccountId).Distinct(StringComparer.Ordinal).ToArray();
+        for (int index = 0; index < accounts.Length; index++)
+            if (_accountMoves.TryGetValue(accounts[index], out var buttons))
+            {
+                buttons.Up.IsEnabled = _preferencesEnabled && !_reorderBusy && index > 0;
+                buttons.Down.IsEnabled = _preferencesEnabled && !_reorderBusy && index < accounts.Length - 1;
+            }
     }
 
     internal void SetUpdate(UpdateService updates)
@@ -108,15 +156,37 @@ public sealed class MainWindow : Window
         var focus = Keyboard.FocusedElement as FrameworkElement;
         var focusCard = _cards.Values.FirstOrDefault(card => card.Select == focus || card.Pin == focus);
         var focusWasPin = focusCard?.Pin == focus;
+        var focusMove = _ringMoves.FirstOrDefault(entry => entry.Value.Left == focus || entry.Value.Right == focus);
+        bool focusWasRight = focusMove.Value.Right == focus;
+        var focusAccount = _accountMoves.FirstOrDefault(entry => entry.Value.Up == focus || entry.Value.Down == focus);
+        bool focusWasDown = focusAccount.Value.Down == focus;
         var offset = _scroll.VerticalOffset;
         _groups.Children.Clear();
         _cards.Clear();
+        _ringMoves.Clear();
+        _accountMoves.Clear();
         foreach (var group in _items.GroupBy(item => (item.AccountId, item.Provider)))
         {
             var section = new Border { BorderBrush = Brushes.Transparent, Margin = new Thickness(2), Padding = new Thickness(2) };
             var panel = new StackPanel();
             section.Child = panel;
-            panel.Children.Add(Label($"{group.First().Provider} · {group.First().Account}", true));
+            var header = new DockPanel { LastChildFill = false };
+            header.Children.Add(Label($"{group.First().Provider} · {group.First().Account}", true));
+            if (_arranging)
+            {
+                var controls = new StackPanel { Orientation = Orientation.Horizontal };
+                var up = new Button { Content = "↑", Width = 27, Height = 23, ToolTip = "Move account earlier" };
+                var down = new Button { Content = "↓", Width = 27, Height = 23, ToolTip = "Move account later" };
+                AutomationProperties.SetName(up, "Move account earlier " + group.First().Provider + " " + group.First().Account);
+                AutomationProperties.SetName(down, "Move account later " + group.First().Provider + " " + group.First().Account);
+                up.Click += (_, _) => _moveAccount(group.Key.AccountId, -1);
+                down.Click += (_, _) => _moveAccount(group.Key.AccountId, 1);
+                controls.Children.Add(up); controls.Children.Add(down);
+                DockPanel.SetDock(controls, Dock.Right);
+                header.Children.Add(controls);
+                _accountMoves[group.Key.AccountId] = (up, down);
+            }
+            panel.Children.Add(header);
             var cards = new WrapPanel();
             foreach (var item in group) cards.Children.Add(CreateCard(item).Border);
             panel.Children.Add(cards);
@@ -124,10 +194,15 @@ public sealed class MainWindow : Window
         }
         if (_groups.Children.Count == 0)
             _groups.Children.Add(Label("No readable quota windows yet. Open Settings to connect an official client.", false));
+        UpdateRingMoves();
         Dispatcher.BeginInvoke(() =>
         {
             _scroll.ScrollToVerticalOffset(offset);
-            if (focusCard is not null && _cards.TryGetValue(focusCard.Item.Key, out var replacement))
+            if (focusAccount.Key is not null && _accountMoves.TryGetValue(focusAccount.Key, out var replacementAccount))
+                (focusWasDown ? replacementAccount.Down : replacementAccount.Up).Focus();
+            else if (focusMove.Key is not null && _ringMoves.TryGetValue(focusMove.Key, out var replacementMove))
+                (focusWasRight ? replacementMove.Right : replacementMove.Left).Focus();
+            else if (focusCard is not null && _cards.TryGetValue(focusCard.Item.Key, out var replacement))
                 (focusWasPin ? (Control)replacement.Pin : replacement.Select).Focus();
         }, System.Windows.Threading.DispatcherPriority.Loaded);
     }
@@ -149,6 +224,18 @@ public sealed class MainWindow : Window
         var window = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, FontSize = 11, FontWeight = FontWeights.SemiBold };
         var status = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, FontSize = 8 };
         stack.Children.Add(window); stack.Children.Add(status);
+        if (_arranging)
+        {
+            var moves = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            var left = new Button { Content = "←", Width = 34, Height = 22, Padding = new Thickness(0), ToolTip = "Move this ring earlier" };
+            var right = new Button { Content = "→", Width = 34, Height = 22, Padding = new Thickness(0), ToolTip = "Move this ring later" };
+            AutomationProperties.SetName(left, "Move earlier " + item.Provider + " " + item.Account + " " + item.Group + " " + item.Window);
+            AutomationProperties.SetName(right, "Move later " + item.Provider + " " + item.Account + " " + item.Group + " " + item.Window);
+            left.Click += (_, _) => _moveRing(item, -1);
+            right.Click += (_, _) => _moveRing(item, 1);
+            moves.Children.Add(left); moves.Children.Add(right); stack.Children.Add(moves);
+            _ringMoves[item.Key] = (left, right);
+        }
         var glyph = PinGlyph();
         var pin = PinButton(glyph);
         overlay.Children.Add(pin);
