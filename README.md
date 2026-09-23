@@ -33,7 +33,7 @@ Any combination works, and one provider is enough. The monitor reads quotas thro
 | --- | --- | --- |
 | OpenAI Codex | Settings, then **Sign in** | Launches the official Codex client sign-in |
 | Anthropic Claude (direct) | Settings, then **Sign in** | Launches the official Claude Code subscription sign-in |
-| Google Antigravity | Sign in to the official `agy` CLI, or **Open official client** in Settings | The CLI account keeps refreshing with the desktop app closed |
+| Google Antigravity | Sign in to the official `agy` CLI, or use **Open desktop app** in Settings for the desktop source | The CLI account keeps refreshing with the desktop app closed |
 | GitHub Copilot (optional) | Settings, then **Sign in** | Opens `gh auth login` in a console and your browser |
 
 If an existing session is already recognized, you do not need to sign in again.
@@ -85,6 +85,8 @@ Uninstall through Windows Installed apps. App files, shortcuts, and this install
 
 - **An account is missing.** Sign in through the provider's own client, then press Refresh. A browser-only login may not create the session the monitor reads.
 - **A reading is stale.** Press Refresh and confirm the provider's client still has a valid session. Refresh respects provider cooldowns. Settings shows when an account can be retried.
+- **Claude asks you to sign in, but Claude Code is still logged in.** Check `claude auth status`, open Claude Code to let it renew its session, then press Refresh. If the quota read still fails after renewal, use Claude Code's official sign-in.
+- **An Antigravity CLI reading is stale.** Wait for the next eligible read, then press Refresh. If the CLI session needs sign-in, open `agy` interactively, complete its sign-in, run `/usage`, and press Refresh again. The **Open desktop app** button does not start CLI sign-in.
 - **Copilot shows nothing.** Complete the one-time setup in [Copilot setup](docs/copilot-setup.md), then use Copilot **Sign in** and finish the prompts in the console window that opens.
 - **Nothing happens when launching.** Confirm you extracted the whole ZIP, including the `backend` folder, next to the executable.
 - **The quota reader is unavailable.** Click **Retry connection** in the toolbar. This reconnects or starts the reader without changing your accounts. If it stays unavailable, use **Quit** and reopen the monitor. Closing the window only hides it to the tray.

@@ -148,10 +148,15 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.connection.job['state'], 'verifying')
         self.connection.cancel(job['id'])
 
-    def test_cancel_keeps_antigravity_open(self):
-        job = self.connection.start('antigravity')
-        self.connection.cancel(job['id'])
+    def test_opening_antigravity_desktop_never_claims_cli_quota_verification(self):
+        self.monitor.rows = [dict(id='cli', provider='antigravity', label='CLI',
+                                  source='Official Antigravity CLI /usage (desktop app not required)',
+                                  status='live', lastSuccess=101)]
+        self.connection.start('antigravity')
         self.connection.worker.join(3)
+        self.assertEqual(self.connection.job['state'], 'opened')
+        self.assertIn('press Refresh', self.connection.job['message'])
+        self.assertEqual(self.monitor.next_discovery, 0)
         self.assertFalse(self.process.terminated)
 
     def test_login_route_rejects_cross_origin_before_launch(self):

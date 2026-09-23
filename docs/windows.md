@@ -15,7 +15,7 @@ The installer and application are unsigned. Windows may display an unknown-publi
 Open **Settings**, select your providers, and click **Save monitored providers**. Existing sessions from official coding clients are detected where available. A browser sign-in alone may not be enough.
 
 - **Codex and Claude** use **Sign in** to launch their official coding-client sign-in commands. Install the official clients first.
-- **Antigravity** uses **Open official client** for desktop sign-in. For monitoring while the desktop app is closed, install and sign in to the [official `agy` CLI](https://antigravity.google/docs/cli/install), run `agy -p /usage` once, and press **Refresh**. Pin quotas on the account marked **CLI**. After a successful CLI reading, that account replaces desktop-source cards in the display. Stored selections are retained, and identities are not merged. API-key mode is not supported for subscription monitoring.
+- **Antigravity** uses **Open desktop app** for desktop sign-in. For monitoring while the desktop app is closed, install and sign in to the [official `agy` CLI](https://antigravity.google/docs/cli/install), run `agy -p /usage` once, and press **Refresh**. Pin quotas on the account marked **CLI**. After a successful CLI reading, that account replaces desktop-source cards in the display. Stored selections are retained, and identities are not merged. API-key mode is not supported for subscription monitoring.
 - **Copilot** needs the optional [one-time setup](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/copilot-setup.md). Its **Sign in** button opens the official GitHub CLI and browser. Complete the prompts in the console and leave it open until sign-in finishes.
 
 Accounts remain separate by verified identity. Direct Claude subscriptions are separate from Claude or GPT allowance supplied by Antigravity. Use a provider's own client to change accounts. The monitor never switches accounts automatically.
@@ -61,6 +61,8 @@ The monitor reads official client sessions without taking over sign-in or renewa
 Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the Windows app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 
 Provider interfaces can change and interrupt readings. If an account is missing or stale, confirm that its official client has a valid session, then press **Refresh**. For launch failures with the portable version, confirm that the complete archive was extracted.
+
+For a stale Antigravity **CLI** account, wait for the next eligible read shown in Settings and press **Refresh**. If the CLI session needs sign-in, open `agy` interactively, complete its sign-in, run `/usage`, and refresh the monitor. **Open desktop app** does not start CLI sign-in.
 
 If the quota reader is unavailable, click **Retry connection** in the toolbar. This reconnects or starts the reader without changing accounts. If it stays unavailable, use **Quit** and reopen the monitor. Closing the window only hides it to the tray.
 

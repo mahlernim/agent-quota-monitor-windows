@@ -142,7 +142,7 @@ public sealed class AccountsWindow : Window
         });
         body.Children.Add(new TextBlock
         {
-            Text = "Provider sign-in uses the official coding client. Antigravity opens its official client for account changes. The monitor follows the verified client identity and never switches accounts automatically.",
+            Text = "Provider sign-in uses the official coding client. The monitor follows verified client identities and never switches accounts automatically.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brushes.DimGray,
             Margin = new Thickness(0, 4, 0, 8)
@@ -162,7 +162,7 @@ public sealed class AccountsWindow : Window
             {
                 var signIn = new Button
                 {
-                    Content = provider == "antigravity" ? "Open official client" : "Sign in",
+                    Content = provider == "antigravity" ? "Open desktop app" : "Sign in",
                     Tag = provider,
                     MinWidth = 90,
                     Padding = new Thickness(8, 3, 8, 3),
@@ -176,6 +176,10 @@ public sealed class AccountsWindow : Window
             body.Children.Add(row);
         }
 
+        body.Children.Add(new TextBlock {
+            Text = "Antigravity Open desktop app does not start CLI sign-in. For a CLI account, run agy interactively and sign in if prompted, then run agy -p /usage and press Refresh in the monitor.",
+            TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 5, 0, 0)
+        });
         body.Children.Add(new TextBlock {
             Text = "Copilot Sign in opens the official GitHub CLI and browser. Its optional runtime must first be installed with Setup-Copilot.ps1 from the source repository.",
             TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 5, 0, 0)
@@ -424,7 +428,7 @@ public sealed class AccountsWindow : Window
 
     private async Task StartConnectionAsync(string provider) =>
         await PostAsync("/api/connections/start", new { provider },
-            provider == "antigravity" ? "Official Antigravity client opened." : "Official sign-in started.");
+            provider == "antigravity" ? "Opening Antigravity desktop app. CLI accounts sign in through agy in a terminal." : "Official sign-in started.");
 
     private async Task RemoveAsync(string accountId) =>
         await PostAsync("/api/accounts/remove", new { accountId }, "Account hidden from the monitor.");

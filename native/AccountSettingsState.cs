@@ -35,6 +35,14 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         : Error switch
     {
         "" => "",
+        "sign_in_required" or "local_session_unavailable" when IsAntigravityCli =>
+            "Antigravity CLI session needs attention. Run agy interactively and sign in if prompted, then run agy -p /usage and press Refresh in the monitor.",
+        "sign_in_required" when IsAntigravityDesktop =>
+            "Antigravity desktop session was rejected. Sign in through the Antigravity desktop app, then press Refresh in the monitor.",
+        "local_session_unavailable" when IsAntigravityDesktop =>
+            "Antigravity desktop session is unavailable. Open the Antigravity desktop app, then press Refresh in the monitor.",
+        "sign_in_required" when Provider == "claude" =>
+            "Claude quota read was rejected. Check claude auth status, open Claude Code, then press Refresh. If Claude Code reports an expired login or the read still fails after renewal, sign in through Claude Code.",
         "sign_in_required" => "Session expired or rejected. Sign in through the official client.",
         "local_session_unavailable" => "Local session unavailable.",
         "independent_sign_in_needed" => "Official sign-in is needed.",
@@ -45,10 +53,15 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "copilot_auth_source_unsupported" => "The existing github.com GitHub CLI sign-in is required.",
         "copilot_read_timeout" => "Copilot quota read timed out.",
         "antigravity_cli_timeout" => "Antigravity CLI quota read timed out. Waiting to retry.",
-        "antigravity_cli_failed" => "Run agy -p /usage in the official CLI, then refresh.",
-        "antigravity_cli_auth_unsupported" => "Use the official Antigravity CLI Google sign-in for subscription quotas.",
+        "antigravity_cli_failed" => "Run agy interactively and sign in if prompted, then run agy -p /usage and press Refresh in the monitor.",
+        "antigravity_cli_auth_unsupported" => "Antigravity CLI has a custom provider, API key, or unreadable auth settings. Restore Google account sign-in in agy, then run agy -p /usage and press Refresh in the monitor.",
         _ => "Quota reader unavailable. " + Error.Replace('_', ' ')
     };
+
+    private bool IsAntigravityCli => Provider == "antigravity" &&
+        Source.StartsWith("Official Antigravity CLI", StringComparison.Ordinal);
+    private bool IsAntigravityDesktop => Provider == "antigravity" &&
+        Source == "Official running Antigravity local service";
 
     private static string DescribeQuotas(JsonElement account)
     {
