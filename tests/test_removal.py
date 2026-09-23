@@ -84,6 +84,24 @@ class RemovalTests(unittest.TestCase):
             self.monitor.save_layout([self.b['id']], [self.a['id']])
         self.assertEqual([a['id'] for a in self.monitor.snapshot()['accounts']], original)
 
+    def test_ring_order_persists_without_changing_accounts_or_other_settings(self):
+        self.monitor.rows[self.a['id']]['groups'][0]['buckets'].append({'id': 'second', 'remaining': 75})
+        def ring(account_id, bucket_id):
+            return {'accountId': account_id, 'groupId': 'g', 'bucketId': bucket_id}
+        original_accounts = [a['id'] for a in self.monitor.snapshot()['accounts']]
+        order = [ring(self.a['id'], 'second'), ring(self.a['id'], 'w'), ring(self.b['id'], 'w')]
+        self.assertTrue(self.monitor.save_ring_order(order))
+        self.assertEqual(self.monitor.snapshot()['ringOrder'], order)
+        self.assertEqual([a['id'] for a in self.monitor.snapshot()['accounts']], original_accounts)
+        self.assertEqual(self.settings.data['desiredGoogleAccounts'], ['same@example.com'])
+        self.cache.save(self.monitor.rows)
+        restarted = Monitor(self.cache, settings_vault=self.settings)
+        self.assertEqual(restarted.snapshot()['ringOrder'], order)
+        self.assertFalse(self.monitor.save_ring_order(order[:-1]))
+        with self.assertRaises(ValueError):
+            self.monitor.save_ring_order([order[0], order[0], order[2]])
+        self.assertEqual(self.monitor.snapshot()['ringOrder'], order)
+
     def test_unknown_account_and_requested_placeholder(self):
         self.assertFalse(self.monitor.remove_account('unknown'))
         m = Monitor(Store(), desired_google=['pending@example.com'], settings_vault=Store())
@@ -109,6 +127,12 @@ class RemovalTests(unittest.TestCase):
             self.assertEqual(send('/api/accounts/layout',{'order':[self.b['id'],self.a['id']],'removed':[]}),200)
             self.assertEqual(send('/api/accounts/layout',{'order':[self.a['id']],'removed':[]}),409)
             self.assertEqual(send('/api/accounts/layout',{'order':None,'removed':[]}),400)
+            rings = [{'accountId':self.a['id'],'groupId':'g','bucketId':'w'},
+                     {'accountId':self.b['id'],'groupId':'g','bucketId':'w'}]
+            self.assertEqual(send('/api/accounts/rings',{'order':rings[::-1]}),200)
+            self.assertEqual(self.monitor.snapshot()['ringOrder'],rings[::-1])
+            self.assertEqual(send('/api/accounts/rings',{'order':rings[:1]}),409)
+            self.assertEqual(send('/api/accounts/rings',{'order':[rings[0],rings[0]]}),400)
             self.assertEqual(send('/api/accounts/remove',{'accountId':self.a['id']},'https://evil.test'),403)
             self.assertEqual(send('/api/accounts/remove',{'accountId':self.a['id']}),200)
             self.assertEqual(len(self.monitor.snapshot()['accounts']),1)
