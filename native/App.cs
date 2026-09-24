@@ -36,6 +36,8 @@ public sealed class App : Application
     private UpdateService? updates;
     private DispatcherTimer? updateTimer;
     private bool offlineCheck;
+    private bool formatUpdateChecked;
+    private DispatcherTimer? wakeTimer;
     public App()
     {
         backendConnection = new BackendConnection(http, LaunchBackend);
@@ -87,6 +89,8 @@ public sealed class App : Application
         floating.LocationChanged += (_, _) => { if (preferencesLoaded) { placementSave.Stop(); placementSave.Start(); } };
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(Window.OpacityProperty, typeof(Window)).AddValueChanged(floating, (_, _) => { if (preferencesLoaded) { opacity = floating.Opacity; placementSave.Stop(); placementSave.Start(); } });
         tray = new TrayController(ShowMain, ShowAccounts, ToggleFloating, () => _ = Quit());
+        Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
         if (!Environment.GetCommandLineArgs().Contains("--minimized")) main.Show();
         await StartServices();
     }
@@ -152,6 +156,30 @@ public sealed class App : Application
             return;
         }
         await Post("/api/refresh", new {});
+    }
+    private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    { if (e.Mode == Microsoft.Win32.PowerModes.Resume) ScheduleWake(); }
+    private void OnNetworkAvailabilityChanged(object? sender, System.Net.NetworkInformation.NetworkAvailabilityEventArgs e)
+    { if (e.IsAvailable) ScheduleWake(); }
+    // Resume and network events arrive on other threads, often before the network is usable.
+    private void ScheduleWake() => Dispatcher.BeginInvoke(() =>
+    {
+        if (stopping) return;
+        if (wakeTimer is null)
+        {
+            wakeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+            wakeTimer.Tick += (_, _) => { wakeTimer.Stop(); if (!stopping) _ = Post("/api/wake", new {}); };
+        }
+        wakeTimer.Stop();
+        wakeTimer.Start();
+    });
+    private void CheckForFormatUpdate(JsonElement root)
+    {
+        // One early check per session when a provider format changed. Automatic checks must be on.
+        if (formatUpdateChecked || updates is null) return;
+        if (!root.GetProperty("accounts").EnumerateArray().Any(account => QuotaItem.Text(account, "error") == "schema_changed")) return;
+        formatUpdateChecked = true;
+        _ = updates.Check(urgent: true);
     }
     private void InitializeUpdates()
     {
@@ -232,6 +260,7 @@ public sealed class App : Application
             items = candidate;
             accountIds = candidateAccountIds;
             backendReady = true;
+            CheckForFormatUpdate(data.RootElement);
             main?.ShowBackendError("");
             selected ??= items.FirstOrDefault()?.Key;
             if (Render() && main is not null) main.Title = "Agent Quota Monitor Windows";
@@ -351,6 +380,9 @@ public sealed class App : Application
         BestEffort(() => updates?.Dispose());
         BestEffort(() => timer?.Stop());
         BestEffort(() => placementSave?.Stop());
+        BestEffort(() => wakeTimer?.Stop());
+        BestEffort(() => Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged);
+        BestEffort(() => System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged);
         try
         {
             try { await Task.WhenAll(startupTask, pollTask, activationTask).WaitAsync(TimeSpan.FromSeconds(3)); }

@@ -7,21 +7,25 @@ using System.Text.Json;
 namespace AgentQuotaMonitor;
 
 internal sealed record AccountStatus(string Id, string Provider, string Label, string Status,
-    string Source, string Identity, string Error, double? LastSuccess, double? NextAttempt, string QuotaDetails = "", string RetryState = "")
+    string Source, string Identity, string Error, double? LastSuccess, double? NextAttempt, string QuotaDetails = "", string RetryState = "",
+    double? SessionExpiresAt = null)
 {
     internal static AccountStatus[] Parse(JsonElement status)
     {
         if (!status.TryGetProperty("accounts", out JsonElement accounts) || accounts.ValueKind != JsonValueKind.Array)
             throw new JsonException("Account status is unavailable.");
-        var result = accounts.EnumerateArray().Select(account => new AccountStatus(
-            Text(account, "id"), Text(account, "provider"), Text(account, "label"), Text(account, "status"),
-            Text(account, "source"), Text(account, "identityStatus"), Text(account, "error"),
-            Number(account, "lastSuccess"), Number(account, "nextAttempt"), DescribeQuotas(account), Text(account, "retryState"))).ToArray();
+        var result = accounts.EnumerateArray().Select(From).ToArray();
         if (result.Any(account => string.IsNullOrWhiteSpace(account.Id)) ||
             result.Select(account => account.Id).Distinct(StringComparer.Ordinal).Count() != result.Length)
             throw new JsonException("Account identities are invalid.");
         return result;
     }
+
+    internal static AccountStatus From(JsonElement account) => new(
+        Text(account, "id"), Text(account, "provider"), Text(account, "label"), Text(account, "status"),
+        Text(account, "source"), Text(account, "identityStatus"), Text(account, "error"),
+        Number(account, "lastSuccess"), Number(account, "nextAttempt"), DescribeQuotas(account), Text(account, "retryState"),
+        Number(account, "sessionExpiresAt"));
 
     internal static string Timestamp(double? seconds, string fallback)
     {
@@ -44,6 +48,14 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "sign_in_required" when Provider == "claude" =>
             "Claude quota read was rejected. Check claude auth status, open Claude Code, then press Refresh. If Claude Code reports an expired login or the read still fails after renewal, sign in through Claude Code.",
         "sign_in_required" => "Session expired or rejected. Sign in through the official client.",
+        "session_expired" when Provider == "claude" =>
+            "The Claude Code session expired. Open Claude Code to renew it. The monitor resumes automatically after Claude Code renews the session.",
+        "session_expired" => "The official session expired. Open the official client to renew it.",
+        "antigravity_cli_unavailable" =>
+            "The Antigravity CLI (agy) is not installed and the Antigravity desktop app is closed. Install the official CLI from Settings to read quota without the desktop app, or open the desktop app. Gemini CLI does not report Antigravity quota.",
+        "network_unavailable" => "No network connection. The monitor retries every five minutes and again when the network returns.",
+        "connection_or_response_error" => "The provider could not be reached or returned an unreadable response. Waiting to retry.",
+        "schema_changed" => "The provider changed its response format. Check for a monitor update in Settings.",
         "local_session_unavailable" => "Local session unavailable.",
         "independent_sign_in_needed" => "Official sign-in is needed.",
         "rate_limited" => "Provider rate limit. Waiting until the next eligible read.",

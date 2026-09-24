@@ -44,6 +44,7 @@ public sealed class QuotaItem
         foreach (var g in a.GetProperty("groups").EnumerateArray())
         foreach (var b in g.GetProperty("buckets").EnumerateArray())
         {
+            var guidance = AccountStatus.From(a).Guidance; var note = guidance.Length > 0 ? "\n" + guidance : "";
             var provider = Text(a, "provider"); var group = Text(g, "label"); var status = Text(a, "status");
             var code = provider switch { "codex" => "CX", "claude" => "CL", "copilot" => "CP",
                 "antigravity" => group.Contains("Gemini", StringComparison.OrdinalIgnoreCase) ? "GM" : "CG", _ => "?" };
@@ -56,6 +57,12 @@ public sealed class QuotaItem
             {
                 var left = reset - (now ?? DateTimeOffset.UtcNow);
                 resetText = left.TotalSeconds > 0 ? $"Resets in {(int)left.TotalHours}h {left.Minutes}m · {reset.LocalDateTime:g}" : "Reset due · awaiting provider";
+                if (status != "live" && left.TotalSeconds <= 0 && !unlimited)
+                {
+                    // The cached value predates the reset, so it no longer describes this window.
+                    remaining = null;
+                    resetText = "Reset since the last read · waiting for a fresh read";
+                }
                 if (status == "live" && remaining.HasValue && duration is 18000 or 604800 && left.TotalSeconds > 0 && left.TotalSeconds <= duration &&
                     !(b.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.False)) time = left.TotalSeconds / duration * 100;
             }
@@ -65,7 +72,7 @@ public sealed class QuotaItem
             result.Add(new QuotaItem { Key = MakeKey(aid, gid, bid), AccountId = aid, GroupId = gid, BucketId = bid,
                 Provider = provider, Code = code, Account = Text(a, "label"), Group = group, Window = window,
                 Status = status, Remaining = remaining, Unlimited = unlimited, TimeRemaining = time, ResetText = resetText,
-                Tooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · {quotaText}\n{status.ToUpperInvariant()} · {resetText}{pace}" });
+                Tooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · {quotaText}\n{status.ToUpperInvariant()} · {resetText}{pace}{note}" });
         }
         return result;
     }
