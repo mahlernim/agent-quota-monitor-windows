@@ -18,11 +18,69 @@ async Task Test(string name, Func<Task> action)
     passed++;
     Console.WriteLine("PASS " + name);
 }
-string Status(int pid = 77) => "{\"backend\":{\"name\":\"agent-quota-monitor\",\"protocolVersion\":1,\"processId\":" + pid + "},\"now\":1,\"accounts\":[]}";
+string Status(int pid = 77, string? version = null) => "{\"backend\":{\"name\":\"agent-quota-monitor\",\"protocolVersion\":1,\"processId\":" + pid +
+    (version is null ? "" : ",\"appVersion\":\"" + version + "\"") + "},\"now\":1,\"accounts\":[]}";
 HttpResponseMessage Json(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
 HttpRequestException Refused() => new("Connection refused", new SocketException((int)SocketError.ConnectionRefused));
-BackendConnection Connection(HttpClient http, Func<IBackendProcess> launch, int limit = 180) =>
-    new(http, launch, TimeSpan.FromMilliseconds(limit), TimeSpan.FromMilliseconds(45), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(100));
+BackendConnection Connection(HttpClient http, Func<IBackendProcess> launch, int limit = 180, string? version = null) =>
+    new(http, launch, TimeSpan.FromMilliseconds(limit), TimeSpan.FromMilliseconds(45), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(100), version);
+
+await Test("a reader from the same app version is attached", async () =>
+{
+    var launches = 0; var shutdowns = 0;
+    using var http = Client((r, ct) => { if (r.Method == HttpMethod.Post) shutdowns++; return Task.FromResult(Json(Status(88, "0.2.4"))); });
+    using var connection = Connection(http, () => { launches++; return new FakeProcess(); }, version: "0.2.4");
+    await connection.EnsureAsync(CancellationToken.None);
+    Check(launches == 0 && shutdowns == 0 && !connection.OwnsBackend, "Same-version reader adoption");
+});
+
+foreach (var older in new string?[] { null, "0.2.3" })
+{
+    await Test("a reader from another app version is stopped by process ID and replaced " + (older ?? "unversioned"), async () =>
+    {
+        var process = new FakeProcess(); var launches = 0; var shutdowns = 0; bool stopped = false;
+        using var http = Client((r, ct) =>
+        {
+            if (r.Method == HttpMethod.Post)
+            {
+                Check(r.RequestUri!.AbsolutePath == "/api/shutdown" && r.Headers.GetValues("X-Quota-Process-Id").Single() == "88", "Shutdown targets the probed reader");
+                shutdowns++; stopped = true; return Task.FromResult(Json("{}"));
+            }
+            if (!stopped) return Task.FromResult(Json(Status(88, older)));
+            return launches == 0 ? throw Refused() : Task.FromResult(Json(Status(77, "0.2.4")));
+        });
+        using var connection = Connection(http, () => { launches++; return process; }, version: "0.2.4");
+        await connection.EnsureAsync(CancellationToken.None);
+        Check(shutdowns == 1 && launches == 1 && connection.OwnsBackend, "Older reader replacement");
+    });
+}
+
+await Test("a reader from another version that refuses shutdown is never duplicated", async () =>
+{
+    var launches = 0;
+    using var http = Client((r, ct) => Task.FromResult(r.Method == HttpMethod.Post ? new HttpResponseMessage(HttpStatusCode.Conflict) : Json(Status(88, "0.2.3"))));
+    using var connection = Connection(http, () => { launches++; return new FakeProcess(); }, version: "0.2.4");
+    await Expect<BackendConnectionException>(() => connection.EnsureAsync(CancellationToken.None));
+    Check(launches == 0, "Refused shutdown launch");
+});
+
+await Test("a reader from another version that keeps the port is never duplicated", async () =>
+{
+    var launches = 0;
+    using var http = Client((r, ct) => Task.FromResult(r.Method == HttpMethod.Post ? Json("{}") : Json(Status(88, "0.2.3"))));
+    using var connection = Connection(http, () => { launches++; return new FakeProcess(); }, version: "0.2.4");
+    await Expect<BackendConnectionException>(() => connection.EnsureAsync(CancellationToken.None));
+    Check(launches == 0, "Lingering reader launch");
+});
+
+await Test("a different reader taking the port during replacement is not adopted", async () =>
+{
+    var launches = 0; bool stopped = false;
+    using var http = Client((r, ct) => { if (r.Method == HttpMethod.Post) { stopped = true; return Task.FromResult(Json("{}")); } return Task.FromResult(Json(Status(stopped ? 99 : 88, "0.2.3"))); });
+    using var connection = Connection(http, () => { launches++; return new FakeProcess(); }, version: "0.2.4");
+    await Expect<BackendConnectionException>(() => connection.EnsureAsync(CancellationToken.None));
+    Check(launches == 0, "Port takeover launch");
+});
 
 await Test("existing compatible reader is attached and never stopped", async () =>
 {

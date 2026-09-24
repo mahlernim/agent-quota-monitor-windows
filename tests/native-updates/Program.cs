@@ -36,7 +36,42 @@ count=handler.Count; await service.Check(); Assert(handler.Count==count,"failure
 handler.Fail=false; await service.Check(urgent:true); Assert(handler.Count==count+1,"format change skips the daily limit");
 service.SetAutomatic(false); count=handler.Count;
 await service.Check(urgent:true); Assert(handler.Count==count,"format change respects disabled automatic checks");
+
+const string Setup = "agent-quota-monitor-windows-1.0.1-setup-win-x64.exe";
+string Assets(params string[] names) => JsonSerializer.Serialize(new[] { new { tag_name = "v1.0.1", prerelease = false, draft = false,
+    assets = names.Select(name => new { name, state = "uploaded" }).ToArray() } });
+Assert(UpdateService.Select(Assets("app-win-x64.zip", Setup, Setup + ".sha256"), "1.0.0")!.Installer, "installer with checksum enables in-place install");
+Assert(!UpdateService.Select(Assets("app-win-x64.zip", Setup), "1.0.0")!.Installer, "installer without checksum is not installed in place");
+Assert(UpdateService.AssetUri("v1.0.1", Setup).ToString() == UpdateService.Repository + "/releases/download/v1.0.1/" + Setup, "download addresses are built from the fixed repository");
+byte[] setup = System.Text.Encoding.UTF8.GetBytes("synthetic installer");
+string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(setup)).ToLowerInvariant();
+var release = new ReleaseInfo("v1.0.1", UpdateService.Repository + "/releases/tag/v1.0.1", true);
+async Task<string?> Download(Func<HttpRequestMessage, HttpResponseMessage> respond)
+{
+    string folder = Path.Combine(Path.GetTempPath(), "aqm-update-test-" + Guid.NewGuid().ToString("N"));
+    using var downloader = new UpdateService(new HttpClient(new FakeHandler("[]")), new UpdatePreferences(), _ => {}, () => now, "1.0.0",
+        new HttpClient(new RouteHandler(respond)));
+    try { return File.ReadAllText(await downloader.DownloadInstaller(release, folder)); }
+    catch (InvalidDataException) { return null; }
+    finally { try { Directory.Delete(folder, true); } catch (DirectoryNotFoundException) { } }
+}
+HttpResponseMessage Redirect(string to) { var r = new HttpResponseMessage(HttpStatusCode.Found); r.Headers.Location = new Uri(to); return r; }
+HttpResponseMessage Body(byte[] data) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(data) };
+HttpResponseMessage Official(HttpRequestMessage r, string checksum) => r.RequestUri!.Host == "github.com"
+    ? Redirect("https://release-assets.githubusercontent.com/assets/" + Path.GetFileName(r.RequestUri.AbsolutePath))
+    : r.RequestUri.AbsolutePath.EndsWith(".sha256") ? Body(System.Text.Encoding.ASCII.GetBytes(checksum)) : Body(setup);
+Assert(await Download(r => Official(r, hash + "  " + Setup + "\n")) == "synthetic installer", "verified installer is saved after a GitHub redirect");
+Assert(await Download(r => Official(r, new string('0', 64) + "  " + Setup)) is null, "checksum mismatch is rejected");
+Assert(await Download(r => Official(r, hash + "  other.exe")) is null, "checksum for another file is rejected");
+Assert(await Download(r => r.RequestUri!.Host == "github.com" ? Redirect("https://downloads.example.test/" + Setup) : Body(setup)) is null, "redirects away from GitHub are rejected");
+Assert(await Download(r => r.RequestUri!.Host == "github.com" ? Redirect("http://objects.githubusercontent.com/" + Setup) : Body(setup)) is null, "redirects to plain HTTP are rejected");
 Console.WriteLine($"{checks} update checks passed");
+sealed class RouteHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler {
+ protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) {
+  if(request.Headers.Authorization is not null) throw new Exception("Credentials sent");
+  return Task.FromResult(respond(request));
+ }
+}
 sealed class FakeHandler(string content) : HttpMessageHandler {
  public int Count; public bool Fail;
  protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token) {

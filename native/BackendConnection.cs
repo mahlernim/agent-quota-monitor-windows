@@ -27,20 +27,23 @@ public sealed class BackendConnection : IDisposable
     private readonly TimeSpan retryDelay;
     private readonly TimeSpan shutdownTimeout;
     private readonly SemaphoreSlim connectionGate = new(1, 1);
+    private readonly string? appVersion;
     private IBackendProcess? owned;
     private int? acceptedProcessId;
     public bool OwnsBackend => owned != null;
     internal bool CleanupFailed { get; private set; }
 
-    public BackendConnection(HttpClient http, Func<Process> launch)
-        : this(http, () => new BackendProcess(launch())) { }
+    public BackendConnection(HttpClient http, Func<Process> launch, string? appVersion = null)
+        : this(http, () => new BackendProcess(launch()), appVersion: appVersion) { }
 
+    /// <param name="appVersion">When set, a reader started by another app version is replaced.</param>
     internal BackendConnection(HttpClient http, Func<IBackendProcess> launch,
         TimeSpan? startupTimeout = null, TimeSpan? probeTimeout = null,
-        TimeSpan? retryDelay = null, TimeSpan? shutdownTimeout = null)
+        TimeSpan? retryDelay = null, TimeSpan? shutdownTimeout = null, string? appVersion = null)
     {
         this.http = http;
         this.launch = launch;
+        this.appVersion = appVersion;
         this.startupTimeout = startupTimeout ?? TimeSpan.FromSeconds(15);
         // Windows can take just over two seconds to report a refused loopback connection.
         // Leave room for that result while retaining the overall startup deadline.
@@ -66,14 +69,19 @@ public sealed class BackendConnection : IDisposable
             acceptedProcessId = null;
             if (owned?.HasExited == true) ReleaseOwned();
             var initial = await ProbeAsync(deadline.Token);
-            if (initial.ProcessId.HasValue)
+            if (initial.ProcessId is int existing)
             {
-                if (owned != null && initial.ProcessId != owned.Id) throw Conflict();
-                deadline.Token.ThrowIfCancellationRequested();
-                acceptedProcessId = initial.ProcessId;
-                return;
+                if (owned != null && existing != owned.Id) throw Conflict();
+                if (owned != null || appVersion is null || initial.AppVersion == appVersion)
+                {
+                    deadline.Token.ThrowIfCancellationRequested();
+                    acceptedProcessId = existing;
+                    return;
+                }
+                // A reader left by another app version, for example after an upgrade, serves old reader code.
+                await ReplaceOtherVersionAsync(existing, deadline.Token);
             }
-            if (initial.TimedOut)
+            else if (initial.TimedOut)
                 throw new BackendConnectionException("The local quota reader did not respond in time. Click Retry connection to try again. No additional reader was started.");
             if (owned != null)
                 throw new BackendConnectionException("The quota reader is still running but is not accepting connections. Click Retry connection to try again. If this continues, use Quit and reopen the monitor.");
@@ -110,6 +118,28 @@ public sealed class BackendConnection : IDisposable
             throw;
         }
     }
+
+    private async Task ReplaceOtherVersionAsync(int processId, CancellationToken cancellationToken)
+    {
+        // The process-bound shutdown request can only stop the exact reader that was probed.
+        using (var body = new StringContent("{}", Encoding.UTF8, "application/json"))
+        using (var request = new HttpRequestMessage(HttpMethod.Post, "/api/shutdown") { Content = body })
+        {
+            request.Headers.Add("X-Quota-Process-Id", processId.ToString(CultureInfo.InvariantCulture));
+            using var response = await http.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode) throw OtherVersion();
+        }
+        while (true)
+        {
+            await Task.Delay(retryDelay, cancellationToken);
+            var probe = await ProbeAsync(cancellationToken);
+            if (probe.ProcessId is null && !probe.TimedOut) return;
+            if (probe.ProcessId is int other && other != processId) throw Conflict();
+        }
+    }
+
+    private static BackendConnectionException OtherVersion() => new(
+        "A quota reader from another app version is still running and did not stop. End quota-backend.exe in Task Manager, then click Retry connection.");
 
     public async Task StopOwnedAsync(CancellationToken cancellationToken)
     {
@@ -156,12 +186,13 @@ public sealed class BackendConnection : IDisposable
                 data.Write(buffer, 0, read);
             }
             using var document = JsonDocument.Parse(data.ToArray());
-            return new Probe(ValidateStatus(document.RootElement), false);
+            int processId = ValidateStatus(document.RootElement);
+            return new Probe(processId, false, ReadVersion(document.RootElement));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        { return new Probe(null, true); }
+        { return new Probe(null, true, null); }
         catch (HttpRequestException error) when (ConnectionRefused(error))
-        { return new Probe(null, false); }
+        { return new Probe(null, false, null); }
         catch (Exception error) when (error is JsonException or InvalidOperationException or KeyNotFoundException)
         { throw Conflict(error); }
         catch (HttpRequestException error)
@@ -187,6 +218,11 @@ public sealed class BackendConnection : IDisposable
             !backend.GetProperty("processId").TryGetInt32(out var pid) || pid <= 0) throw Conflict();
         return pid;
     }
+
+    // Readers before 0.2.4 report no version and count as another version.
+    private static string? ReadVersion(JsonElement root) =>
+        root.GetProperty("backend").TryGetProperty("appVersion", out var version) && version.ValueKind == JsonValueKind.String
+            ? version.GetString() : null;
 
     private static int ValidateStatus(JsonElement root)
     {
@@ -251,7 +287,7 @@ public sealed class BackendConnection : IDisposable
     }
 
     public void Dispose() => ReleaseOwned();
-    private readonly record struct Probe(int? ProcessId, bool TimedOut);
+    private readonly record struct Probe(int? ProcessId, bool TimedOut, string? AppVersion);
 }
 
 internal interface IBackendProcess : IDisposable
