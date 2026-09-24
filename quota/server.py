@@ -129,7 +129,8 @@ def handler(monitor, port, connections=None, version='development'):
                             return self.send(503, b'{}')
                         try:
                             if self.path.endswith('/start'):
-                                result = connections.start(payload.get('provider'), payload.get('accountId'))
+                                result = connections.start(payload.get('provider'), payload.get('accountId'),
+                                                           payload.get('verify', False))
                             else:
                                 connections.cancel(payload.get('jobId'))
                                 result = {'cancelled': True}

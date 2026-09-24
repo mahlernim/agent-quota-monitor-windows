@@ -412,8 +412,16 @@ public sealed class App : Application
         if (stopping || main is null) return;
         switch (action)
         {
-            case "install-cli" or "install-codex" or "install-claude":
-                var installer = action switch { "install-codex" => OfficialInstall.Codex, "install-claude" => OfficialInstall.Claude, _ => OfficialInstall.Antigravity };
+            case "connect-copilot":
+                await ActionPost("/api/connections/start", new { provider = "copilot", accountId = account.Id, verify = true },
+                    "Linking the account the GitHub CLI is signed in to. Settings shows its progress.");
+                return;
+            case "install-cli" or "install-codex" or "install-claude" or "setup-copilot":
+                var installer = action switch
+                {
+                    "install-codex" => OfficialInstall.Codex, "install-claude" => OfficialInstall.Claude,
+                    "setup-copilot" => OfficialInstall.Copilot, _ => OfficialInstall.Antigravity
+                };
                 if (!installer.Confirm(main)) return;
                 try { installer.Start(); main.ShowNotice("The official installer opened in PowerShell. Follow that window, then return here."); }
                 catch (Exception) { main.ShowNotice("PowerShell couldn't be started. Run the install command shown in the confirmation yourself."); }

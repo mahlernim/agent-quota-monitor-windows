@@ -22,6 +22,48 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
     internal static readonly OfficialInstall Codex = Client("Codex", "https://chatgpt.com/codex/install.ps1",
         "It installs Codex for your Windows account in %LOCALAPPDATA%\\Programs\\OpenAI\\Codex and adds it to your PATH.", "OpenAI Codex", true);
 
+    internal const string CopilotSdk = "@github/copilot-sdk@1.0.14";
+
+    /// <summary>
+    /// Official Copilot components for installed copies. winget installs only missing tools and
+    /// keeps its own license prompts. The SDK goes into the monitor's own runtime folder.
+    /// </summary>
+    internal static readonly OfficialInstall Copilot = new("Set up Copilot",
+        "npm install --prefix %LOCALAPPDATA%\\QuotaDashboard\\copilot-runtime " + CopilotSdk,
+        "Set up GitHub Copilot monitoring?\n\nA PowerShell window will:\n\n" +
+        "1. Install any missing official tools with winget: GitHub CLI (GitHub.cli), Node.js LTS (OpenJS.NodeJS.LTS), and GitHub Copilot CLI (GitHub.Copilot). " +
+        "winget may ask you to accept their terms, and Node.js may ask for administrator approval.\n" +
+        "2. Install the official Copilot SDK (" + CopilotSdk + ") into %LOCALAPPDATA%\\QuotaDashboard\\copilot-runtime.\n" +
+        "3. Start GitHub sign-in in your browser only if the GitHub CLI isn't signed in yet.\n\n" +
+        "Then choose Connect beside GitHub Copilot. The monitor never sees your credentials and sends no prompts.",
+        string.Join("\n",
+            "$ErrorActionPreference = 'Stop'",
+            "function Update-SessionPath { $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') }",
+            "if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) { throw 'winget is required. Install App Installer from the Microsoft Store, then try again.' }",
+            "function Install-Missing([string]$id, [scriptblock]$present) {",
+            "  if (& $present) { Write-Host \"$id is already installed.\"; return }",
+            "  Write-Host \"Installing $id with winget\" -ForegroundColor Cyan",
+            "  winget install --id $id --exact --source winget",
+            "  if ($LASTEXITCODE) { throw \"$id installation failed.\" }",
+            "  Update-SessionPath",
+            "}",
+            "Install-Missing 'GitHub.cli' { Get-Command gh.exe -ErrorAction SilentlyContinue }",
+            "Install-Missing 'OpenJS.NodeJS.LTS' { Get-Command node.exe -ErrorAction SilentlyContinue }",
+            "Install-Missing 'GitHub.Copilot' { (Get-Command copilot.exe -ErrorAction SilentlyContinue) -or (Get-ChildItem \"$env:LOCALAPPDATA\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_*\\copilot.exe\" -ErrorAction SilentlyContinue) }",
+            "$runtime = Join-Path $env:LOCALAPPDATA 'QuotaDashboard\\copilot-runtime'",
+            "New-Item -ItemType Directory -Path $runtime -Force | Out-Null",
+            "Write-Host 'Installing the official Copilot SDK' -ForegroundColor Cyan",
+            "npm install --prefix $runtime --no-audit --no-fund " + CopilotSdk,
+            "if ($LASTEXITCODE) { throw 'Copilot SDK installation failed.' }",
+            "gh auth status --hostname github.com *> $null",
+            "if ($LASTEXITCODE) {",
+            "  Write-Host 'Signing in to GitHub. Follow the prompts here and in your browser.' -ForegroundColor Cyan",
+            "  gh auth login --hostname github.com --git-protocol https --web",
+            "  if ($LASTEXITCODE) { throw 'GitHub sign-in did not finish.' }",
+            "}",
+            "Write-Host ''",
+            "Write-Host 'Finished. Return to Agent Quota Monitor and choose Connect beside GitHub Copilot.' -ForegroundColor Green"));
+
     private static OfficialInstall Client(string name, string source, string location, string row, bool bypass = false)
     {
         string command = "irm " + source + " | iex";

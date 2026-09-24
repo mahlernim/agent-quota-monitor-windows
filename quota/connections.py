@@ -65,6 +65,14 @@ def client_command(provider):
     return None
 
 
+def copilot_ready():
+    from .copilot import setup_ready
+    try:
+        return setup_ready()
+    except Exception:
+        return False
+
+
 def antigravity_cli_installed():
     from .antigravity_cli import command
     try:
@@ -94,12 +102,14 @@ class Connections:
         self.stop = threading.Event()
         self.worker = None
         self.clients = {p: bool(self.resolver(p)) for p in PROVIDERS}
+        self.clients['copilotReady'] = copilot_ready()
         self.clients_checked = self.clock()
 
     def snapshot(self):
         # Clients are rechecked briefly cached, so an install while running enables its buttons.
         if self.clock() - self.clients_checked >= CLIENT_RECHECK_SECONDS:
             clients = {p: bool(self.resolver(p)) for p in PROVIDERS}
+            clients['copilotReady'] = copilot_ready()
             with self.lock:
                 self.clients, self.clients_checked = clients, self.clock()
         with self.lock:
@@ -109,9 +119,12 @@ class Connections:
         clients['antigravityCli'] = antigravity_cli_installed()
         return dict(clients=clients, job=job)
 
-    def start(self, provider, account_id=None):
+    def start(self, provider, account_id=None, verify=False):
+        """Start official sign-in. For Copilot, verify links the GitHub CLI's current account without a new sign-in."""
         if not isinstance(provider, str) or provider not in PROVIDERS:
             raise ValueError('Choose a supported provider.')
+        if verify is not False and (verify is not True or provider != 'copilot'):
+            raise ValueError('Only Copilot can link an existing sign-in.')
         with self.lock:
             if self.worker and self.worker.is_alive():
                 raise RuntimeError('A connection is already in progress.')
@@ -127,13 +140,14 @@ class Connections:
                 try:
                     quota_command()
                 except Exception:
-                    raise ValueError('Copilot setup is required. Run Setup-Copilot.ps1 from the source repository, then retry.') from None
+                    raise ValueError('Copilot setup is required. Choose Set up Copilot first.') from None
             self.stop = threading.Event()
             now = self.clock()
             self.job = dict(id=uuid.uuid4().hex, provider=provider, accountId=account_id,
                             expectedLabel=target['label'] if target else None,
-                            state='starting', startedAt=now, deadline=now+600,
-                            message='Opening Antigravity desktop app…' if provider == 'antigravity' else 'Opening the official client…')
+                            state='starting', startedAt=now, deadline=now+600, verify=verify,
+                            message='Linking the account the GitHub CLI is signed in to…' if verify
+                            else 'Opening Antigravity desktop app…' if provider == 'antigravity' else 'Opening the official client…')
             self.worker = threading.Thread(target=self._run, args=(command, copy.deepcopy(self.job), self.stop), daemon=True)
             self.worker.start()
             return copy.deepcopy(self.job)
@@ -172,6 +186,26 @@ class Connections:
         job_id = job['id']
         try:
             if stop.is_set():
+                return
+            if job.get('verify'):
+                # Link the account the GitHub CLI already uses. No client is launched.
+                self._set(job_id, 'verifying', 'Checking the GitHub CLI account and its Copilot quota…')
+                from .copilot import bind_current_account
+                try:
+                    bind_current_account(stop=stop)
+                except Exception:
+                    self._set(job_id, 'failed', 'The GitHub CLI isn’t signed in, or its Copilot quota couldn’t be read. Use Sign in instead.')
+                    return
+                if stop.is_set():
+                    return
+                self.monitor.next_discovery = 0
+                while not stop.wait(1):
+                    if self.clock() >= job['deadline']:
+                        self._set(job_id, 'timed_out', 'Connection timed out. Existing sign-ins are preserved. Retry when ready.')
+                        break
+                    self.monitor.refresh()
+                    if self._verify(job):
+                        break
                 return
             process = self.launcher(command)
             desktop = job['provider'] == 'antigravity'
