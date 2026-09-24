@@ -90,12 +90,22 @@ def read_snapshot():
         raise ReadError('copilot_reader_failed') from None
 
 
+def setup_ready():
+    """True when the official tools and SDK runtime exist. It never starts a reader."""
+    try:
+        command()
+        return True
+    except ReadError:
+        return False
+
+
 def copilot_account():
     # Discovery is local only. Hidden accounts never launch a quota reader.
     binding = descriptor_vault().load()
     subject = binding.get('id')
     if not isinstance(subject,int) or isinstance(subject,bool) or subject<=0:
-        raise ReadError('copilot_setup_required')
+        # Setup can be complete while no GitHub account has been linked yet.
+        raise ReadError('copilot_not_connected' if setup_ready() else 'copilot_setup_required')
     def read():
         raw = read_snapshot()
         if raw['id'] != subject:

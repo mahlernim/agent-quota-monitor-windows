@@ -256,6 +256,7 @@ internal static class Program
             await Call(window, "PollAsync");
             Check(installButtons["codex"].Visibility == Visibility.Collapsed && signInButtons["codex"].Visibility == Visibility.Visible,
                 "Sign in returns once the client is found");
+            await TestCopilot(window, handler, missing, clientInstalls);
             confirmInstall = false;
             await TestProviders(window, handler);
             await TestNames(window, handler);
@@ -387,6 +388,46 @@ internal static class Program
         finally { window.Close(); owner.Close(); }
     }
 
+    private static async Task TestCopilot(AccountsWindow window, SyntheticBackend handler, JsonObject status, List<OfficialInstall> installs)
+    {
+        Button setup = Field<Button>(window, "_copilotSetup"), connect = Field<Button>(window, "_copilotConnect");
+        Check(setup.Visibility == Visibility.Collapsed && connect.Visibility == Visibility.Collapsed, "Copilot setup controls stay hidden when not needed");
+        status["connections"]!["clients"]!["copilotReady"] = false;
+        handler.Status = status.ToJsonString();
+        await Call(window, "PollAsync");
+        Check(setup.Visibility == Visibility.Visible && connect.Visibility == Visibility.Collapsed, "Missing Copilot components offer Set up Copilot");
+        Click(setup);
+        Check(installs.Last() == OfficialInstall.Copilot, "A confirmed setup runs only the Copilot setup script");
+        string script = OfficialInstall.Copilot.Script;
+        // Saved for an optional PowerShell parser check. Nothing here runs the scripts.
+        string scripts = Path.Combine(Path.GetTempPath(), "aqm-installer-scripts");
+        Directory.CreateDirectory(scripts);
+        foreach ((string name, OfficialInstall installer) in new[] { ("antigravity", OfficialInstall.Antigravity), ("claude", OfficialInstall.Claude),
+                     ("codex", OfficialInstall.Codex), ("copilot", OfficialInstall.Copilot) })
+            File.WriteAllText(Path.Combine(scripts, name + ".ps1"), installer.Script);
+        Check(script.Contains("--id $id --exact --source winget") && !script.Contains("--accept") && script.Contains("'GitHub.cli'") &&
+            script.Contains("'OpenJS.NodeJS.LTS'") && script.Contains("'GitHub.Copilot'") && script.Contains(OfficialInstall.CopilotSdk) &&
+            script.Contains("gh auth status") && !script.Contains("python") && OfficialInstall.Copilot.Confirmation.Contains("administrator approval"),
+            "Copilot setup installs only missing official tools, leaves license prompts to winget, and needs no Python");
+
+        JsonObject unlinked = JsonNode.Parse(status.ToJsonString())!.AsObject();
+        unlinked["connections"]!["clients"]!["copilotReady"] = true;
+        JsonArray accounts = unlinked["accounts"]!.AsArray();
+        JsonObject pending = accounts[0]!.DeepClone().AsObject();
+        pending["id"] = "copilot-pending"; pending["provider"] = "copilot"; pending["error"] = "copilot_not_connected"; pending["status"] = "pending";
+        accounts.Add(pending);
+        handler.Status = unlinked.ToJsonString();
+        await Call(window, "PollAsync");
+        Check(setup.Visibility == Visibility.Collapsed && connect.Visibility == Visibility.Visible, "A completed setup without a linked account offers Connect");
+        await Call(window, "ConnectCopilotAsync");
+        JsonNode body = JsonNode.Parse(handler.LastBody!)!;
+        Check(handler.LastPath == "/api/connections/start" && body["provider"]!.GetValue<string>() == "copilot" && body["verify"]!.GetValue<bool>() &&
+            body["accountId"]!.GetValue<string>() == "copilot-pending", "Connect links the existing GitHub CLI account without a new sign-in");
+        status["connections"]!["clients"]!["copilotReady"] = true;
+        handler.Status = status.ToJsonString();
+        await Call(window, "PollAsync");
+    }
+
     private static async Task TestProviders(AccountsWindow window, SyntheticBackend handler)
     {
         var checks = Field<Dictionary<string, CheckBox>>(window, "_providerChecks");
@@ -466,6 +507,9 @@ internal static class Program
         Check(Problem("claude", "session_expired")?.Action is null, "An expired Claude session is explained without launching a client");
         Check(Problem("codex", "client_not_installed")?.Action == "install-codex" && Problem("claude", "client_not_installed")?.Action == "install-claude",
             "A missing client offers its official installer instead of Sign in");
+        Check(Problem("copilot", "copilot_setup_required")?.Action == "setup-copilot" && Problem("copilot", "copilot_not_connected")?.Action == "connect-copilot" &&
+            !Problem("copilot", "copilot_setup_required")!.Summary.Contains("Setup-Copilot.ps1"),
+            "Copilot banners separate missing setup from an unlinked account and never point to the source script");
         Check(Problem("codex", "network_unavailable")?.Action == "retry" && Problem("claude", "connection_or_response_error")?.Action == "retry" &&
             Problem("codex", "schema_changed")?.Action == "check-updates" && Problem("codex", "rate_limited")?.Action is null,
             "Network, format, and cooldown problems choose matching actions");

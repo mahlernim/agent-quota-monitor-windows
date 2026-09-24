@@ -71,6 +71,46 @@ class ConnectionTests(unittest.TestCase):
             self.connection.cancel(job['id'])
             self.connection.worker.join(3)
 
+    def test_copilot_connect_links_the_existing_sign_in_without_launching_a_client(self):
+        launched = []
+        self.connection.launcher = lambda cmd: launched.append(cmd) or self.process
+        observed = threading.Event()
+        self.monitor.refresh = observed.set
+        with patch('quota.copilot.command', return_value=['reader']), patch('quota.copilot.bind_current_account') as bind:
+            job = self.connection.start('copilot', verify=True)
+            self.assertTrue(observed.wait(3))
+            bind.assert_called_once()
+            self.assertEqual(launched, [])
+            self.assertEqual(self.connection.job['state'], 'verifying')
+            self.connection.cancel(job['id'])
+            self.connection.worker.join(3)
+
+    def test_connect_is_copilot_only_and_requires_a_boolean(self):
+        for provider, verify in (('claude', True), ('codex', True), ('copilot', 'yes'), ('copilot', 1)):
+            with self.assertRaises(ValueError):
+                self.connection.start(provider, verify=verify)
+        self.assertIsNone(self.connection.worker)
+
+    def test_failed_copilot_connect_points_to_sign_in(self):
+        from quota.providers import ReadError
+        with patch('quota.copilot.command', return_value=['reader']), \
+                patch('quota.copilot.bind_current_account', side_effect=ReadError('copilot_reader_failed')):
+            self.connection.start('copilot', verify=True)
+            self.connection.worker.join(3)
+        self.assertEqual(self.connection.job['state'], 'failed')
+        self.assertIn('Use Sign in instead', self.connection.job['message'])
+
+    def test_copilot_distinguishes_missing_setup_from_an_unlinked_account(self):
+        from quota import copilot
+        from quota.providers import ReadError
+        class Empty:
+            def load(self): return {}
+        for ready, code in ((False, 'copilot_setup_required'), (True, 'copilot_not_connected')):
+            with patch.object(copilot, 'descriptor_vault', return_value=Empty()), patch.object(copilot, 'setup_ready', return_value=ready):
+                with self.assertRaises(ReadError) as raised:
+                    copilot.copilot_account()
+            self.assertEqual(raised.exception.code, code)
+
     def test_copilot_setup_missing_never_launches_login(self):
         with patch('quota.copilot.command', side_effect=RuntimeError('missing')):
             with self.assertRaisesRegex(ValueError, 'setup is required'):

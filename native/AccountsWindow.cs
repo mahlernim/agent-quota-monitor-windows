@@ -76,6 +76,11 @@ public sealed class AccountsWindow : Window
     private readonly Func<Window, OfficialInstall, bool> _confirmInstall;
     private readonly Action<OfficialInstall> _startInstall;
     private readonly Dictionary<string, Button> _clientInstallButtons = [];
+    private readonly Button _copilotSetup = Ui.Apply(new Button { Content = "Set up Copilot", Tag = "setup:copilot", Visibility = Visibility.Collapsed,
+        Margin = new Thickness(0, 1, 6, 1), ToolTip = "Installs the official GitHub tools and SDK after you confirm." });
+    private readonly Button _copilotConnect = Ui.Apply(new Button { Content = "Connect", Tag = "connect:copilot", Visibility = Visibility.Collapsed,
+        Margin = new Thickness(0, 1, 6, 1), ToolTip = "Links the account the GitHub CLI is already signed in to, without a new sign-in." }, true);
+    private string? _unlinkedCopilot;
 
     internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null, Func<bool>? backendReady = null,
         Func<Window, bool>? confirmCliInstall = null, Action? startCliInstall = null,
@@ -197,10 +202,16 @@ public sealed class AccountsWindow : Window
                 OfficialInstall installer = provider == "codex" ? OfficialInstall.Codex : OfficialInstall.Claude;
                 var install = Ui.Apply(new Button { Content = installer.Title, Tag = "install:" + provider, Visibility = Visibility.Collapsed,
                     ToolTip = "Shows the official install command first. Runs only after you confirm." });
-                install.Click += (_, _) => InstallClient(installer);
+                install.Click += (_, _) => InstallClient(installer, "When it finishes, choose Sign in here.");
                 DockPanel.SetDock(install, Dock.Right);
                 row.Children.Add(install);
                 _clientInstallButtons[provider] = install;
+            }
+            if (provider == "copilot")
+            {
+                _copilotSetup.Click += (_, _) => InstallClient(OfficialInstall.Copilot, "When it finishes, choose Connect here.");
+                _copilotConnect.Click += async (_, _) => await ConnectCopilotAsync();
+                foreach (Button extra in new[] { _copilotSetup, _copilotConnect }) { DockPanel.SetDock(extra, Dock.Right); row.Children.Add(extra); }
             }
             if (provider == "antigravity")
             {
@@ -213,7 +224,7 @@ public sealed class AccountsWindow : Window
         }
         body.Children.Add(Hint("Antigravity: the CLI (agy) reads quota while the desktop app is closed. Open desktop app doesn't sign in the CLI.",
             Readme + "google-antigravity"));
-        body.Children.Add(Hint("Copilot needs a one-time setup before Sign in.", "https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/copilot-setup.md"));
+        body.Children.Add(Hint("Copilot needs a one-time setup. Set up Copilot installs the official tools after you confirm.", "https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/copilot-setup.md"));
 
         body.Children.Add(new Separator { Margin = new Thickness(0, 6, 0, 6) });
         var accountHeader = new DockPanel { LastChildFill = false };
@@ -348,6 +359,10 @@ public sealed class AccountsWindow : Window
         {
             foreach ((string provider, Button button) in _signInButtons)
                 button.IsEnabled = clients.TryGetProperty(provider, out JsonElement available) && available.ValueKind == JsonValueKind.True;
+            bool copilotReady = !clients.TryGetProperty("copilotReady", out JsonElement ready) || ready.ValueKind != JsonValueKind.False;
+            _copilotSetup.Visibility = copilotReady ? Visibility.Collapsed : Visibility.Visible;
+            _unlinkedCopilot = copilotReady ? accountRows.FirstOrDefault(row => row.Provider == "copilot" && row.Error == "copilot_not_connected")?.Id : null;
+            _copilotConnect.Visibility = _unlinkedCopilot is null ? Visibility.Collapsed : Visibility.Visible;
             // A missing Codex or Claude client offers its official installer in place of a disabled Sign in.
             foreach ((string provider, Button install) in _clientInstallButtons)
             {
@@ -652,15 +667,22 @@ public sealed class AccountsWindow : Window
         await PostAsync("/api/connections/start", new { provider },
             provider == "antigravity" ? "Opening Antigravity desktop app. CLI accounts sign in through agy in a terminal." : "Official sign-in started.");
 
-    private void InstallClient(OfficialInstall installer)
+    private void InstallClient(OfficialInstall installer, string next)
     {
         if (_closed || !_confirmInstall(this, installer)) return;
         try
         {
             _startInstall(installer);
-            ShowSuccess("The official installer opened in PowerShell. When it finishes, choose Sign in here.");
+            ShowSuccess("The official installer opened in PowerShell. " + next);
         }
         catch (Exception) { ShowError("PowerShell couldn't be started. Run the install command shown in the confirmation yourself."); }
+    }
+
+    private async Task ConnectCopilotAsync()
+    {
+        if (_unlinkedCopilot is null) return;
+        await PostAsync("/api/connections/start", new { provider = "copilot", accountId = _unlinkedCopilot, verify = true },
+            "Linking the account the GitHub CLI is signed in to.");
     }
 
     private void InstallCli()
