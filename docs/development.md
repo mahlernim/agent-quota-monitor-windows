@@ -55,6 +55,8 @@ The real startup test uses Windows sockets and the native connection flow to lau
 
 Build the installer with `./Build-Installer.ps1 -BundleDirectory <portable-build-folder>` after installing Inno Setup 6. Both build scripts read the same default version from the native project. If the portable build used `-Version`, pass the same override to the installer script. The installer script rejects a version that does not match the packaged executable, and the Inno Setup definition requires an explicitly supplied `AppVersion`.
 
+The installer records the files it installs in `installed-files.txt` in the app folder. During an update it deletes files named in the previous record that the new version no longer ships, then removes folders left empty. Other files in the folder are never touched. Installations from before this record existed are cleaned with the fixed list in `packaging/legacy-files.txt`. It applies only when the folder already holds the app and its uninstaller.
+
 Validate installation, upgrades, removal, and preservation of settings before publishing. Run update policy tests with `dotnet run --project tests/native-updates/UpdateTests.csproj`.
 
 Release checklist:
