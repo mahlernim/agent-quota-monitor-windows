@@ -62,6 +62,16 @@ If Codex or Claude Code isn't installed, Settings and the main window offer its 
 
 The official clients renew their own sessions while you use them. If a session lapses, open that client (Codex, or Claude Code) and the monitor resumes by itself. Settings shows when a Claude Code session expires and when a Codex session was last renewed.
 
+### Anthropic Claude
+
+The monitor reads the sign-in saved by **Claude Code**, Anthropic's command-line tool. Signing in to the Claude desktop app or claude.ai alone isn't enough, because neither saves a session the monitor can read. Claude Code needs a Claude Pro, Max, Team, or Enterprise plan.
+
+1. In Settings, tick **Anthropic Claude**. If Claude Code is missing, choose **Install Claude Code** and confirm. The official installer runs in a PowerShell window.
+2. When it finishes, choose **Sign in**. It can take up to a minute to replace the install button.
+3. A Claude Code window and your browser open. Sign in in the browser. If the browser shows a code instead of returning, paste it into the Claude Code window.
+
+The account appears once its quota has been read.
+
 ### Google Antigravity
 
 The official Antigravity CLI (`agy`) is the recommended source. It lets the monitor read quota even while the Antigravity desktop app is closed. Without it, Antigravity readings stop whenever the desktop app closes.

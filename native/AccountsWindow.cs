@@ -231,6 +231,8 @@ public sealed class AccountsWindow : Window
             }
             body.Children.Add(row);
         }
+        body.Children.Add(Hint("Claude: the monitor reads the sign-in saved by Claude Code, the command-line tool. The Claude desktop app or website alone isn't enough.",
+            Readme + "anthropic-claude"));
         body.Children.Add(Hint("Antigravity: the CLI (agy) reads quota while the desktop app is closed. Open desktop app doesn't sign in the CLI.",
             Readme + "google-antigravity"));
         body.Children.Add(Hint("Copilot needs a one-time setup. Set up Copilot installs the official tools after you confirm.", "https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/copilot-setup.md"));

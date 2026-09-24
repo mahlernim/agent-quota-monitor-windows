@@ -12,6 +12,10 @@ PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
 ACTIVE = ('starting', 'waiting', 'verifying')
 EARLY_EXIT_SECONDS = 5
 CLIENT_RECHECK_SECONDS = 20
+WAITING = {
+    'copilot': 'Follow the GitHub CLI sign-in window and browser. The monitor verifies the quota afterward.',
+    'claude': 'Complete sign-in in the browser. If it shows a code instead of returning, paste the code into the Claude Code window.',
+}
 CODEX_EARLY_EXIT = ('The Codex client exited before sign-in could start. Try updating the CLI with '
                     'npm install -g @openai/codex@latest, check ~/.codex/config.toml, or sign in through the Codex app.')
 
@@ -82,11 +86,16 @@ def antigravity_cli_installed():
         return False
 
 
+# Clients whose sign-in may need the user to read or type in their own console.
+VISIBLE_SIGN_IN = ('gh.exe', 'gh', 'claude.exe', 'claude')
+
+
 def launch(command):
     # Launch only resolved local executables with fixed arguments, never a shell.
     # Output may contain auth URLs or codes, so discard it rather than logging it.
-    if Path(command[0]).name.lower() in ('gh.exe', 'gh'):
-        # GitHub's device code and interactive confirmation stay in its own console.
+    if Path(command[0]).name.lower() in VISIBLE_SIGN_IN:
+        # GitHub shows a device code there. Claude Code asks for a pasted code when the
+        # browser can't reach its local callback. Neither console's output is captured.
         return subprocess.Popen(command, cwd=Path.home(), creationflags=getattr(subprocess, 'CREATE_NEW_CONSOLE', 0))
     return subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, cwd=Path.home(),
@@ -134,7 +143,7 @@ class Connections:
                 raise ValueError('This account is no longer visible. Refresh the monitor.')
             command = self.resolver(provider)
             if not command:
-                raise ValueError('Official client not found. Install it, then restart the monitor.')
+                raise ValueError('Official client not found. Install it from Settings, then choose Sign in again.')
             if provider == 'copilot':
                 from .copilot import command as quota_command
                 try:
@@ -216,7 +225,7 @@ class Connections:
                 self.monitor.next_discovery = 0
                 self._set(job_id, 'opened', 'Antigravity desktop app opened. Complete sign-in there if needed, then press Refresh. CLI accounts use agy in a terminal.')
                 return
-            self._set(job_id, 'waiting', 'Follow the GitHub CLI sign-in window and browser. The monitor verifies the quota afterward.' if job['provider'] == 'copilot' else 'Complete sign-in in the browser opened by the official client. This renews that client’s session too.')
+            self._set(job_id, 'waiting', WAITING.get(job['provider'], 'Complete sign-in in the browser opened by the official client. This renews that client’s session too.'))
             while not stop.wait(1):
                 if self.clock() >= job['deadline']:
                     self._set(job_id, 'timed_out', 'Connection timed out. Existing sign-ins are preserved. Retry when ready.')
@@ -224,6 +233,11 @@ class Connections:
                 status = process.poll()
                 if status is not None:
                     if status != 0:
+                        # Closing a visible sign-in console after it finished also exits non-zero.
+                        self.monitor.next_discovery = 0
+                        self.monitor.refresh()
+                        if self._verify(job):
+                            break
                         # Output is discarded because it can contain sign-in codes, so only timing is known.
                         early = self.clock() - job['startedAt'] <= EARLY_EXIT_SECONDS
                         self._set(job_id, 'failed', CODEX_EARLY_EXIT if early and job['provider'] == 'codex'

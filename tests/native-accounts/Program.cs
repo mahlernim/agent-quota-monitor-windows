@@ -206,6 +206,9 @@ internal static class Program
             Check(body.Children.OfType<TextBlock>().Any(block => Inline(block).Contains("reads quota while the desktop app is closed", StringComparison.Ordinal) &&
                 Inline(block).Contains("Open desktop app doesn't sign in the CLI", StringComparison.Ordinal) && block.Inlines.OfType<System.Windows.Documents.Hyperlink>().Any()),
                 "Settings keeps a one-line Antigravity hint with a link instead of a long paragraph");
+            Check(body.Children.OfType<TextBlock>().Any(block => Inline(block).Contains("Claude desktop app or website alone isn't enough", StringComparison.Ordinal) &&
+                block.Inlines.OfType<System.Windows.Documents.Hyperlink>().Any(link => link.NavigateUri?.Fragment == "#anthropic-claude")),
+                "Settings explains that Claude needs Claude Code and links to its guide");
             Check(!body.Children.OfType<Button>().Any(button => button.Content is string text && text.Contains("Save monitored providers")),
                 "Providers have no separate Save button");
             AccountLayoutState layout = Field<AccountLayoutState>(window, "_layout");
@@ -497,14 +500,15 @@ internal static class Program
 
     private static void TestProblems()
     {
-        AccountProblem? Problem(string provider, string error, string source = "Synthetic official client")
+        AccountStatus Account(string provider, string error, string source = "Synthetic official client")
         {
             JsonObject sample = JsonNode.Parse(Snapshot("problem"))!.AsObject();
             sample["accounts"]![0]!["provider"] = provider;
             sample["accounts"]![0]!["error"] = error;
             sample["accounts"]![0]!["source"] = source;
-            return Parse(sample.ToJsonString())[0].Problem;
+            return Parse(sample.ToJsonString())[0];
         }
+        AccountProblem? Problem(string provider, string error, string source = "Synthetic official client") => Account(provider, error, source).Problem;
         const string cli = "Official Antigravity CLI /usage (desktop app not required)";
         const string desktop = "Official running Antigravity local service";
         foreach (string error in new[] { "sign_in_required", "local_session_unavailable", "antigravity_cli_failed" })
@@ -517,6 +521,11 @@ internal static class Program
         Check(Problem("claude", "session_expired")?.Action is null, "An expired Claude session is explained without launching a client");
         Check(Problem("codex", "client_not_installed")?.Action == "install-codex" && Problem("claude", "client_not_installed")?.Action == "install-claude",
             "A missing client offers its official installer instead of Sign in");
+        Check(Problem("claude", "client_not_installed")!.Summary.Contains("desktop app alone isn't enough", StringComparison.Ordinal) &&
+            Account("claude", "client_not_installed").Guidance.Contains("desktop app or website alone isn't enough", StringComparison.Ordinal),
+            "A missing Claude Code explains that the desktop app doesn't provide the session");
+        Check(OfficialInstall.Claude.Confirmation.Contains("Pro, Max, Team, or Enterprise", StringComparison.Ordinal),
+            "The Claude Code install confirmation names the plans Claude Code needs");
         Check(Problem("copilot", "copilot_setup_required")?.Action == "setup-copilot" && Problem("copilot", "copilot_not_connected")?.Action == "connect-copilot" &&
             !Problem("copilot", "copilot_setup_required")!.Summary.Contains("Setup-Copilot.ps1"),
             "Copilot banners separate missing setup from an unlinked account and never point to the source script");
