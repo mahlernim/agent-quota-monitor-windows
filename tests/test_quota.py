@@ -153,7 +153,7 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(headers['Cache-Control'],'no-store')
         self.assertIn("frame-ancestors 'none'",headers['Content-Security-Policy'])
         self.assertEqual(json.loads(data)['accounts'],[])
-        self.assertEqual(json.loads(data)['backend'], {'name': 'agent-quota-monitor', 'protocolVersion': 1, 'processId': os.getpid()})
+        self.assertEqual(json.loads(data)['backend'], {'name': 'agent-quota-monitor', 'protocolVersion': 1, 'processId': os.getpid(), 'appVersion': 'development'})
 
     def test_browser_dashboard_is_not_served(self):
         for path in ('/', '/app.js', '/style.css', '/icon.svg', '/index.html', '/web/index.html'):

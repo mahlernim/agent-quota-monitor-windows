@@ -40,9 +40,21 @@ Name: "{autodesktop}\Agent Quota Monitor"; Filename: "{app}\agent-quota-monitor-
 [Run]
 Filename: "{app}\agent-quota-monitor-windows.exe"; Description: "Launch Agent Quota Monitor"; Flags: nowait postinstall skipifsilent
 [Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var ResultCode: Integer;
+begin
+  { AppMutex guarantees that no monitor window is open, so any running reader was left behind,
+    for example after a crash. Stop it so its files can be replaced. Cached data is written atomically. }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM quota-backend.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := '';
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var Command: String;
+    ResultCode: Integer;
 begin
+  if CurUninstallStep = usUninstall then
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM quota-backend.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if CurUninstallStep = usUninstall then
     if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'AgentQuotaMonitorWindows', Command) then
       if CompareText(Command, '"' + ExpandConstant('{app}\agent-quota-monitor-windows.exe') + '" --minimized') = 0 then

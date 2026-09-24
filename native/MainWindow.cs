@@ -120,14 +120,18 @@ public sealed class MainWindow : Window
             }
     }
 
-    internal void SetUpdate(UpdateService updates)
+    /// <param name="install">Installs a verified release in place, or null when this copy cannot do that.</param>
+    /// <param name="progress">Replaces the actions while an install is being prepared.</param>
+    internal void SetUpdate(UpdateService updates, Action? install = null, string? progress = null)
     {
         _updateBanner.Children.Clear();
         var release = updates.Available;
         _updateBanner.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;
         if (release is null) return;
         _updateBanner.Children.Add(Label($"Version {release.Tag.TrimStart('v')} is available", true));
+        if (progress is not null) { _updateBanner.Children.Add(Label(progress, false)); return; }
         void Open() => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(release.Url) { UseShellExecute = true });
+        if (install is not null && release.Installer) _updateBanner.Children.Add(Button("Install update", install));
         _updateBanner.Children.Add(Button("Download update", Open));
         _updateBanner.Children.Add(Button("Later", updates.Later));
         _updateBanner.Children.Add(Button("Skip this version", updates.Skip));

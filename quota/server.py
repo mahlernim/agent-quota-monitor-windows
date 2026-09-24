@@ -3,12 +3,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import re
 import threading
 from .monitor import Monitor, poll_monitor
 from .vault import Vault
 from .connections import Connections
 
-def handler(monitor, port, connections=None):
+def app_version(value):
+    """The launching app's version, echoed so a newer app can replace an older reader."""
+    return value if isinstance(value, str) and re.fullmatch(r'[0-9A-Za-z.+-]{1,64}', value) else 'development'
+
+
+def handler(monitor, port, connections=None, version='development'):
     expected = f'127.0.0.1:{port}'
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -40,7 +46,7 @@ def handler(monitor, port, connections=None):
                 return self.send(403, b'{}')
             if self.path == '/api/status':
                 data = monitor.snapshot()
-                data['backend'] = dict(name='agent-quota-monitor', protocolVersion=1, processId=os.getpid())
+                data['backend'] = dict(name='agent-quota-monitor', protocolVersion=1, processId=os.getpid(), appVersion=version)
                 if connections:
                     data['connections'] = connections.snapshot()
                 return self.send(200, json.dumps(data, allow_nan=False).encode())
@@ -140,6 +146,7 @@ def handler(monitor, port, connections=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=8765)
+    parser.add_argument('--app-version', default='development')
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error('Choose a port between 1024 and 65535')
@@ -150,7 +157,7 @@ def main():
         desired = []
     monitor = Monitor(Vault(), desired_google=desired, settings_vault=settings)
     connections = Connections(monitor)
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections))
+    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections, app_version(args.app_version)))
     stop = threading.Event()
     threading.Thread(target=poll_monitor, args=(monitor, stop), daemon=True).start()
     print(f'Quota backend listening on 127.0.0.1:{args.port}', flush=True)

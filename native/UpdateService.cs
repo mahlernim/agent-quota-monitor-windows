@@ -1,16 +1,20 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Net.Http;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 
 namespace AgentQuotaMonitor;
 
-internal sealed record ReleaseInfo(string Tag, string Url);
+internal sealed record ReleaseInfo(string Tag, string Url, bool Installer = false);
 internal sealed class UpdatePreferences
 {
     public bool Automatic { get; set; } = true;
@@ -23,6 +27,7 @@ internal sealed class UpdateService : IDisposable
     internal const string Repository = "https://github.com/mahlernim/agent-quota-monitor-windows";
     internal static string InstalledVersion => typeof(UpdateService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.0.0";
     private readonly HttpClient client;
+    private readonly HttpClient downloads;
     private readonly Action<UpdatePreferences> save;
     private readonly Func<DateTimeOffset> clock;
     private readonly string version;
@@ -31,9 +36,12 @@ internal sealed class UpdateService : IDisposable
     internal string Status { get; private set; } = "";
     internal bool Busy { get; private set; }
     internal event Action? Changed;
-    internal UpdateService(HttpClient? client = null, UpdatePreferences? preferences = null, Action<UpdatePreferences>? save = null, Func<DateTimeOffset>? clock = null, string? version = null)
+    internal UpdateService(HttpClient? client = null, UpdatePreferences? preferences = null, Action<UpdatePreferences>? save = null, Func<DateTimeOffset>? clock = null, string? version = null, HttpClient? downloads = null)
     {
         this.client = client ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(12), MaxResponseContentBufferSize = 2 * 1024 * 1024 };
+        // Redirects are followed manually so each hop can be checked against the GitHub hosts.
+        this.downloads = downloads ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(10) };
+        this.downloads.DefaultRequestHeaders.UserAgent.ParseAdd("AgentQuotaMonitor/" + InstalledVersion);
         this.client.DefaultRequestHeaders.UserAgent.ParseAdd("AgentQuotaMonitor/" + InstalledVersion);
         this.client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         Preferences = preferences ?? Load(); this.save = save ?? Save; this.clock = clock ?? (() => DateTimeOffset.UtcNow);
@@ -70,11 +78,65 @@ internal sealed class UpdateService : IDisposable
             if (candidate is null || (current.Pre.Length == 0 && (candidate.Pre.Length > 0 || item.GetProperty("prerelease").GetBoolean())) || candidate.CompareTo(newest) <= 0) continue;
             if (!item.TryGetProperty("assets", out var assets) || !assets.EnumerateArray().Any(a => (a.GetProperty("name").GetString() ?? "").EndsWith("win-x64.zip", StringComparison.OrdinalIgnoreCase) && a.GetProperty("state").GetString() == "uploaded")) continue;
             // Construct the destination from a validated version, never a response-provided URL.
-            newest = candidate; best = new(tag, Repository + "/releases/tag/" + Uri.EscapeDataString(tag));
+            string installer = InstallerName(tag);
+            bool Uploaded(string name) => assets.EnumerateArray().Any(a => a.GetProperty("name").GetString() == name && a.GetProperty("state").GetString() == "uploaded");
+            newest = candidate; best = new(tag, Repository + "/releases/tag/" + Uri.EscapeDataString(tag), Uploaded(installer) && Uploaded(installer + ".sha256"));
         }
         return best;
     }
-    public void Dispose() => client.Dispose();
+
+    internal static string InstallerName(string tag) => $"agent-quota-monitor-windows-{tag.TrimStart('v')}-setup-win-x64.exe";
+    internal static Uri AssetUri(string tag, string name) =>
+        new(Repository + "/releases/download/" + Uri.EscapeDataString(tag) + "/" + Uri.EscapeDataString(name));
+    // GitHub serves release files from github.com and redirects to its own download hosts.
+    internal static readonly string[] DownloadHosts = ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"];
+
+    /// <summary>Downloads the release installer and returns its path only when the published SHA-256 checksum matches.</summary>
+    internal async Task<string> DownloadInstaller(ReleaseInfo release, string directory, CancellationToken cancellationToken = default)
+    {
+        if (!release.Installer || SemVersion.Parse(release.Tag) is null) throw new InvalidDataException("This release has no installer.");
+        string name = InstallerName(release.Tag);
+        string checksum = Encoding.ASCII.GetString(await Fetch(AssetUri(release.Tag, name + ".sha256"), 4096, cancellationToken));
+        var match = Regex.Match(checksum.Trim(), @"^([0-9a-fA-F]{64}) [ *]?(\S+)$");
+        if (!match.Success || match.Groups[2].Value != name) throw new InvalidDataException("The published checksum is invalid.");
+        byte[] installer = await Fetch(AssetUri(release.Tag, name), 512L * 1024 * 1024, cancellationToken);
+        if (!CryptographicOperations.FixedTimeEquals(SHA256.HashData(installer), Convert.FromHexString(match.Groups[1].Value)))
+            throw new InvalidDataException("The downloaded installer does not match its published checksum.");
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, name);
+        await File.WriteAllBytesAsync(path, installer, cancellationToken);
+        return path;
+    }
+
+    private async Task<byte[]> Fetch(Uri uri, long limit, CancellationToken cancellationToken)
+    {
+        for (int hop = 0; hop < 5; hop++)
+        {
+            if (uri.Scheme != Uri.UriSchemeHttps || !DownloadHosts.Contains(uri.IdnHost, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidDataException("The download left GitHub.");
+            using var response = await downloads.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if ((int)response.StatusCode is >= 300 and < 400)
+            {
+                uri = response.Headers.Location is Uri next ? (next.IsAbsoluteUri ? next : new Uri(uri, next)) : throw new InvalidDataException("Redirect without a destination.");
+                continue;
+            }
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength > limit) throw new InvalidDataException("The download is too large.");
+            using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var output = new MemoryStream();
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await input.ReadAsync(buffer, cancellationToken)) != 0)
+            {
+                if (output.Length + read > limit) throw new InvalidDataException("The download is too large.");
+                output.Write(buffer, 0, read);
+            }
+            return output.ToArray();
+        }
+        throw new InvalidDataException("Too many redirects.");
+    }
+
+    public void Dispose() { client.Dispose(); downloads.Dispose(); }
 }
 internal sealed record SemVersion(BigInteger Major, BigInteger Minor, BigInteger Patch, string[] Pre) : IComparable<SemVersion>
 {

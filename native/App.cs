@@ -37,10 +37,14 @@ public sealed class App : Application
     private DispatcherTimer? updateTimer;
     private bool offlineCheck;
     private bool formatUpdateChecked;
+    private string? updateProgress;
+    private string? pendingInstaller;
+    // Only the per-user installation can be upgraded in place. Portable copies keep Download update.
+    private static bool Installed => File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"));
     private DispatcherTimer? wakeTimer;
     public App()
     {
-        backendConnection = new BackendConnection(http, LaunchBackend);
+        backendConnection = new BackendConnection(http, LaunchBackend, UpdateService.InstalledVersion);
         ensureBackend = backendConnection.EnsureAsync;
         stopBackend = backendConnection.StopOwnedAsync;
     }
@@ -181,11 +185,46 @@ public sealed class App : Application
         formatUpdateChecked = true;
         _ = updates.Check(urgent: true);
     }
+    private void ShowUpdate()
+    {
+        if (!stopping && updates is not null)
+            main?.SetUpdate(updates, Installed ? () => _ = InstallUpdateAsync() : null, updateProgress);
+    }
+    private async Task InstallUpdateAsync()
+    {
+        var release = updates?.Available;
+        if (release is null || stopping || updateProgress is not null || main is null) return;
+        string version = release.Tag.TrimStart('v');
+        var answer = MessageBox.Show(main, $"Install version {version} now?\n\n" +
+            "The monitor downloads the installer from this project's GitHub release, checks it against the published SHA-256 checksum, " +
+            "closes itself, and opens the installer. Your settings and cached quota are kept.",
+            "Install update", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+        if (answer != MessageBoxResult.OK || stopping) return;
+        updateProgress = $"Downloading and verifying version {version}…";
+        ShowUpdate();
+        try
+        {
+            string root = Path.Combine(Path.GetTempPath(), "AgentQuotaMonitorUpdate");
+            // Installers from earlier updates are no longer needed once this app runs.
+            BestEffort(() => { if (Directory.Exists(root)) Directory.Delete(root, true); });
+            string folder = Path.Combine(root, Guid.NewGuid().ToString("N"));
+            pendingInstaller = await updates!.DownloadInstaller(release, folder, lifetime.Token);
+            await Quit();
+        }
+        catch (OperationCanceledException) when (stopping) { }
+        catch
+        {
+            pendingInstaller = null;
+            updateProgress = null;
+            ShowUpdate();
+            main?.ShowBackendError("The update could not be downloaded or verified. Nothing was installed. Try again later or choose Download update.");
+        }
+    }
     private void InitializeUpdates()
     {
         if (updates is not null || stopping) return;
         updates = new UpdateService();
-        updates.Changed += () => { if (!stopping) main?.SetUpdate(updates); };
+        updates.Changed += ShowUpdate;
         updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         updateTimer.Tick += async (_, _) =>
         {
@@ -214,6 +253,7 @@ public sealed class App : Application
             var root = FindSource(); start.FileName = Path.Combine(root, ".venv-desktop", "Scripts", "pythonw.exe");
             start.WorkingDirectory = root; start.ArgumentList.Add("-m"); start.ArgumentList.Add("quota.server");
         }
+        start.ArgumentList.Add("--app-version"); start.ArgumentList.Add(UpdateService.InstalledVersion);
         return Process.Start(start) ?? throw new InvalidOperationException();
     }
     private static string FindSource()
@@ -400,6 +440,9 @@ public sealed class App : Application
             BestEffort(() => backendConnection?.Dispose());
             BestEffort(http.Dispose);
             BestEffort(() => instance?.Dispose());
+            // Start the verified installer only after the reader stopped and the instance mutex was released.
+            if (pendingInstaller is not null)
+                BestEffort(() => Process.Start(new ProcessStartInfo(pendingInstaller) { UseShellExecute = true })?.Dispose());
             if (exitOverride is not null) exitOverride();
             else Shutdown();
         }
