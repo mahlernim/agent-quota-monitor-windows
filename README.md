@@ -2,7 +2,7 @@
 
 See how much of your AI coding quota is left, when each window resets, and whether you are spending faster than time is passing. It lives in the Windows tray and never sends a prompt to find out.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.3)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.4)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -35,7 +35,7 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 
 ## Install
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 
@@ -60,7 +60,7 @@ A browser-only login may not create the session the monitor reads. Sign in throu
 
 If Codex or Claude Code isn't installed, Settings and the main window offer its official installer in place of **Sign in**. The confirmation shows the exact command, and it runs in a visible PowerShell window only after you choose OK. Clients installed while the monitor runs are found within a minute.
 
-The official clients renew their own sessions while you use them. If a session lapses, open that client (Codex, or Claude Code) and the monitor resumes by itself. Settings shows when a Claude Code session expires and when a Codex session was last renewed.
+The official clients renew their own sessions while you use them. If a session lapses, follow the account banner to sign in or open the official client. Claude's **Sign in** works without sending a message. Settings shows when a Claude Code session expires and when a Codex session was last renewed.
 
 ### Anthropic Claude
 
@@ -125,7 +125,7 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | The Antigravity CLI isn't installed and the desktop app is closed | No Antigravity source is running | **Install CLI**, or open the desktop app |
 | The Antigravity CLI needs sign-in | The CLI session lapsed | **Copy command**, then run `agy -p /usage` in a terminal |
 | Codex didn't accept the saved session | The Codex session lapsed | Open Codex, or **Sign in** |
-| Your Claude Code session expired | Claude Code renews its session only when used, even if it's already open | Send any message in Claude Code. The monitor resumes by itself |
+| Your Claude Code session expired | The saved Claude Code session needs renewal | Choose **Sign in**. No message or available quota is needed |
 | Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
 | GitHub Copilot isn't set up yet, or Copilot is set up | Setup is incomplete, or no GitHub account is linked | **Set up Copilot**, then **Connect** |
 | No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
@@ -155,7 +155,7 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 - **An account is missing.** Sign in through the provider's official client, wait a minute, then press **Refresh**.
 - **Antigravity goes stale when the desktop app closes.** Install the Antigravity CLI from Settings. See [Google Antigravity](#google-antigravity).
 - **An Antigravity CLI account is stale.** Wait for the next eligible read shown in Settings, then press **Refresh**. If the CLI needs sign-in, run `agy` in a terminal, sign in, run `agy -p /usage`, and refresh again.
-- **Claude says the session expired, but Claude Code is open.** An open Claude Code renews its session only when it's used. Send any message in it, and the monitor resumes within a minute. Use **Sign in** only if Claude Code itself says you're signed out.
+- **Claude says the session expired, but Claude Code is open.** Choose **Sign in** on the account banner or in Settings and complete the browser login. No message is needed, even when your five-hour quota is exhausted. Signing in does not reset your quota. The monitor resumes by itself.
 - **Codex says the session wasn't accepted.** Open the Codex app or CLI. If that doesn't help, use **Sign in**.
 - **Codex Sign in stops right away.** The Codex client exited before sign-in started. Update it with `npm install -g @openai/codex@latest`, check `~/.codex/config.toml`, or sign in through the Codex app.
 - **Claude says the read was rejected.** Check `claude auth status`, open Claude Code to let it renew its session, and press **Refresh**. If it still fails, sign in again through Claude Code.

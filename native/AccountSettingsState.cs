@@ -53,8 +53,8 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             "Codex did not accept the saved session. Open the Codex app or CLI to renew it. The monitor resumes by itself afterward. Sign in again only if that does not help.",
         "sign_in_required" => "Session expired or rejected. Sign in through the official client.",
         "session_expired" when Provider == "claude" =>
-            "The Claude Code session expired. An open but idle Claude Code renews it only when used, so send any message in Claude Code. " +
-            "The monitor resumes by itself. Sign in again only if Claude Code reports that you are signed out.",
+            "The Claude Code session expired. Choose Sign in to renew it through Claude Code and your browser. " +
+            "No message is needed, even when your usage limit is reached. Signing in does not reset your quota. The monitor resumes by itself.",
         "client_not_installed" when Provider == "codex" =>
             "Codex isn't installed on this computer. Install it from Settings or the main window, then choose Sign in.",
         "client_not_installed" when Provider == "claude" =>
@@ -99,7 +99,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 "antigravity_cli_unavailable" => new("The Antigravity CLI isn't installed and the desktop app is closed.", "install-cli", "Install CLI"),
                 "local_session_unavailable" when IsAntigravityDesktop => new("The Antigravity desktop app is closed.", "open-desktop", "Open desktop app"),
                 "sign_in_required" when IsAntigravityDesktop => new("The Antigravity desktop session was rejected.", "open-desktop", "Open desktop app"),
-                "session_expired" when Provider == "claude" => new("Your Claude Code session expired. Send any message in Claude Code to renew it."),
+                "session_expired" when Provider == "claude" => new("Your Claude Code session expired. Sign in to renew it. No message is needed.", "sign-in", "Sign in"),
                 "copilot_setup_required" => new("GitHub Copilot isn't set up yet.", "setup-copilot", "Set up Copilot"),
                 "copilot_not_connected" => new("Copilot is set up. Link your GitHub account.", "connect-copilot", "Connect"),
                 "client_not_installed" when Provider == "codex" => new("Codex isn't installed.", "install-codex", "Install Codex"),

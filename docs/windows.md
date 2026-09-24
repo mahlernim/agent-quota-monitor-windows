@@ -4,9 +4,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 ## Install and launch
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -14,7 +14,7 @@ The installer and application are unsigned. Windows may display an unknown-publi
 
 Open **Settings** (the gear icon) and select your providers. Changes save right away. Existing sessions from official coding clients are detected within a minute. A browser sign-in alone may not be enough.
 
-- **Codex and Claude.** **Sign in** launches the official client's sign-in. If a client is missing, **Install Codex** or **Install Claude Code** shows the official install command and runs it in a visible PowerShell window after you confirm. The clients renew their own sessions while you use them. If a session lapses, use that client and the monitor resumes by itself.
+- **Codex and Claude.** **Sign in** launches the official client's sign-in. If a client is missing, **Install Codex** or **Install Claude Code** shows the official install command and runs it in a visible PowerShell window after you confirm. The clients renew their own sessions while you use them. If a session lapses, follow the account banner to sign in or open the official client. Claude's **Sign in** works without sending a message.
 - **Claude specifically.** The monitor reads the sign-in saved by Claude Code, the command-line tool. The Claude desktop app or claude.ai alone isn't enough. Claude Code needs a Pro, Max, Team, or Enterprise plan. **Sign in** opens a Claude Code window next to the browser. If the browser shows a code instead of returning, paste it into that window.
 - **Antigravity.** The official Antigravity CLI (`agy`) lets the monitor read quota while the desktop app is closed. When `agy` is missing, **Install CLI** shows Google's exact install command, `irm https://antigravity.google/cli/install.ps1 | iex`, and runs it in a visible PowerShell window only after you confirm. That window then runs `agy -p /usage` so you can sign in. You can also follow the [official instructions](https://antigravity.google/docs/cli/install) yourself. **Open desktop app** opens the Antigravity desktop app, which can supply readings while it runs. Gemini CLI does not report Antigravity quota. API-key mode is not supported.
 - **Copilot.** Needs a one-time setup. **Set up Copilot** lists its steps, then installs any missing official tools with winget and the Copilot SDK in a visible window. **Connect** then links the account the GitHub CLI is signed in to. **Sign in** changes the account. See the [Copilot setup guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/copilot-setup.md).
@@ -48,7 +48,7 @@ A gray ring with a **stale** badge preserves the last value that could be read. 
 - **Antigravity CLI missing and desktop app closed.** Use **Install CLI**, or open the desktop app.
 - **Antigravity CLI needs sign-in.** **Copy command**, then run `agy -p /usage` in a terminal.
 - **Codex didn't accept the session.** Open Codex, or use **Sign in**.
-- **Claude Code session expired.** An open Claude Code renews its session only when used. Send any message in it, and the monitor resumes by itself.
+- **Claude Code session expired.** Choose **Sign in** on the account banner or in Settings and complete the browser login. No message is needed, even when your five-hour quota is exhausted. Signing in does not reset your quota. The monitor resumes by itself.
 - **Codex or Claude Code isn't installed.** Use **Install Codex** or **Install Claude Code**, then **Sign in**.
 - **Copilot isn't set up or linked.** Use **Set up Copilot**, then **Connect**.
 - **No network connection.** Use **Retry**, or wait. The monitor retries every five minutes and again when Windows reconnects or wakes from sleep.
@@ -88,6 +88,6 @@ The monitor reads official client sessions without taking over sign-in or renewa
 
 Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.3) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.4) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

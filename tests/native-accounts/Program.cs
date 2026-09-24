@@ -134,11 +134,12 @@ internal static class Program
         claudeSample["accounts"]![0]!["error"] = "session_expired";
         claudeSample["accounts"]![0]!["sessionExpiresAt"] = 1790000000;
         AccountStatus expired = Parse(claudeSample.ToJsonString())[0];
-        Check(expired.Guidance.Contains("send any message in Claude Code", StringComparison.Ordinal) &&
-            expired.Guidance.Contains("resumes by itself", StringComparison.Ordinal) && expired.Guidance.Contains("only if Claude Code reports", StringComparison.Ordinal) &&
-            expired.Problem!.Summary.Contains("Send any message in Claude Code") && !expired.Problem.Summary.Contains("Open Claude Code") &&
+        Check(expired.Guidance.Contains("Choose Sign in", StringComparison.Ordinal) &&
+            expired.Guidance.Contains("No message is needed", StringComparison.Ordinal) &&
+            expired.Guidance.Contains("does not reset your quota", StringComparison.Ordinal) &&
+            expired.Problem!.Action == "sign-in" && expired.Problem.ActionLabel == "Sign in" &&
             expired.SessionExpiresAt == 1790000000,
-            "An expired Claude session explains that an idle open Claude Code renews on use and keeps its expiry");
+            "An expired Claude session offers prompt-free sign-in without claiming a quota reset and keeps its expiry");
         string missingCli = Antigravity(desktopSource, "antigravity_cli_unavailable").Guidance;
         Check(missingCli.Contains("Install the official CLI from Settings", StringComparison.Ordinal) &&
             missingCli.Contains("Gemini CLI does not report", StringComparison.Ordinal),
@@ -518,7 +519,7 @@ internal static class Program
         Check(Problem("antigravity", "antigravity_cli_unavailable", desktop)?.Action == "install-cli", "A missing CLI offers the confirmed installer");
         Check(Problem("codex", "sign_in_required")?.Action == "sign-in" && Problem("copilot", "local_session_unavailable")?.Action == "sign-in",
             "Official-client sign-in problems offer Sign in");
-        Check(Problem("claude", "session_expired")?.Action is null, "An expired Claude session is explained without launching a client");
+        Check(Problem("claude", "session_expired")?.Action == "sign-in", "An expired Claude session offers official sign-in");
         Check(Problem("codex", "client_not_installed")?.Action == "install-codex" && Problem("claude", "client_not_installed")?.Action == "install-claude",
             "A missing client offers its official installer instead of Sign in");
         Check(Problem("claude", "client_not_installed")!.Summary.Contains("desktop app alone isn't enough", StringComparison.Ordinal) &&

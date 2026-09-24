@@ -10,7 +10,7 @@ Reads the official Codex session and its account-scoped `/wham/usage` response. 
 
 Reads the official Claude Code session. `/api/oauth/profile` verifies account identity before `/api/oauth/usage` is accepted. Product attribution is excluded from quota windows. [Official Claude Code login](https://code.claude.com/docs/en/cli-reference) can be launched from Settings. Tokens are never logged or refreshed by the monitor.
 
-The credential file's non-secret `expiresAt` value (milliseconds) is read at discovery and shown in Settings. On Windows in September 2026 the access token lasted about eight hours after Claude Code renewed it. Once it has expired, the reader reports `session_expired` without sending a request. Only Claude Code renews the session. When Claude Code rewrites the credential file, the changed file revision allows an immediate read. Expired sessions retry at the normal interval without escalating backoff.
+The credential file's non-secret `expiresAt` value (milliseconds) is read at discovery and shown in Settings. On Windows in September 2026 the access token lasted about eight hours after Claude Code renewed it. Once it has expired, the reader reports `session_expired` without sending a request. Only Claude Code renews the session. The account banner and Settings offer official sign-in through `claude auth login`, which renews authentication without a model prompt, including when model usage is exhausted. Sign-in does not reset quota. When Claude Code rewrites the credential file, the changed file revision allows an immediate read. Expired sessions retry at the normal interval without escalating backoff.
 
 ## Antigravity
 
