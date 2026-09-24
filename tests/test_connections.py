@@ -179,6 +179,43 @@ class ConnectionTests(unittest.TestCase):
         self.connection.worker.join(3)
         self.assertEqual(self.connection.job['state'], 'failed')
 
+    def test_closing_the_console_after_sign_in_still_verifies(self):
+        self.process.status = 1
+        def signed_in():
+            self.monitor.rows[0].update(status='live', lastSuccess=101)
+        self.monitor.refresh = signed_in
+        self.connection.start('claude', 'original')
+        self.connection.worker.join(3)
+        self.assertEqual(self.connection.job['state'], 'connected')
+
+    def test_claude_and_github_sign_in_open_a_visible_console(self):
+        from quota import connections
+        with patch('quota.connections.subprocess.Popen') as popen:
+            for command in (['C:/bin/claude.exe', 'auth', 'login', '--claudeai'], ['C:/bin/gh.exe', 'auth', 'login']):
+                connections.launch(command)
+                self.assertNotIn('stdout', popen.call_args.kwargs)
+                self.assertNotIn('stdin', popen.call_args.kwargs)
+                self.assertEqual(popen.call_args.kwargs['creationflags'], getattr(connections.subprocess, 'CREATE_NEW_CONSOLE', 0))
+            connections.launch(['C:/bin/codex.exe', 'login'])
+            self.assertEqual(popen.call_args.kwargs['stdout'], connections.subprocess.DEVNULL)
+
+    def test_claude_waiting_message_explains_the_pasted_code(self):
+        observed = threading.Event()
+        original = self.connection._set
+        def record(job_id, state, message):
+            original(job_id, state, message)
+            if state == 'waiting': observed.set()
+        self.connection._set = record
+        job = self.connection.start('claude')
+        self.assertTrue(observed.wait(3))
+        self.assertIn('paste the code into the Claude Code window', self.connection.job['message'])
+        self.connection.cancel(job['id'])
+
+    def test_missing_client_message_does_not_ask_for_a_restart(self):
+        self.connection.resolver = lambda p: None
+        with self.assertRaises(ValueError) as error: self.connection.start('claude')
+        self.assertNotIn('restart', str(error.exception))
+
     def test_early_codex_exit_explains_possible_fixes_without_output(self):
         self.process.status = 1
         self.connection.start('codex')

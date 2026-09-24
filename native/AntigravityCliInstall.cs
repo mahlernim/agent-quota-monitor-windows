@@ -16,7 +16,8 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
 
     /// <summary>Anthropic's official native Claude Code installer.</summary>
     internal static readonly OfficialInstall Claude = Client("Claude Code", "https://claude.ai/install.ps1",
-        "It installs Claude Code for your Windows account in %USERPROFILE%\\.local\\bin.", "Anthropic Claude");
+        "It installs Claude Code for your Windows account in %USERPROFILE%\\.local\\bin. " +
+        "Claude Code needs a Claude Pro, Max, Team, or Enterprise plan.", "Anthropic Claude");
 
     /// <summary>OpenAI's official standalone Codex installer. OpenAI documents running it with a process-only execution policy bypass.</summary>
     internal static readonly OfficialInstall Codex = Client("Codex", "https://chatgpt.com/codex/install.ps1",
@@ -74,7 +75,7 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
             $"Write-Host 'Installing {name} from {source}' -ForegroundColor Cyan",
             command,
             "Write-Host ''",
-            $"Write-Host 'Finished. Return to Agent Quota Monitor and choose Sign in beside {row}.' -ForegroundColor Green");
+            $"Write-Host 'Finished. Return to Agent Quota Monitor and choose Sign in beside {row}. The button can take up to a minute to appear.' -ForegroundColor Green");
         return new OfficialInstall("Install " + name, command, confirmation, script, bypass);
     }
 

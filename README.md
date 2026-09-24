@@ -2,7 +2,7 @@
 
 See how much of your AI coding quota is left, when each window resets, and whether you are spending faster than time is passing. It lives in the Windows tray and never sends a prompt to find out.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.2)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.3)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -35,7 +35,7 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 
 ## Install
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.3/agent-quota-monitor-windows-0.3.3-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 
@@ -61,6 +61,16 @@ A browser-only login may not create the session the monitor reads. Sign in throu
 If Codex or Claude Code isn't installed, Settings and the main window offer its official installer in place of **Sign in**. The confirmation shows the exact command, and it runs in a visible PowerShell window only after you choose OK. Clients installed while the monitor runs are found within a minute.
 
 The official clients renew their own sessions while you use them. If a session lapses, open that client (Codex, or Claude Code) and the monitor resumes by itself. Settings shows when a Claude Code session expires and when a Codex session was last renewed.
+
+### Anthropic Claude
+
+The monitor reads the sign-in saved by **Claude Code**, Anthropic's command-line tool. Signing in to the Claude desktop app or claude.ai alone isn't enough, because neither saves a session the monitor can read. Claude Code needs a Claude Pro, Max, Team, or Enterprise plan.
+
+1. In Settings, tick **Anthropic Claude**. If Claude Code is missing, choose **Install Claude Code** and confirm. The official installer runs in a PowerShell window.
+2. When it finishes, choose **Sign in**. It can take up to a minute to replace the install button.
+3. A Claude Code window and your browser open. Sign in in the browser. If the browser shows a code instead of returning, paste it into the Claude Code window.
+
+The account appears once its quota has been read.
 
 ### Google Antigravity
 

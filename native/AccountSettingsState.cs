@@ -58,7 +58,8 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "client_not_installed" when Provider == "codex" =>
             "Codex isn't installed on this computer. Install it from Settings or the main window, then choose Sign in.",
         "client_not_installed" when Provider == "claude" =>
-            "Claude Code isn't installed on this computer. Install it from Settings or the main window, then choose Sign in.",
+            "Claude Code isn't installed on this computer. The monitor reads the sign-in saved by Claude Code, so the Claude desktop app or website alone isn't enough. " +
+            "Install it from Settings or the main window, then choose Sign in.",
         "session_expired" => "The official session expired. Open the official client to renew it.",
         "antigravity_cli_unavailable" =>
             "The Antigravity CLI (agy) is not installed and the Antigravity desktop app is closed. Install the official CLI from Settings to read quota without the desktop app, or open the desktop app. Gemini CLI does not report Antigravity quota.",
@@ -102,7 +103,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 "copilot_setup_required" => new("GitHub Copilot isn't set up yet.", "setup-copilot", "Set up Copilot"),
                 "copilot_not_connected" => new("Copilot is set up. Link your GitHub account.", "connect-copilot", "Connect"),
                 "client_not_installed" when Provider == "codex" => new("Codex isn't installed.", "install-codex", "Install Codex"),
-                "client_not_installed" when Provider == "claude" => new("Claude Code isn't installed.", "install-claude", "Install Claude Code"),
+                "client_not_installed" when Provider == "claude" => new("Claude Code isn't installed. The Claude desktop app alone isn't enough.", "install-claude", "Install Claude Code"),
                 "session_expired" => new("The session expired. Open the official client to renew it."),
                 "sign_in_required" when Provider == "codex" => new("Codex didn't accept the saved session. Open Codex, or sign in again.", "sign-in", "Sign in"),
                 "sign_in_required" when Provider == "claude" => new("Claude didn't accept the saved session. Open Claude Code, or sign in again.", "sign-in", "Sign in"),
