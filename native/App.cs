@@ -22,6 +22,7 @@ public sealed class App : Application
     private bool stopping; private bool polling; private bool preferencesLoaded; private bool backendReady; private bool connecting;
     private bool reorderBusy;
     private List<string> accountIds = new();
+    private List<AccountStatus> accountStates = new();
     private SingleInstance? instance; private DispatcherTimer? timer;
     private readonly CancellationTokenSource lifetime = new();
     private readonly BackendConnection? backendConnection;
@@ -81,8 +82,9 @@ public sealed class App : Application
         http.DefaultRequestHeaders.Add("Origin", "http://127.0.0.1:8765");
         http.DefaultRequestHeaders.Add("X-Quota-Request", "refresh");
         main = new MainWindow(SelectTray, TogglePin, ToggleFloating, () => _ = RefreshAsync(), () => _ = Quit(), ShowAccounts,
-            (item, direction) => _ = MoveRingAsync(item, direction),
-            (accountId, direction) => _ = MoveAccountAsync(accountId, direction));
+            (item, offset) => _ = MoveRingAsync(item, offset),
+            (accountId, offset) => _ = MoveAccountAsync(accountId, offset),
+            (account, action) => _ = AccountActionAsync(account, action));
         main.Closing += (_, ev) => { if (!stopping) { ev.Cancel = true; main.Hide(); } };
         floating = new FloatingWindow(ShowMain, HideFloating);
         main.Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/robot-ring.ico"));
@@ -280,6 +282,7 @@ public sealed class App : Application
             List<QuotaItem> candidate = QuotaSnapshot.Parse(data.RootElement);
             List<string> candidateAccountIds = data.RootElement.GetProperty("accounts").EnumerateArray()
                 .Select(account => QuotaItem.Text(account, "id")).ToList();
+            List<AccountStatus> candidateStates = AccountStatus.Parse(data.RootElement).ToList();
             if (!preferencesLoaded)
             {
                 using var prefs = JsonDocument.Parse(await http.GetStringAsync("/api/desktop", cancellation.Token));
@@ -293,12 +296,14 @@ public sealed class App : Application
                 if (QuotaItem.Number(p, "wpfFloatingLeft") is double x) floating!.Left = x;
                 if (QuotaItem.Number(p, "wpfFloatingTop") is double y) floating!.Top = y;
                 floating!.SetScale((QuotaItem.Number(p, "desktopFloatingScale") ?? 100) / 100);
+                QuotaNames.Apply(p);
                 preferencesLoaded = true;
                 if (p.TryGetProperty("desktopFloating", out var f) && f.ValueKind == JsonValueKind.True) { floating!.Opacity = opacity; floating.Show(); }
             }
             if (stopping || (connecting && !duringConnection)) return;
             items = candidate;
             accountIds = candidateAccountIds;
+            accountStates = candidateStates;
             backendReady = true;
             CheckForFormatUpdate(data.RootElement);
             main?.ShowBackendError("");
@@ -336,7 +341,7 @@ public sealed class App : Application
     private bool Render()
     {
         if (stopping) return false;
-        try { main?.SetData(items, selected, pins); floating?.SetData(items.Where(q => pins.Contains(q.Key)).ToList()); tray?.SetQuota(items.FirstOrDefault(q => q.Key == selected)); return true; }
+        try { main?.SetData(items, selected, pins, accountStates); floating?.SetData(items.Where(q => pins.Contains(q.Key)).ToList()); tray?.SetQuota(items.FirstOrDefault(q => q.Key == selected)); return true; }
         catch { if (!stopping && main is not null) main.Title = "Agent Quota Monitor · display unavailable"; return false; }
     }
     private void SelectTray(QuotaItem item) { if (stopping || !backendReady || connecting) return; selected = item.Key; Render(); _ = Post("/api/desktop", new { desktopSelection = item.Selection }); }
@@ -347,13 +352,19 @@ public sealed class App : Application
         var values = pins.Select(key => { var ids = JsonSerializer.Deserialize<string[]>(key)!; return new { accountId = ids[0], groupId = ids[1], bucketId = ids[2] }; }).ToArray();
         _ = Post("/api/desktop", new { desktopFloatingSelections = values });
     }
-    private async Task MoveRingAsync(QuotaItem item, int direction)
+    /// <summary>Moves a ring by an offset within its own account, as a menu, key, or drag and drop requests.</summary>
+    private async Task MoveRingAsync(QuotaItem item, int offset)
     {
-        if (reorderBusy || stopping || !backendReady || connecting || direction is not (-1 or 1)) return;
+        if (reorderBusy || stopping || !backendReady || connecting || offset == 0) return;
         var reordered = items.ToList();
-        int from = reordered.FindIndex(row => row.Key == item.Key), to = from + direction;
-        if (from < 0 || to < 0 || to >= reordered.Count || reordered[to].AccountId != item.AccountId) return;
-        (reordered[from], reordered[to]) = (reordered[to], reordered[from]);
+        var slots = Enumerable.Range(0, reordered.Count).Where(index => reordered[index].AccountId == item.AccountId).ToList();
+        var rings = slots.Select(index => reordered[index]).ToList();
+        int from = rings.FindIndex(row => row.Key == item.Key), to = from + offset;
+        if (from < 0 || to < 0 || to >= rings.Count) return;
+        var moving = rings[from];
+        rings.RemoveAt(from);
+        rings.Insert(to, moving);
+        for (int index = 0; index < slots.Count; index++) reordered[slots[index]] = rings[index];
         reorderBusy = true;
         main?.SetReorderBusy(true);
         try
@@ -368,16 +379,19 @@ public sealed class App : Application
         catch { main?.ShowBackendError("Could not save ring order. Refresh and try again."); }
         finally { reorderBusy = false; main?.SetReorderBusy(false); }
     }
-    private async Task MoveAccountAsync(string accountId, int direction)
+    /// <summary>Moves an account among the accounts the main window shows. Hidden accounts keep their saved slots.</summary>
+    private async Task MoveAccountAsync(string accountId, int offset)
     {
-        if (reorderBusy || stopping || !backendReady || connecting || direction is not (-1 or 1)) return;
-        var visible = items.Select(row => row.AccountId).Distinct(StringComparer.Ordinal).ToList();
-        int from = visible.IndexOf(accountId), to = from + direction;
+        if (reorderBusy || stopping || !backendReady || connecting || offset == 0) return;
+        var visible = (main?.AccountOrder ?? items.Select(row => row.AccountId).Distinct(StringComparer.Ordinal).ToList())
+            .Where(accountIds.Contains).ToList();
+        int from = visible.IndexOf(accountId), to = from + offset;
         if (from < 0 || to < 0 || to >= visible.Count) return;
         var reordered = accountIds.ToList();
-        int sourceIndex = reordered.IndexOf(visible[from]), targetIndex = reordered.IndexOf(visible[to]);
-        if (sourceIndex < 0 || targetIndex < 0) return;
-        (reordered[sourceIndex], reordered[targetIndex]) = (reordered[targetIndex], reordered[sourceIndex]);
+        var slots = visible.Select(id => reordered.IndexOf(id)).OrderBy(index => index).ToList();
+        visible.RemoveAt(from);
+        visible.Insert(to, accountId);
+        for (int index = 0; index < slots.Count; index++) reordered[slots[index]] = visible[index];
         reorderBusy = true;
         main?.SetReorderBusy(true);
         try
@@ -391,6 +405,57 @@ public sealed class App : Application
         catch (OperationCanceledException) when (stopping) { }
         catch { main?.ShowBackendError("Could not save account order. Refresh and try again."); }
         finally { reorderBusy = false; main?.SetReorderBusy(false); }
+    }
+    /// <summary>Runs the one action offered for an account problem in the main window.</summary>
+    private async Task AccountActionAsync(AccountStatus account, string action)
+    {
+        if (stopping || main is null) return;
+        switch (action)
+        {
+            case "install-cli":
+                if (!AntigravityCliInstall.Confirm(main)) return;
+                try { AntigravityCliInstall.Start(); main.ShowNotice("The Antigravity CLI installer opened in PowerShell. Follow that window, then return here."); }
+                catch (Exception) { main.ShowNotice("PowerShell couldn't be started. Install the CLI from antigravity.google/docs/cli/install."); }
+                return;
+            case "copy-agy":
+                try { Clipboard.SetText("agy -p /usage"); main.ShowNotice("Copied agy -p /usage. Run it in a terminal and sign in if asked."); }
+                catch (System.Runtime.InteropServices.ExternalException) { main.ShowNotice("The clipboard is busy. Run agy -p /usage in a terminal."); }
+                return;
+            case "check-updates":
+                if (updates is null) return;
+                await updates.Check(true);
+                if (!stopping) main.ShowNotice(updates.Status);
+                return;
+            case "retry":
+                await ActionPost("/api/wake", new { }, "Retrying accounts that couldn't connect. Provider cooldowns still apply.");
+                return;
+            case "open-desktop":
+                await ActionPost("/api/connections/start", new { provider = "antigravity" }, "Opening the Antigravity desktop app.");
+                return;
+            case "sign-in":
+                await ActionPost("/api/connections/start", new { provider = account.Provider, accountId = account.Id },
+                    "Official sign-in started. Follow the browser or console window. Settings shows its progress.");
+                return;
+        }
+    }
+    private async Task ActionPost(string path, object body, string success)
+    {
+        if (stopping || !backendReady || connecting) { main?.ShowNotice("The quota reader isn't connected. Choose Retry connection first."); return; }
+        try
+        {
+            using var response = await BackendRequests.PostAsync(http, path, body, lifetime.Token);
+            if (response.IsSuccessStatusCode) { main?.ShowNotice(success); return; }
+            string message = "The request couldn't be completed.";
+            try
+            {
+                using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                if (error.RootElement.TryGetProperty("error", out var text) && text.ValueKind == JsonValueKind.String) message = text.GetString()!;
+            }
+            catch (JsonException) { }
+            main?.ShowNotice(message.Length <= 300 ? message : message[..300]);
+        }
+        catch (OperationCanceledException) when (stopping) { }
+        catch (Exception) { main?.ShowNotice("The request couldn't be completed."); }
     }
     private void ShowMain() { if (stopping) return; main?.Show(); if (main != null) { main.WindowState = WindowState.Normal; main.Activate(); } }
     private AccountsWindow? accounts;

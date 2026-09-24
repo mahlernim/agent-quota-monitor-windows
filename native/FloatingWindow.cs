@@ -96,14 +96,18 @@ public sealed class FloatingWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Center,
                 ToolTip = item.Tooltip
             });
-            cell.Children.Add(new TextBlock
+            // The readable name is used when it fits the cell, even narrowed. Otherwise initials.
+            // The cell scales as a whole, so a fit at 100 percent holds at every supported size.
+            cell.Children.Add(new FitText
             {
-                Text = (item.Code ?? "?") + (item.Window ?? string.Empty),
+                Text = item.Label,
+                Fallback = item.ShortLabel,
                 Foreground = item.Stale ? Brushes.Gray : Brushes.DarkSlateGray,
                 FontSize = 9,
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                TextTrimming = TextTrimming.CharacterEllipsis
+                FontWeight = FontWeights.Normal,
+                Width = 56,
+                Height = 13,
+                HorizontalAlignment = HorizontalAlignment.Center
             });
             _items.Children.Add(cell);
         }

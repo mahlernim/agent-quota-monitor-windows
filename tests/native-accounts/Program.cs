@@ -144,6 +144,7 @@ internal static class Program
             Antigravity(cliSource, "schema_changed").Guidance.Contains("Check for a monitor update", StringComparison.Ordinal),
             "Offline and format-change failures have specific guidance");
         TestCards();
+        TestProblems();
     }
 
     private static void TestCards()
@@ -194,9 +195,12 @@ internal static class Program
             var signInButtons = Field<Dictionary<string, Button>>(window, "_signInButtons");
             Check((string)signInButtons["antigravity"].Content == "Open desktop app", "Antigravity action identifies the desktop client");
             var body = (StackPanel)((ScrollViewer)((DockPanel)window.Content).Children.OfType<ScrollViewer>().Single()).Content;
-            Check(body.Children.OfType<TextBlock>().Any(block => block.Text.Contains("Antigravity Open desktop app", StringComparison.Ordinal) &&
-                block.Text.Contains("agy -p /usage", StringComparison.Ordinal)),
-                "Settings explains that CLI recovery uses a separate terminal session");
+            static string Inline(TextBlock block) => string.Concat(block.Inlines.OfType<System.Windows.Documents.Run>().Select(run => run.Text));
+            Check(body.Children.OfType<TextBlock>().Any(block => Inline(block).Contains("reads quota while the desktop app is closed", StringComparison.Ordinal) &&
+                Inline(block).Contains("Open desktop app doesn't sign in the CLI", StringComparison.Ordinal) && block.Inlines.OfType<System.Windows.Documents.Hyperlink>().Any()),
+                "Settings keeps a one-line Antigravity hint with a link instead of a long paragraph");
+            Check(!body.Children.OfType<Button>().Any(button => button.Content is string text && text.Contains("Save monitored providers")),
+                "Providers have no separate Save button");
             AccountLayoutState layout = Field<AccountLayoutState>(window, "_layout");
             Check(layout.Loaded && layout.Displayed.Count == 3, "The actual Settings window reads the synthetic backend");
             Button installCli = Field<Button>(window, "_installCli");
@@ -223,19 +227,26 @@ internal static class Program
             handler.Status = missing.ToJsonString();
             await Call(window, "PollAsync");
             Check(installCli.Visibility == Visibility.Collapsed, "The offer disappears once agy is installed");
+            await TestProviders(window, handler);
+            await TestNames(window, handler);
+            Check(!Move(window, "b", -1), "Rows cannot move outside Edit order");
             Click(Field<Button>(window, "_editOrder"));
-            MoveButton(window, "b", -1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Check(layout.Order.SequenceEqual(new[] { "b", "a", "c" }), "Move up acts on the stable account ID");
+            Check(Move(window, "b", -1) && layout.Order.SequenceEqual(new[] { "b", "a", "c" }), "Moving a row acts on the stable account ID");
+            Check(Tagged<Border>(Field<StackPanel>(window, "_accounts"), "b") is Border movedRow && movedRow.IsKeyboardFocusWithin,
+                "Focus stays on the moved row");
+            Check(Move(window, "c", -2) && layout.Order.SequenceEqual(new[] { "c", "b", "a" }) && Move(window, "c", 2) && layout.Order.SequenceEqual(new[] { "b", "a", "c" }),
+                "A drop moves a row by several places inside the draft");
             handler.Status = Snapshot("c", "a", "b");
             await Call(window, "PollAsync");
             Check(layout.Order.SequenceEqual(new[] { "b", "a", "c" }), "The actual status poll preserves unsaved moves");
+            int changedBeforeSave = changed;
             await Call(window, "SaveOrderAsync");
             using (JsonDocument request = JsonDocument.Parse(handler.LastLayout!))
             {
                 Check(request.RootElement.GetProperty("order").EnumerateArray().Select(value => value.GetString()).SequenceEqual(new[] { "b", "a", "c" }) &&
                     request.RootElement.GetProperty("removed").GetArrayLength() == 0, "Save sends exact IDs without hiding accounts");
             }
-            Check(!layout.Editing && changed == 1 && Field<TextBlock>(window, "_message").Text == "Account order saved.", "Save applies and preserves its confirmation after polling");
+            Check(!layout.Editing && changed == changedBeforeSave + 1 && Field<TextBlock>(window, "_message").Text == "Account order saved.", "Save applies and preserves its confirmation after polling");
             handler.GetStatus = HttpStatusCode.ServiceUnavailable;
             await Call(window, "PollAsync");
             Check(Field<TextBlock>(window, "_health").Text.Length > 0 && Field<TextBlock>(window, "_message").Text == "Account order saved.", "Poll failures have separate feedback");
@@ -247,7 +258,7 @@ internal static class Program
             handler.PostStatus = HttpStatusCode.OK;
 
             Click(Field<Button>(window, "_editOrder"));
-            MoveButton(window, "a", -1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Move(window, "a", -1);
             string[] draft = layout.Order;
             handler.LayoutStatus = HttpStatusCode.Conflict;
             await Call(window, "SaveOrderAsync");
@@ -257,7 +268,7 @@ internal static class Program
             handler.LayoutStatus = HttpStatusCode.OK;
 
             Click(Field<Button>(window, "_editOrder"));
-            MoveButton(window, "a", -1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Move(window, "a", -1);
             string[] saved = layout.Order;
             var pending = new TaskCompletionSource<HttpResponseMessage>();
             string oldSnapshot = handler.Status;
@@ -275,9 +286,16 @@ internal static class Program
             Check(layout.HasConflict && layout.Order.SequenceEqual(prior) && !Field<Button>(window, "_saveOrder").IsEnabled, "Discovery during editing blocks stale layout writes");
             Click(Field<Button>(window, "_cancelOrder"));
             Check(layout.Displayed.Count == 4, "Cancel displays newly discovered accounts");
-            var expander = Field<StackPanel>(window, "_accounts").Children.OfType<StackPanel>().First().Children.OfType<Expander>().Single();
-            string details = ((TextBlock)expander.Content).Text;
-            Check(details.Contains("Verified stable identity") && details.Contains("Synthetic official client") && details.Contains("Last successful read") && details.Contains("Next eligible read") && details.Contains("Synthetic plan"), "Native account details retain browser diagnostics");
+            string firstId = layout.Displayed[0].Id;
+            Button toggle = Tagged<Button>(Field<StackPanel>(window, "_accounts"), "details:" + firstId)!;
+            Check(Tagged<TextBlock>(Field<StackPanel>(window, "_accounts"), "detail-text:" + firstId) is null, "Details start collapsed");
+            Click(toggle);
+            string details = Tagged<TextBlock>(Field<StackPanel>(window, "_accounts"), "detail-text:" + firstId)!.Text;
+            Check(details.Contains("Last read") && details.Contains("Next read") && details.Contains("Synthetic official client") && details.Contains("Synthetic plan") &&
+                !details.Contains("Verified stable identity") && !details.Contains("Account ID"), "Details show useful fields and leave internal identity values to Copy details");
+            string copied = layout.Displayed[0].Diagnostics();
+            Check(copied.Contains("Verified stable identity") && copied.Contains("Account ID · " + firstId) && copied.Contains("Error · rate_limited") &&
+                !copied.Contains("shared@example.test") && !copied.Contains("test-only"), "Copy details uses an explicit field list without the account label");
             await Call(window, "StartConnectionAsync", "codex");
             Check(handler.LastPath == "/api/connections/start" && JsonNode.Parse(handler.LastBody!)!["provider"]!.GetValue<string>() == "codex", "Official sign-in retains the selected provider");
             await Call(window, "StartConnectionAsync", "antigravity");
@@ -321,8 +339,7 @@ internal static class Program
                 handler.Status = preview.ToJsonString();
                 await Call(window, "PollAsync");
                 Field<TextBlock>(window, "_message").Text = "Synthetic preview. No provider account is connected.";
-                Click(Field<Button>(window, "_editOrder"));
-                Field<StackPanel>(window, "_accounts").Children.OfType<StackPanel>().Last().Children.OfType<Expander>().Single().IsExpanded = true;
+                Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "details:sample-copilot")!);
                 window.Height = 920;
                 window.UpdateLayout();
                 await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
@@ -340,12 +357,105 @@ internal static class Program
         finally { window.Close(); owner.Close(); }
     }
 
+    private static async Task TestProviders(AccountsWindow window, SyntheticBackend handler)
+    {
+        var checks = Field<Dictionary<string, CheckBox>>(window, "_providerChecks");
+        Check(checks["codex"].IsChecked == true && checks["claude"].IsChecked == false && checks.Values.All(check => check.IsEnabled),
+            "Provider checkboxes load the saved selection");
+        checks["claude"].IsChecked = true;
+        await Call(window, "SaveProvidersAsync");
+        Check(handler.LastPath == "/api/providers" && JsonNode.Parse(handler.LastBody!)!["enabled"]!.AsArray().Select(value => value!.GetValue<string>())
+            .SequenceEqual(new[] { "codex", "claude", "copilot" }), "A provider change saves the full selection right away");
+
+        handler.PostStatus = HttpStatusCode.BadRequest;
+        checks["claude"].IsChecked = false;
+        await Call(window, "SaveProvidersAsync");
+        Check(checks["claude"].IsChecked == true && Field<TextBlock>(window, "_message").Text == "Synthetic operation failure.",
+            "A failed save restores the last confirmed selection");
+        handler.PostStatus = HttpStatusCode.OK;
+
+        // A slow first write must not overwrite later clicks, and a skipped middle write is never sent.
+        int before = handler.PostBodies.Count;
+        var slow = new TaskCompletionSource<HttpResponseMessage>();
+        handler.NextPost = slow.Task;
+        checks["antigravity"].IsChecked = true;
+        Task first = Call(window, "SaveProvidersAsync");
+        checks["copilot"].IsChecked = false;
+        Task second = Call(window, "SaveProvidersAsync");
+        checks["claude"].IsChecked = false;
+        Task third = Call(window, "SaveProvidersAsync");
+        slow.SetResult(SyntheticBackend.Json("{\"error\":\"Synthetic slow failure.\"}", HttpStatusCode.BadRequest));
+        await Task.WhenAll(first, second, third);
+        Check(handler.PostBodies.Count == before + 2 && JsonNode.Parse(handler.PostBodies[^1])!["enabled"]!.AsArray().Select(value => value!.GetValue<string>())
+            .SequenceEqual(new[] { "codex", "antigravity" }) && checks["antigravity"].IsChecked == true && checks["copilot"].IsChecked == false &&
+            checks["claude"].IsChecked == false, "Only the newest selection is sent after a slow write, and a stale failure changes nothing");
+    }
+
+    private static async Task TestNames(AccountsWindow window, SyntheticBackend handler)
+    {
+        var initials = Field<Dictionary<string, TextBox>>(window, "_initialsFields");
+        var names = Field<Dictionary<string, TextBox>>(window, "_nameFields");
+        Check(initials["antigravity-gemini"].Text == "AG" && initials["antigravity-claude-gpt"].Text == "AC" && names["antigravity-claude-gpt"].Text == "Claude and GPT",
+            "Name fields start with the AG and AC defaults and a truthful combined name");
+        int before = handler.PostBodies.Count;
+        initials["antigravity-gemini"].Text = "A-G";
+        await Call(window, "SaveNamesAsync");
+        Check(handler.PostBodies.Count == before && Field<TextBlock>(window, "_message").Text.Contains("letters or digits"), "Invalid initials are rejected without a request");
+        initials["antigravity-gemini"].Text = "GEM";
+        names["antigravity-gemini"].Text = "Gemini Pro";
+        await Call(window, "SaveNamesAsync");
+        JsonNode saved = JsonNode.Parse(handler.LastBody!)!["quotaLabels"]!;
+        Check(handler.LastPath == "/api/desktop" && saved["antigravity-gemini"]!["initials"]!.GetValue<string>() == "GEM" &&
+            QuotaNames.For("antigravity-gemini") == new QuotaName("GEM", "Gemini Pro"), "Valid names are saved as desktop preferences and applied");
+        var item = new QuotaItem { Code = "GM", Window = "5h", Provider = "antigravity" };
+        Check(item.Label == "Gemini Pro 5h" && item.ShortLabel == "GEM 5h" && item.IdentityColor == "#287bc1",
+            "Renamed labels never change the internal code or ring color");
+        QuotaNames.Set(QuotaNames.Defaults);
+        foreach (string type in QuotaNames.Types) { initials[type].Text = QuotaNames.Defaults[type].Initials; names[type].Text = QuotaNames.Defaults[type].Name; }
+    }
+
+    private static void TestProblems()
+    {
+        AccountProblem? Problem(string provider, string error, string source = "Synthetic official client")
+        {
+            JsonObject sample = JsonNode.Parse(Snapshot("problem"))!.AsObject();
+            sample["accounts"]![0]!["provider"] = provider;
+            sample["accounts"]![0]!["error"] = error;
+            sample["accounts"]![0]!["source"] = source;
+            return Parse(sample.ToJsonString())[0].Problem;
+        }
+        const string cli = "Official Antigravity CLI /usage (desktop app not required)";
+        const string desktop = "Official running Antigravity local service";
+        foreach (string error in new[] { "sign_in_required", "local_session_unavailable", "antigravity_cli_failed" })
+            Check(Problem("antigravity", error, cli)?.Action == "copy-agy", "Antigravity CLI " + error + " points to agy, never the desktop app or Sign in");
+        Check(Problem("antigravity", "local_session_unavailable", desktop)?.Action == "open-desktop" &&
+            Problem("antigravity", "sign_in_required", desktop)?.Action == "open-desktop", "Antigravity desktop problems open the desktop app");
+        Check(Problem("antigravity", "antigravity_cli_unavailable", desktop)?.Action == "install-cli", "A missing CLI offers the confirmed installer");
+        Check(Problem("codex", "sign_in_required")?.Action == "sign-in" && Problem("copilot", "local_session_unavailable")?.Action == "sign-in",
+            "Official-client sign-in problems offer Sign in");
+        Check(Problem("claude", "session_expired")?.Action is null, "An expired Claude session is explained without launching a client");
+        Check(Problem("codex", "network_unavailable")?.Action == "retry" && Problem("claude", "connection_or_response_error")?.Action == "retry" &&
+            Problem("codex", "schema_changed")?.Action == "check-updates" && Problem("codex", "rate_limited")?.Action is null,
+            "Network, format, and cooldown problems choose matching actions");
+        Check(Problem("codex", "") is null, "A healthy account has no banner");
+        Check(QuotaNames.Defaults["antigravity-gemini"] == new QuotaName("AG", "Gemini") && QuotaNames.Defaults["antigravity-claude-gpt"] == new QuotaName("AC", "Claude and GPT") &&
+            QuotaNames.Defaults.Values.All(name => QuotaNames.ValidInitials(name.Initials) && QuotaNames.ValidName(name.Name)),
+            "Defaults use AG and AC and fit the name limits");
+    }
+
     private static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
     private static Task Call(object target, string name, params object[] args) => (Task)target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args)!;
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-    private static Button MoveButton(AccountsWindow window, string id, int direction) => Field<StackPanel>(window, "_accounts").Children.OfType<StackPanel>()
-        .SelectMany(card => card.Children.OfType<DockPanel>()).SelectMany(row => row.Children.OfType<StackPanel>())
-        .SelectMany(row => row.Children.OfType<Button>()).Single(button => button.Tag is ValueTuple<string, int> key && key == (id, direction));
+    // Drag and drop and Alt+arrow keys both call MoveRow on the unsaved draft.
+    private static bool Move(AccountsWindow window, string id, int offset) =>
+        (bool)window.GetType().GetMethod("MoveRow", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { id, offset })!;
+    private static T? Tagged<T>(DependencyObject node, string tag) where T : FrameworkElement
+    {
+        if (node is T match && Equals(match.Tag, tag)) return match;
+        foreach (object child in LogicalTreeHelper.GetChildren(node))
+            if (child is DependencyObject next && Tagged<T>(next, tag) is T found) return found;
+        return null;
+    }
 }
 
 internal sealed class SyntheticBackend : HttpMessageHandler
@@ -359,6 +469,8 @@ internal sealed class SyntheticBackend : HttpMessageHandler
     internal string? LastPath { get; private set; }
     internal string? LastBody { get; private set; }
     internal Task<HttpResponseMessage>? NextGet { get; set; }
+    internal Task<HttpResponseMessage>? NextPost { get; set; }
+    internal List<string> PostBodies { get; } = [];
     internal static HttpResponseMessage Json(string body, HttpStatusCode status = HttpStatusCode.OK) => new(status)
         { Content = new StringContent(body, Encoding.UTF8, "application/json") };
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -371,6 +483,8 @@ internal sealed class SyntheticBackend : HttpMessageHandler
         }
         LastPath = request.RequestUri!.AbsolutePath;
         LastBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+        PostBodies.Add(LastBody);
+        if (NextPost is not null) { Task<HttpResponseMessage> pending = NextPost; NextPost = null; return await pending; }
         if (LastPath == "/api/accounts/layout")
         {
             LastLayout = LastBody;

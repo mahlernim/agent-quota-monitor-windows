@@ -6,6 +6,8 @@ using System.Text.Json;
 
 namespace AgentQuotaMonitor;
 
+internal sealed record AccountProblem(string Summary, string? Action = null, string? ActionLabel = null);
+
 internal sealed record AccountStatus(string Id, string Provider, string Label, string Status,
     string Source, string Identity, string Error, double? LastSuccess, double? NextAttempt, string QuotaDetails = "", string RetryState = "",
     double? SessionExpiresAt = null, double? SessionRenewedAt = null)
@@ -71,6 +73,72 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "antigravity_cli_auth_unsupported" => "Antigravity CLI has a custom provider, API key, or unreadable auth settings. Restore Google account sign-in in agy, then run agy -p /usage and press Refresh in the monitor.",
         _ => "Quota reader unavailable. " + Error.Replace('_', ' ')
     };
+
+    /// <summary>
+    /// A one-sentence summary and at most one action for the main window. The action depends on
+    /// provider and source as well as the error, so CLI accounts never get a desktop action.
+    /// </summary>
+    internal AccountProblem? Problem
+    {
+        get
+        {
+            if (RetryState == "suspended") return new("Automatic reads are paused by the provider's retry time.");
+            bool official = Provider is "codex" or "claude" or "copilot";
+            return Error switch
+            {
+                "" => null,
+                "sign_in_required" or "local_session_unavailable" or "antigravity_cli_failed" when IsAntigravityCli =>
+                    new("The Antigravity CLI needs sign-in. Run agy -p /usage in a terminal.", "copy-agy", "Copy command"),
+                "antigravity_cli_unavailable" => new("The Antigravity CLI isn't installed and the desktop app is closed.", "install-cli", "Install CLI"),
+                "local_session_unavailable" when IsAntigravityDesktop => new("The Antigravity desktop app is closed.", "open-desktop", "Open desktop app"),
+                "sign_in_required" when IsAntigravityDesktop => new("The Antigravity desktop session was rejected.", "open-desktop", "Open desktop app"),
+                "session_expired" when Provider == "claude" => new("Your Claude Code session expired. Open Claude Code to renew it."),
+                "session_expired" => new("The session expired. Open the official client to renew it."),
+                "sign_in_required" when Provider == "codex" => new("Codex didn't accept the saved session. Open Codex, or sign in again.", "sign-in", "Sign in"),
+                "sign_in_required" when Provider == "claude" => new("Claude didn't accept the saved session. Open Claude Code, or sign in again.", "sign-in", "Sign in"),
+                "sign_in_required" when official => new("The official client needs sign-in.", "sign-in", "Sign in"),
+                "local_session_unavailable" when official => new("No readable session from the official client.", "sign-in", "Sign in"),
+                "network_unavailable" => new("No network connection.", "retry", "Retry"),
+                "connection_or_response_error" => new("The provider couldn't be reached.", "retry", "Retry"),
+                "schema_changed" => new("The provider changed its data format.", "check-updates", "Check for updates"),
+                "rate_limited" => new("Provider rate limit. Waiting for the next read."),
+                _ => new(Guidance.Split(". ")[0].TrimEnd('.') + ".")
+            };
+        }
+    }
+
+    /// <summary>The reading source in plain words.</summary>
+    internal string SourceText => Source switch
+    {
+        "Official Codex session / usage endpoint" => "Codex app or CLI session",
+        "Official Claude Code session / OAuth usage endpoint" => "Claude Code session",
+        "Official running Antigravity local service" => "Antigravity desktop app",
+        _ when IsAntigravityCli => "Antigravity CLI (agy)",
+        _ when Provider == "copilot" && Source.Length > 0 => "GitHub CLI and Copilot SDK",
+        "" => "Not reported",
+        _ => Source
+    };
+
+    /// <summary>
+    /// Support text built from an explicit field list. It never contains credentials, and it
+    /// leaves out the account label because that is often an email address.
+    /// </summary>
+    internal string Diagnostics() => string.Join(Environment.NewLine, new[]
+    {
+        "Agent Quota Monitor " + UpdateService.InstalledVersion,
+        "Provider · " + Provider,
+        "Status · " + (Status.Length > 0 ? Status : "unknown"),
+        "Error · " + (Error.Length > 0 ? Error : "none"),
+        "Retry state · " + (RetryState.Length > 0 ? RetryState : "normal"),
+        "Source · " + (Source.Length > 0 ? Source : "not reported"),
+        "Identity · " + (Identity.Length > 0 ? Identity : "not reported"),
+        "Account ID · " + Id,
+        "Last successful read · " + Timestamp(LastSuccess, "never"),
+        "Next eligible read · " + Timestamp(NextAttempt, "not reported"),
+        "Session expires · " + Timestamp(SessionExpiresAt, "not reported"),
+        "Session last renewed · " + Timestamp(SessionRenewedAt, "not reported"),
+        "Account label omitted. Add it yourself only if it is needed."
+    });
 
     private bool IsAntigravityCli => Provider == "antigravity" &&
         Source.StartsWith("Official Antigravity CLI", StringComparison.Ordinal);

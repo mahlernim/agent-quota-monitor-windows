@@ -53,4 +53,9 @@ internal static class AntigravityCliInstall
     {
         using var process = Process.Start(StartInfo());
     }
+
+    /// <summary>Shows the exact official command. Nothing runs unless the user chooses OK.</summary>
+    internal static bool Confirm(System.Windows.Window owner) =>
+        System.Windows.MessageBox.Show(owner, Confirmation, "Install Antigravity CLI", System.Windows.MessageBoxButton.OKCancel,
+            System.Windows.MessageBoxImage.Question, System.Windows.MessageBoxResult.Cancel) == System.Windows.MessageBoxResult.OK;
 }

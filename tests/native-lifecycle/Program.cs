@@ -104,7 +104,7 @@ internal static class Program
                         await Call(app, "StartServices");
                         object updateService = Field<object>(app, "updates"), updateClock = Field<object>(app, "updateTimer");
                         Button refresh = Field<Button>(main, "_refresh");
-                        Check(!Field<bool>(app, "backendReady") && Field<object?>(app, "timer") is null && (string)refresh.Content == "Retry connection",
+                        Check(!Field<bool>(app, "backendReady") && Field<object?>(app, "timer") is null && System.Windows.Automation.AutomationProperties.GetName(refresh) == "Retry connection",
                             "Initial failure leaves a usable retry action and no provider polling");
                         Check(updateService is UpdateService && updateClock is DispatcherTimer, "Update controls remain available after initial failure");
                         main.SetData(cached.AsEnumerable().Reverse().ToList(), cached[0].Key, Field<HashSet<string>>(app, "pins"));
@@ -112,7 +112,7 @@ internal static class Program
                         refresh.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                         await Field<Task>(app, "startupTask");
                         object pollClock = Field<object>(app, "timer");
-                        Check(ensureCalls == 2 && Field<bool>(app, "backendReady") && ((DispatcherTimer)pollClock).IsEnabled && (string)refresh.Content == "Refresh",
+                        Check(ensureCalls == 2 && Field<bool>(app, "backendReady") && ((DispatcherTimer)pollClock).IsEnabled && System.Windows.Automation.AutomationProperties.GetName(refresh) == "Refresh",
                             "The retry toolbar action reconnects and starts polling");
                         Check(handler.Posts.Count == 0 && Field<HashSet<string>>(app, "pins").SetEquals(new[] { cached[0].Key }) && Field<string>(app, "selected") == cached[0].Key,
                             "Reconnect reads cached status without requesting providers or changing pins and selections");
@@ -133,7 +133,7 @@ internal static class Program
                         object updateService = Field<object>(app, "updates");
                         Task first = Call(app, "RefreshAsync"), second = Call(app, "RefreshAsync"), third = Call(app, "RefreshAsync");
                         await Call(app, "Poll");
-                        Check(ensureCalls == 2 && handler.Requests == 0 && !Field<Button>(main, "_refresh").IsEnabled && (string)Field<Button>(main, "_refresh").Content == "Connecting",
+                        Check(ensureCalls == 2 && handler.Requests == 0 && !Field<Button>(main, "_refresh").IsEnabled && System.Windows.Automation.AutomationProperties.GetName(Field<Button>(main, "_refresh")) == "Connecting",
                             "Rapid retries share one connection attempt and suppress ordinary polls");
                         CheckPreferenceControlsLocked(app, main, handler, cached, "Pending reconnection disables cards and rejects pin and tray changes");
                         starting.SetResult();

@@ -8,6 +8,9 @@
     <Compile Include="../../native/AccountSettingsState.cs" Link="AccountSettingsState.cs" />
     <Compile Include="../../native/AntigravityCliInstall.cs" Link="AntigravityCliInstall.cs" />
     <Compile Include="../../native/QuotaItem.cs" Link="QuotaItem.cs" />
+    <Compile Include="../../native/QuotaNames.cs" Link="QuotaNames.cs" />
+    <Compile Include="../../native/Ui.cs" Link="Ui.cs" />
+    <Compile Include="../../native/Icons.cs" Link="Icons.cs" />
     <Compile Include="../../native/BackendRequests.cs" Link="BackendRequests.cs" />
     <Compile Include="../../native/StartupRegistration.cs" Link="StartupRegistration.cs" />
     <Compile Include="../../native/UpdateService.cs" Link="UpdateService.cs" />

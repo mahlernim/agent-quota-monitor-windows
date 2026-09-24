@@ -9,6 +9,24 @@ from .monitor import Monitor, poll_monitor
 from .vault import Vault
 from .connections import Connections
 
+QUOTA_TYPES = ('codex', 'claude', 'antigravity-gemini', 'antigravity-claude-gpt', 'copilot')
+
+
+def valid_quota_labels(value):
+    """Display initials and names only. They never change identity, grouping, or colors."""
+    if not isinstance(value, dict) or not set(value) <= set(QUOTA_TYPES):
+        return False
+    for label in value.values():
+        if not isinstance(label, dict) or set(label) != {'initials', 'name'}:
+            return False
+        initials, name = label['initials'], label['name']
+        if not isinstance(initials, str) or not 1 <= len(initials) <= 3 or not initials.isalnum():
+            return False
+        if not isinstance(name, str) or not 1 <= len(name) <= 16 or name != name.strip() or not name.isprintable():
+            return False
+    return True
+
+
 def app_version(value):
     """The launching app's version, echoed so a newer app can replace an older reader."""
     return value if isinstance(value, str) and re.fullmatch(r'[0-9A-Za-z.+-]{1,64}', value) else 'development'
@@ -53,7 +71,7 @@ def handler(monitor, port, connections=None, version='development'):
             if self.path == '/api/desktop':
                 with monitor.lock:
                     prefs = monitor.settings_vault.load() if monitor.settings_vault else {}
-                keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop')
+                keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop', 'quotaLabels')
                 return self.send(200, json.dumps({key: prefs[key] for key in keys if key in prefs}, allow_nan=False).encode())
             return self.send(404, b'{}')
 
@@ -76,6 +94,7 @@ def handler(monitor, port, connections=None, version='development'):
                     if not isinstance(data, dict): raise ValueError()
                     for key, value in data.items():
                         if key == 'desktopFloating' and isinstance(value, bool): continue
+                        if key == 'quotaLabels' and valid_quota_labels(value): continue
                         if key in ('desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop') and type(value) in (int, float):
                             import math
                             if math.isfinite(value) and (35 <= value <= 100 if key == 'desktopOpacity' else 75 <= value <= 200 if key == 'desktopFloatingScale' else -100000 <= value <= 100000): continue
