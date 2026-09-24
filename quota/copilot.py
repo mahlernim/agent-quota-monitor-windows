@@ -21,6 +21,8 @@ def bundled_path(*parts):
 
 
 def command():
+    from .providers import refresh_path
+    refresh_path()
     local = Path(os.environ['LOCALAPPDATA'])
     node = shutil.which('node.exe') or shutil.which('node')
     gh = shutil.which('gh.exe') or shutil.which('gh')

@@ -192,7 +192,15 @@ internal static class PresentationChecks
             FlushUi();
             check(pinActions == 2 && trayActions == 0 && selected == a.Key && pins.SetEquals(new[] { b.Key }) && Glyph(pinB).Fill is not null,
                 "Accessible pin activation changes only the floating selection");
-            Button trayB = Elements<Button>(window).Single(button => button.Content is Donut donut && donut.Item?.Key == b.Key);
+            var cardB = window.Cards[b.Key];
+            Button trayB = cardB.Select;
+            foreach (Point spot in new[] { new Point(6, MainWindow.CardHeight - 8), new Point(MainWindow.CardWidth / 2, MainWindow.CardHeight - 12), new Point(8, 40) })
+            {
+                var hitCard = cardB.Border.InputHitTest(spot) as DependencyObject;
+                check(hitCard is not null && (ReferenceEquals(hitCard, trayB) || trayB.IsAncestorOf(hitCard)), "Empty card space and the label select the tray quota");
+            }
+            var hitPin = cardB.Border.InputHitTest(new Point(MainWindow.CardWidth - 8, 8)) as DependencyObject;
+            check(hitPin is not null && (ReferenceEquals(hitPin, cardB.Pin) || cardB.Pin.IsAncestorOf(hitPin)), "The pin corner still belongs to the pin");
             trayB.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             check(trayActions == 1 && pinActions == 2 && selected == b.Key && pins.SetEquals(new[] { b.Key }),
                 "Selecting a tray quota leaves the floating pins intact");

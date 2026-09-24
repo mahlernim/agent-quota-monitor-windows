@@ -133,9 +133,11 @@ internal static class Program
         claudeSample["accounts"]![0]!["error"] = "session_expired";
         claudeSample["accounts"]![0]!["sessionExpiresAt"] = 1790000000;
         AccountStatus expired = Parse(claudeSample.ToJsonString())[0];
-        Check(expired.Guidance.Contains("Open Claude Code to renew", StringComparison.Ordinal) &&
-            expired.Guidance.Contains("resumes automatically", StringComparison.Ordinal) && expired.SessionExpiresAt == 1790000000,
-            "An expired Claude session points to renewal in Claude Code and keeps its expiry");
+        Check(expired.Guidance.Contains("send any message in Claude Code", StringComparison.Ordinal) &&
+            expired.Guidance.Contains("resumes by itself", StringComparison.Ordinal) && expired.Guidance.Contains("only if Claude Code reports", StringComparison.Ordinal) &&
+            expired.Problem!.Summary.Contains("Send any message in Claude Code") && !expired.Problem.Summary.Contains("Open Claude Code") &&
+            expired.SessionExpiresAt == 1790000000,
+            "An expired Claude session explains that an idle open Claude Code renews on use and keeps its expiry");
         string missingCli = Antigravity(desktopSource, "antigravity_cli_unavailable").Guidance;
         Check(missingCli.Contains("Install the official CLI from Settings", StringComparison.Ordinal) &&
             missingCli.Contains("Gemini CLI does not report", StringComparison.Ordinal),
@@ -182,9 +184,11 @@ internal static class Program
         var owner = new Window { Left = -32000, Top = -32000, Width = 1, Height = 1, ShowActivated = false, ShowInTaskbar = false };
         int changed = 0, installs = 0;
         bool backendReady = true, confirmInstall = false;
+        var clientInstalls = new List<OfficialInstall>();
         owner.Show();
         var window = new AccountsWindow(owner, http, () => ++changed, backendReady: () => backendReady,
-            confirmCliInstall: _ => confirmInstall, startCliInstall: () => ++installs)
+            confirmCliInstall: _ => confirmInstall, startCliInstall: () => ++installs,
+            confirmInstall: (_, _) => confirmInstall, startInstall: clientInstalls.Add)
         { WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
@@ -227,6 +231,32 @@ internal static class Program
             handler.Status = missing.ToJsonString();
             await Call(window, "PollAsync");
             Check(installCli.Visibility == Visibility.Collapsed, "The offer disappears once agy is installed");
+            var installButtons = Field<Dictionary<string, Button>>(window, "_clientInstallButtons");
+            Check(installButtons.Values.All(button => button.Visibility == Visibility.Collapsed) && signInButtons["codex"].Visibility == Visibility.Visible,
+                "Installed clients keep Sign in and hide install buttons");
+            missing["connections"]!["clients"]!["codex"] = false;
+            handler.Status = missing.ToJsonString();
+            await Call(window, "PollAsync");
+            Check(installButtons["codex"].Visibility == Visibility.Visible && signInButtons["codex"].Visibility == Visibility.Collapsed &&
+                installButtons["claude"].Visibility == Visibility.Collapsed && (string)installButtons["codex"].Content == "Install Codex",
+                "A missing Codex client offers its installer in place of Sign in");
+            confirmInstall = false;
+            Click(installButtons["codex"]);
+            Check(clientInstalls.Count == 0, "Declining a client install runs nothing");
+            confirmInstall = true;
+            Click(installButtons["codex"]);
+            Check(clientInstalls.SequenceEqual(new[] { OfficialInstall.Codex }), "A confirmed client install runs only the matching official installer");
+            Check(OfficialInstall.Codex.Command == "irm https://chatgpt.com/codex/install.ps1 | iex" && OfficialInstall.Codex.BypassPolicy &&
+                OfficialInstall.Codex.StartInfo().ArgumentList.Contains("Bypass") && OfficialInstall.Codex.Confirmation.Contains(OfficialInstall.Codex.Command) &&
+                OfficialInstall.Claude.Command == "irm https://claude.ai/install.ps1 | iex" && !OfficialInstall.Claude.StartInfo().ArgumentList.Contains("Bypass") &&
+                OfficialInstall.Claude.Script.Contains(OfficialInstall.Claude.Command) && OfficialInstall.Claude.StartInfo().ArgumentList.Contains("-NoExit"),
+                "Client installers show and run only the documented official commands in a visible window");
+            missing["connections"]!["clients"]!["codex"] = true;
+            handler.Status = missing.ToJsonString();
+            await Call(window, "PollAsync");
+            Check(installButtons["codex"].Visibility == Visibility.Collapsed && signInButtons["codex"].Visibility == Visibility.Visible,
+                "Sign in returns once the client is found");
+            confirmInstall = false;
             await TestProviders(window, handler);
             await TestNames(window, handler);
             Check(!Move(window, "b", -1), "Rows cannot move outside Edit order");
@@ -434,6 +464,8 @@ internal static class Program
         Check(Problem("codex", "sign_in_required")?.Action == "sign-in" && Problem("copilot", "local_session_unavailable")?.Action == "sign-in",
             "Official-client sign-in problems offer Sign in");
         Check(Problem("claude", "session_expired")?.Action is null, "An expired Claude session is explained without launching a client");
+        Check(Problem("codex", "client_not_installed")?.Action == "install-codex" && Problem("claude", "client_not_installed")?.Action == "install-claude",
+            "A missing client offers its official installer instead of Sign in");
         Check(Problem("codex", "network_unavailable")?.Action == "retry" && Problem("claude", "connection_or_response_error")?.Action == "retry" &&
             Problem("codex", "schema_changed")?.Action == "check-updates" && Problem("codex", "rate_limited")?.Action is null,
             "Network, format, and cooldown problems choose matching actions");

@@ -412,10 +412,11 @@ public sealed class App : Application
         if (stopping || main is null) return;
         switch (action)
         {
-            case "install-cli":
-                if (!AntigravityCliInstall.Confirm(main)) return;
-                try { AntigravityCliInstall.Start(); main.ShowNotice("The Antigravity CLI installer opened in PowerShell. Follow that window, then return here."); }
-                catch (Exception) { main.ShowNotice("PowerShell couldn't be started. Install the CLI from antigravity.google/docs/cli/install."); }
+            case "install-cli" or "install-codex" or "install-claude":
+                var installer = action switch { "install-codex" => OfficialInstall.Codex, "install-claude" => OfficialInstall.Claude, _ => OfficialInstall.Antigravity };
+                if (!installer.Confirm(main)) return;
+                try { installer.Start(); main.ShowNotice("The official installer opened in PowerShell. Follow that window, then return here."); }
+                catch (Exception) { main.ShowNotice("PowerShell couldn't be started. Run the install command shown in the confirmation yourself."); }
                 return;
             case "copy-agy":
                 try { Clipboard.SetText("agy -p /usage"); main.ShowNotice("Copied agy -p /usage. Run it in a terminal and sign in if asked."); }

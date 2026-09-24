@@ -11,6 +11,7 @@ import uuid
 PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
 ACTIVE = ('starting', 'waiting', 'verifying')
 EARLY_EXIT_SECONDS = 5
+CLIENT_RECHECK_SECONDS = 20
 CODEX_EARLY_EXIT = ('The Codex client exited before sign-in could start. Try updating the CLI with '
                     'npm install -g @openai/codex@latest, check ~/.codex/config.toml, or sign in through the Codex app.')
 
@@ -30,6 +31,8 @@ def _newest(root, pattern):
 
 
 def client_command(provider):
+    from .providers import refresh_path
+    refresh_path()
     local = _environment_path('LOCALAPPDATA')
     roaming = _environment_path('APPDATA')
     if provider == 'copilot':
@@ -47,7 +50,9 @@ def client_command(provider):
             candidates += _newest(local / 'npm-cache/_npx', '*/node_modules/@anthropic-ai/claude-code-win32-*/claude.exe')
         args = ['auth', 'login', '--claudeai']
     elif provider == 'codex':
-        candidates = _newest(roaming / 'npm/node_modules/@openai/codex', '**/codex.exe') if roaming else []
+        # The official standalone installer uses this per-user folder by default.
+        candidates = [local / 'Programs/OpenAI/Codex/bin/codex.exe'] if local else []
+        candidates += _newest(roaming / 'npm/node_modules/@openai/codex', '**/codex.exe') if roaming else []
         args = ['login']
     else:
         raise ValueError('Unknown provider')
@@ -89,8 +94,14 @@ class Connections:
         self.stop = threading.Event()
         self.worker = None
         self.clients = {p: bool(self.resolver(p)) for p in PROVIDERS}
+        self.clients_checked = self.clock()
 
     def snapshot(self):
+        # Clients are rechecked briefly cached, so an install while running enables its buttons.
+        if self.clock() - self.clients_checked >= CLIENT_RECHECK_SECONDS:
+            clients = {p: bool(self.resolver(p)) for p in PROVIDERS}
+            with self.lock:
+                self.clients, self.clients_checked = clients, self.clock()
         with self.lock:
             clients = self.clients.copy()
             job = copy.deepcopy(self.job)
