@@ -10,6 +10,9 @@ import uuid
 
 PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
 ACTIVE = ('starting', 'waiting', 'verifying')
+EARLY_EXIT_SECONDS = 5
+CODEX_EARLY_EXIT = ('The Codex client exited before sign-in could start. Try updating the CLI with '
+                    'npm install -g @openai/codex@latest, check ~/.codex/config.toml, or sign in through the Codex app.')
 
 
 def _environment_path(name):
@@ -176,7 +179,10 @@ class Connections:
                 status = process.poll()
                 if status is not None:
                     if status != 0:
-                        self._set(job_id, 'failed', 'The official client could not finish sign-in. Retry, or complete sign-in in its terminal.')
+                        # Output is discarded because it can contain sign-in codes, so only timing is known.
+                        early = self.clock() - job['startedAt'] <= EARLY_EXIT_SECONDS
+                        self._set(job_id, 'failed', CODEX_EARLY_EXIT if early and job['provider'] == 'codex'
+                                  else 'The official client could not finish sign-in. Retry, or complete sign-in in its terminal.')
                         break
                     self._set(job_id, 'verifying', 'Sign-in finished. Waiting for an account-verified quota read. Provider cooldowns still apply.')
                 if status == 0:

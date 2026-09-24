@@ -8,7 +8,7 @@ namespace AgentQuotaMonitor;
 
 internal sealed record AccountStatus(string Id, string Provider, string Label, string Status,
     string Source, string Identity, string Error, double? LastSuccess, double? NextAttempt, string QuotaDetails = "", string RetryState = "",
-    double? SessionExpiresAt = null)
+    double? SessionExpiresAt = null, double? SessionRenewedAt = null)
 {
     internal static AccountStatus[] Parse(JsonElement status)
     {
@@ -25,7 +25,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         Text(account, "id"), Text(account, "provider"), Text(account, "label"), Text(account, "status"),
         Text(account, "source"), Text(account, "identityStatus"), Text(account, "error"),
         Number(account, "lastSuccess"), Number(account, "nextAttempt"), DescribeQuotas(account), Text(account, "retryState"),
-        Number(account, "sessionExpiresAt"));
+        Number(account, "sessionExpiresAt"), Number(account, "sessionRenewedAt"));
 
     internal static string Timestamp(double? seconds, string fallback)
     {
@@ -47,6 +47,8 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             "Antigravity desktop session is unavailable. Open the Antigravity desktop app, then press Refresh in the monitor.",
         "sign_in_required" when Provider == "claude" =>
             "Claude quota read was rejected. Check claude auth status, open Claude Code, then press Refresh. If Claude Code reports an expired login or the read still fails after renewal, sign in through Claude Code.",
+        "sign_in_required" when Provider == "codex" =>
+            "Codex did not accept the saved session. Open the Codex app or CLI to renew it. The monitor resumes by itself afterward. Sign in again only if that does not help.",
         "sign_in_required" => "Session expired or rejected. Sign in through the official client.",
         "session_expired" when Provider == "claude" =>
             "The Claude Code session expired. Open Claude Code to renew it. The monitor resumes automatically after Claude Code renews the session.",

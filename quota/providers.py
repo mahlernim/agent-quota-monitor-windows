@@ -95,7 +95,20 @@ def codex_account():
         return model.codex(raw), raw.get('email', 'Codex account')
     result = account('codex', subject, 'Codex account', 'Official Codex session / usage endpoint', read)
     result['sessionRevision'] = path.stat().st_mtime_ns
+    result['sessionRenewedAt'] = codex_renewed(d.get('last_refresh'))
     return result
+
+
+def codex_renewed(value):
+    """Non-secret renewal time in seconds from auth.json, or None. The token is never decoded."""
+    if not isinstance(value, str):
+        return None
+    parsed = model.timestamp(value)
+    if parsed is None:
+        return None
+    from datetime import datetime
+    seconds = datetime.fromisoformat(parsed).timestamp()
+    return seconds if 0 < seconds <= MAX_TIMESTAMP else None
 
 
 def claude_expiry(oauth):

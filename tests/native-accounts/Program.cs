@@ -123,6 +123,13 @@ internal static class Program
         Check(claudeGuidance.Contains("claude auth status", StringComparison.Ordinal) &&
             claudeGuidance.Contains("read still fails after renewal", StringComparison.Ordinal),
             "Rejected Claude quota reads distinguish client renewal from full sign-in");
+        JsonObject codexSample = JsonNode.Parse(Snapshot("codex"))!.AsObject();
+        codexSample["accounts"]![0]!["error"] = "sign_in_required";
+        codexSample["accounts"]![0]!["sessionRenewedAt"] = 1789779319;
+        AccountStatus codex = Parse(codexSample.ToJsonString())[0];
+        Check(codex.Guidance.Contains("Open the Codex app or CLI to renew", StringComparison.Ordinal) &&
+            codex.Guidance.Contains("Sign in again only if", StringComparison.Ordinal) && codex.SessionRenewedAt == 1789779319,
+            "A rejected Codex session points to renewal before sign-in and keeps its renewal time");
         claudeSample["accounts"]![0]!["error"] = "session_expired";
         claudeSample["accounts"]![0]!["sessionExpiresAt"] = 1790000000;
         AccountStatus expired = Parse(claudeSample.ToJsonString())[0];

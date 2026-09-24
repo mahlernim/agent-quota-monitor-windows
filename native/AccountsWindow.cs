@@ -396,6 +396,8 @@ public sealed class AccountsWindow : Window
             string details = $"Source · {EmptyFallback(account.Source)}\nIdentity · {EmptyFallback(account.Identity)}\nAccount ID · {account.Id}\nLast successful read · {AccountStatus.Timestamp(account.LastSuccess, "Never")}\nNext eligible read · {retry}";
             if (account.SessionExpiresAt.HasValue)
                 details += $"\nOfficial session expires · {AccountStatus.Timestamp(account.SessionExpiresAt, "Not reported")} (renewed by the official client)";
+            if (account.SessionRenewedAt.HasValue)
+                details += $"\nSession last renewed · {AccountStatus.Timestamp(account.SessionRenewedAt, "Not reported")} (by the official client)";
             if (!string.IsNullOrEmpty(account.QuotaDetails)) details += "\n" + account.QuotaDetails;
             var detail = new Expander { Header = "Details", Tag = account.Id, IsExpanded = _expandedAccounts.Contains(account.Id),
                 Content = new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(14, 3, 0, 3) } };

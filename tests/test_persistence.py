@@ -171,6 +171,19 @@ class ClaudeExpiryTests(unittest.TestCase):
         self.assertEqual(monitor.snapshot()['accounts'][0]['status'], 'live')
 
 
+class CodexRenewalTests(unittest.TestCase):
+    def test_last_refresh_is_reported_without_decoding_the_token(self):
+        auth = {'tokens': {'account_id': 'acct', 'access_token': 'not.a.jwt'}, 'last_refresh': '2026-09-19T00:55:19.1326212Z'}
+        with patch.object(providers, 'load', return_value=auth), patch.object(providers.Path, 'stat') as stat:
+            stat.return_value.st_mtime_ns = 1
+            account = providers.codex_account()
+        self.assertAlmostEqual(account['sessionRenewedAt'], 1789779319.13, places=1)
+
+    def test_missing_or_invalid_last_refresh_is_unreported(self):
+        for value in (None, '', 'yesterday', 12345, '2026-09-19T00:55:19'):
+            self.assertIsNone(providers.codex_renewed(value))
+
+
 class NetworkTests(unittest.TestCase):
     def raise_url_error(self, reason):
         class Opener:
