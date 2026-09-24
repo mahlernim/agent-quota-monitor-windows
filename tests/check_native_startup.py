@@ -12,7 +12,7 @@ import tempfile
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('dotnet', help='Path to the .NET 8 SDK executable, or dotnet on PATH')
+    parser.add_argument('dotnet', help='Path to the .NET 10 SDK executable, or dotnet on PATH')
     parser.add_argument('--backend', type=Path, help='Optional exact packaged quota-backend.exe to exercise')
     parser.add_argument('--report', type=Path, help='Optional copy of the final JSON result')
     args = parser.parse_args()
