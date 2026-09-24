@@ -130,9 +130,9 @@ def handler(monitor, port, connections=None):
                     return self.send(400, b'{}')
                 except Exception:
                     return self.send(503, b'{"error":"Could not save account preferences"}')
-            if self.path != '/api/refresh':
+            if self.path not in ('/api/refresh', '/api/wake'):
                 return self.send(404, b'{}')
-            threading.Thread(target=monitor.refresh, daemon=True).start()
+            threading.Thread(target=monitor.wake if self.path == '/api/wake' else monitor.refresh, daemon=True).start()
             self.send(202, b'{"accepted":true}')
     return Handler
 

@@ -7,6 +7,12 @@ from .retry import MAX_TIMESTAMP, deadline, delay_seconds, finite_number
 
 INTERVAL = 300
 SUPPORTED_PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
+# Failures that never reached the provider. They retry at the normal interval.
+LOCAL_FAILURES = frozenset(('network_unavailable', 'session_expired'))
+# Errors that end when the official client changes its session file.
+SESSION_ERRORS = frozenset(('sign_in_required', 'session_expired'))
+# Connection failures that a resumed network can clear. Provider cooldowns still apply.
+WAKE_ERRORS = frozenset(('network_unavailable', 'connection_or_response_error'))
 RING_FIELDS = {'accountId', 'groupId', 'bucketId'}
 
 
@@ -92,6 +98,7 @@ class Monitor:
             self.rows = {}
             self.storage_error = True
         self.next_discovery = 0
+        self.next_wake = 0
 
     def set_providers(self, enabled):
         if not isinstance(enabled, list) or any(not isinstance(p, str) or p not in SUPPORTED_PROVIDERS for p in enabled):
@@ -178,7 +185,7 @@ class Monitor:
             with self.lock:
                 self.rows[key] = old
             return
-        renewed = old.get('error') == 'sign_in_required' and not old.get('providerCooldown') and account.get('sessionRevision') != old.get('sessionRevision')
+        renewed = old.get('error') in SESSION_ERRORS and not old.get('providerCooldown') and account.get('sessionRevision') != old.get('sessionRevision')
         if not renewed and now < old.get('nextAttempt', 0):
             with self.lock:
                 self.rows[key] = old
@@ -195,7 +202,8 @@ class Monitor:
             code = err.code if isinstance(err, providers.ReadError) else 'reader_failed'
             failures = old.get('failures', 0)+1
             provider_delay = delay_seconds(getattr(err, 'retry_after', 0))
-            delay = max(min(3600, INTERVAL * 2 ** min(failures-1, 4)), provider_delay)
+            backoff = INTERVAL if code in LOCAL_FAILURES else min(3600, INTERVAL * 2 ** min(failures-1, 4))
+            delay = max(backoff, provider_delay)
             next_attempt = deadline(now, delay)
             row.update(status='stale' if row['lastSuccess'] else 'pending', error=code, failures=failures,
                        nextAttempt=next_attempt, providerCooldown=provider_delay > 0)
@@ -203,6 +211,19 @@ class Monitor:
                 row.update(retryState='suspended', retryReason='provider_cooldown_unrepresentable')
         with self.lock:
             self.rows[key] = row
+
+    def wake(self):
+        """Retry reads that failed only because the network was unavailable, as after sleep."""
+        now = self.clock()
+        with self.lock:
+            if now < self.next_wake:
+                return False
+            self.next_wake = now + 60
+            for row in self.rows.values():
+                if row.get('error') in WAKE_ERRORS and not row.get('providerCooldown') and row.get('retryState') != 'suspended':
+                    row.pop('nextAttempt', None)
+            self.next_discovery = 0
+        return self.refresh()
 
     def refresh(self):
         if not self.refresh_lock.acquire(blocking=False):
@@ -226,8 +247,14 @@ class Monitor:
             with self.lock:
                 for key, row in list(self.rows.items()):
                     if key not in ids:
-                        row.update(status='stale' if row.get('lastSuccess') else 'pending',
+                        # A recent reading ages out on the normal schedule. The error explains why.
+                        success = row.get('lastSuccess')
+                        recent = row.get('status') == 'live' and finite_number(success) and now - success <= INTERVAL*2
+                        row.update(status='live' if recent else 'stale' if success else 'pending',
                                    error=discovery_errors.get(row['provider'], 'local_session_unavailable'))
+                        if not row.get('providerCooldown') and row.get('retryState') != 'suspended':
+                            # An old read timer must not delay a source that returns.
+                            row.pop('nextAttempt', None)
                 for provider in ('codex', 'claude', 'antigravity', 'copilot'):
                     placeholder = provider + '-pending'
                     if any(a['provider'] == provider for a in found):

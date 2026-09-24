@@ -33,6 +33,9 @@ await service.Check(true); Assert(handler.Count==count+1,"manual while disabled"
 handler.Fail=true; await service.Check(true); Assert(service.Status.Contains("Could not"),"manual failure visible");
 service.SetAutomatic(true); now=now.AddDays(1); await service.Check(); Assert(service.Status=="","automatic failure quiet");
 count=handler.Count; await service.Check(); Assert(handler.Count==count,"failure respects cooldown");
+handler.Fail=false; await service.Check(urgent:true); Assert(handler.Count==count+1,"format change skips the daily limit");
+service.SetAutomatic(false); count=handler.Count;
+await service.Check(urgent:true); Assert(handler.Count==count,"format change respects disabled automatic checks");
 Console.WriteLine($"{checks} update checks passed");
 sealed class FakeHandler(string content) : HttpMessageHandler {
  public int Count; public bool Fail;

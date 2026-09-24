@@ -67,8 +67,25 @@ public sealed class AccountsWindow : Window
     private string? _activeJobId;
     private string _accountsSignature = string.Empty;
 
-    internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null, Func<bool>? backendReady = null)
+    private readonly Button _installCli = new()
     {
+        Content = "Install CLI",
+        Tag = "antigravity-cli",
+        MinWidth = 90,
+        Padding = new Thickness(8, 3, 8, 3),
+        Margin = new Thickness(0, 0, 6, 0),
+        Visibility = Visibility.Collapsed,
+        ToolTip = "Install the official Antigravity CLI (agy) so quota can be read without the desktop app."
+    };
+    private readonly Func<Window, bool> _confirmCliInstall;
+    private readonly Action _startCliInstall;
+
+    internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null, Func<bool>? backendReady = null,
+        Func<Window, bool>? confirmCliInstall = null, Action? startCliInstall = null)
+    {
+        _confirmCliInstall = confirmCliInstall ?? (window => MessageBox.Show(window, AntigravityCliInstall.Confirmation,
+            "Install Antigravity CLI", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel) == MessageBoxResult.OK);
+        _startCliInstall = startCliInstall ?? AntigravityCliInstall.Start;
         _updates = updates;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -172,12 +189,21 @@ public sealed class AccountsWindow : Window
                 DockPanel.SetDock(signIn, Dock.Right);
                 row.Children.Add(signIn);
                 _signInButtons[provider] = signIn;
+                if (provider == "antigravity")
+                {
+                    AutomationProperties.SetName(_installCli, "Install the official Antigravity CLI");
+                    _installCli.Click += (_, _) => InstallCli();
+                    DockPanel.SetDock(_installCli, Dock.Right);
+                    row.Children.Add(_installCli);
+                }
             }
             body.Children.Add(row);
         }
 
         body.Children.Add(new TextBlock {
-            Text = "Antigravity Open desktop app does not start CLI sign-in. For a CLI account, run agy interactively and sign in if prompted, then run agy -p /usage and press Refresh in the monitor.",
+            Text = "Antigravity Open desktop app does not start CLI sign-in. The official Antigravity CLI (agy) lets the monitor read quota while the desktop app is closed. " +
+                "Install CLI appears when agy is missing and asks before running Google's installer in a visible window. " +
+                "For an existing CLI account, run agy interactively and sign in if prompted, then run agy -p /usage and press Refresh in the monitor.",
             TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 5, 0, 0)
         });
         body.Children.Add(new TextBlock {
@@ -277,6 +303,9 @@ public sealed class AccountsWindow : Window
         {
             foreach ((string provider, Button button) in _signInButtons)
                 button.IsEnabled = clients.TryGetProperty(provider, out JsonElement available) && available.ValueKind == JsonValueKind.True;
+            // Offer the install only when the reader positively reports that agy is missing.
+            _installCli.Visibility = clients.TryGetProperty("antigravityCli", out JsonElement cli) && cli.ValueKind == JsonValueKind.False
+                ? Visibility.Visible : Visibility.Collapsed;
         }
 
         _job.Text = "No connection in progress.";
@@ -365,6 +394,8 @@ public sealed class AccountsWindow : Window
                 card.Children.Add(new TextBlock { Text = account.Guidance, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Firebrick, Margin = new Thickness(0, 3, 0, 0) });
             string retry = account.RetryState == "suspended" ? "Paused pending a usable provider retry time" : AccountStatus.Timestamp(account.NextAttempt, "Not reported");
             string details = $"Source · {EmptyFallback(account.Source)}\nIdentity · {EmptyFallback(account.Identity)}\nAccount ID · {account.Id}\nLast successful read · {AccountStatus.Timestamp(account.LastSuccess, "Never")}\nNext eligible read · {retry}";
+            if (account.SessionExpiresAt.HasValue)
+                details += $"\nOfficial session expires · {AccountStatus.Timestamp(account.SessionExpiresAt, "Not reported")} (renewed by the official client)";
             if (!string.IsNullOrEmpty(account.QuotaDetails)) details += "\n" + account.QuotaDetails;
             var detail = new Expander { Header = "Details", Tag = account.Id, IsExpanded = _expandedAccounts.Contains(account.Id),
                 Content = new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(14, 3, 0, 3) } };
@@ -429,6 +460,17 @@ public sealed class AccountsWindow : Window
     private async Task StartConnectionAsync(string provider) =>
         await PostAsync("/api/connections/start", new { provider },
             provider == "antigravity" ? "Opening Antigravity desktop app. CLI accounts sign in through agy in a terminal." : "Official sign-in started.");
+
+    private void InstallCli()
+    {
+        if (_closed || !_confirmCliInstall(this)) return;
+        try
+        {
+            _startCliInstall();
+            ShowSuccess("Antigravity CLI installer opened in PowerShell. Follow that window, then return here.");
+        }
+        catch (Exception) { ShowError("PowerShell could not be started. Install the CLI from antigravity.google/docs/cli/install."); }
+    }
 
     private async Task RemoveAsync(string accountId) =>
         await PostAsync("/api/accounts/remove", new { accountId }, "Account hidden from the monitor.");

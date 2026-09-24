@@ -57,6 +57,15 @@ def client_command(provider):
     return None
 
 
+def antigravity_cli_installed():
+    from .antigravity_cli import command
+    try:
+        command()
+        return True
+    except Exception:
+        return False
+
+
 def launch(command):
     # Launch only resolved local executables with fixed arguments, never a shell.
     # Output may contain auth URLs or codes, so discard it rather than logging it.
@@ -80,7 +89,11 @@ class Connections:
 
     def snapshot(self):
         with self.lock:
-            return dict(clients=self.clients.copy(), job=copy.deepcopy(self.job))
+            clients = self.clients.copy()
+            job = copy.deepcopy(self.job)
+        # Checked live so the install offer disappears once the official CLI exists.
+        clients['antigravityCli'] = antigravity_cli_installed()
+        return dict(clients=clients, job=job)
 
     def start(self, provider, account_id=None):
         if not isinstance(provider, str) or provider not in PROVIDERS:

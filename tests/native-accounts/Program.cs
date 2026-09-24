@@ -123,6 +123,48 @@ internal static class Program
         Check(claudeGuidance.Contains("claude auth status", StringComparison.Ordinal) &&
             claudeGuidance.Contains("read still fails after renewal", StringComparison.Ordinal),
             "Rejected Claude quota reads distinguish client renewal from full sign-in");
+        claudeSample["accounts"]![0]!["error"] = "session_expired";
+        claudeSample["accounts"]![0]!["sessionExpiresAt"] = 1790000000;
+        AccountStatus expired = Parse(claudeSample.ToJsonString())[0];
+        Check(expired.Guidance.Contains("Open Claude Code to renew", StringComparison.Ordinal) &&
+            expired.Guidance.Contains("resumes automatically", StringComparison.Ordinal) && expired.SessionExpiresAt == 1790000000,
+            "An expired Claude session points to renewal in Claude Code and keeps its expiry");
+        string missingCli = Antigravity(desktopSource, "antigravity_cli_unavailable").Guidance;
+        Check(missingCli.Contains("Install the official CLI from Settings", StringComparison.Ordinal) &&
+            missingCli.Contains("Gemini CLI does not report", StringComparison.Ordinal),
+            "A missing Antigravity CLI explains the install option and the Gemini CLI difference");
+        Check(Antigravity(cliSource, "network_unavailable").Guidance.Contains("when the network returns", StringComparison.Ordinal) &&
+            Antigravity(cliSource, "schema_changed").Guidance.Contains("Check for a monitor update", StringComparison.Ordinal),
+            "Offline and format-change failures have specific guidance");
+        TestCards();
+    }
+
+    private static void TestCards()
+    {
+        JsonObject Card(string status, string resetsAt, string error = "")
+        {
+            JsonObject sample = JsonNode.Parse(Snapshot("card"))!.AsObject();
+            JsonObject account = sample["accounts"]![0]!.AsObject();
+            account["status"] = status;
+            account["error"] = error;
+            account["groups"] = new JsonArray(new JsonObject { ["id"] = "g", ["label"] = "Codex", ["buckets"] = new JsonArray(
+                new JsonObject { ["id"] = "b", ["label"] = "Five-hour window", ["remaining"] = 40, ["windowSeconds"] = 18000, ["resetsAt"] = resetsAt }) });
+            return sample;
+        }
+        QuotaItem Item(JsonObject sample)
+        {
+            using JsonDocument document = JsonDocument.Parse(sample.ToJsonString());
+            return QuotaItem.Parse(document.RootElement, DateTimeOffset.Parse("2026-09-24T12:00:00Z")).Single();
+        }
+        QuotaItem stale = Item(Card("stale", "2026-09-24T10:00:00Z", "local_session_unavailable"));
+        Check(stale.Remaining is null && stale.Tooltip.Contains("Reset since the last read", StringComparison.Ordinal),
+            "A stale value from before its reset is shown as unknown");
+        Check(stale.Tooltip.Contains("Local session unavailable", StringComparison.Ordinal), "Card tooltips include account guidance");
+        QuotaItem pending = Item(Card("stale", "2026-09-24T14:00:00Z"));
+        Check(pending.Remaining == 40, "A stale value before its reset keeps the cached percentage");
+        QuotaItem live = Item(Card("live", "2026-09-24T10:00:00Z"));
+        Check(live.Remaining == 40 && live.Tooltip.Contains("Reset due", StringComparison.Ordinal),
+            "A live value past its reset keeps the provider reading while waiting");
     }
 
     private static async Task TestWindow(string? previewPath)
@@ -130,10 +172,11 @@ internal static class Program
         using var handler = new SyntheticBackend { Status = Snapshot("a", "b", "c") };
         using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:1") };
         var owner = new Window { Left = -32000, Top = -32000, Width = 1, Height = 1, ShowActivated = false, ShowInTaskbar = false };
-        int changed = 0;
-        bool backendReady = true;
+        int changed = 0, installs = 0;
+        bool backendReady = true, confirmInstall = false;
         owner.Show();
-        var window = new AccountsWindow(owner, http, () => ++changed, backendReady: () => backendReady)
+        var window = new AccountsWindow(owner, http, () => ++changed, backendReady: () => backendReady,
+            confirmCliInstall: _ => confirmInstall, startCliInstall: () => ++installs)
         { WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
@@ -149,6 +192,30 @@ internal static class Program
                 "Settings explains that CLI recovery uses a separate terminal session");
             AccountLayoutState layout = Field<AccountLayoutState>(window, "_layout");
             Check(layout.Loaded && layout.Displayed.Count == 3, "The actual Settings window reads the synthetic backend");
+            Button installCli = Field<Button>(window, "_installCli");
+            Check(installCli.Visibility == Visibility.Collapsed, "The CLI install offer stays hidden unless agy is reported missing");
+            JsonObject missing = JsonNode.Parse(handler.Status)!.AsObject();
+            missing["connections"]!["clients"]!["antigravityCli"] = false;
+            handler.Status = missing.ToJsonString();
+            await Call(window, "PollAsync");
+            Check(installCli.Visibility == Visibility.Visible, "A missing agy shows the CLI install offer");
+            int requestsBeforeInstall = handler.Requests;
+            Click(installCli);
+            Check(installs == 0 && handler.Requests == requestsBeforeInstall, "Declining the confirmation runs nothing");
+            confirmInstall = true;
+            Click(installCli);
+            Check(installs == 1 && handler.Requests == requestsBeforeInstall &&
+                Field<TextBlock>(window, "_message").Text.Contains("installer opened in PowerShell", StringComparison.Ordinal),
+                "A confirmed install opens only the visible official installer");
+            Check(AntigravityCliInstall.Confirmation.Contains(AntigravityCliInstall.Command, StringComparison.Ordinal) &&
+                AntigravityCliInstall.Script.Contains(AntigravityCliInstall.Command, StringComparison.Ordinal) &&
+                AntigravityCliInstall.Command == "irm https://antigravity.google/cli/install.ps1 | iex" &&
+                AntigravityCliInstall.StartInfo().ArgumentList.Contains("-NoExit") && !AntigravityCliInstall.StartInfo().UseShellExecute,
+                "The confirmation shows the exact official command that the visible window runs");
+            missing["connections"]!["clients"]!["antigravityCli"] = true;
+            handler.Status = missing.ToJsonString();
+            await Call(window, "PollAsync");
+            Check(installCli.Visibility == Visibility.Collapsed, "The offer disappears once agy is installed");
             Click(Field<Button>(window, "_editOrder"));
             MoveButton(window, "b", -1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check(layout.Order.SequenceEqual(new[] { "b", "a", "c" }), "Move up acts on the stable account ID");
