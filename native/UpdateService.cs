@@ -53,10 +53,13 @@ internal sealed class UpdateService : IDisposable
     internal void SetAutomatic(bool value) { Preferences.Automatic = value; Persist(); }
     internal void Later() { Preferences.LaterUntil = clock().AddDays(1); Available = null; Persist(); }
     internal void Skip() { if (Available is not null) Preferences.Skipped = Available.Tag; Available = null; Persist(); }
-    /// <summary>An urgent check skips the daily limit but still requires automatic checks to be enabled.</summary>
+    /// <summary>Automatic checks run at most this often, counting failed attempts.</summary>
+    internal static readonly TimeSpan AutomaticInterval = TimeSpan.FromHours(3);
+
+    /// <summary>An urgent check skips the automatic interval but still requires automatic checks to be enabled.</summary>
     internal async Task Check(bool manual = false, bool urgent = false)
     {
-        if (Busy || (!manual && (!Preferences.Automatic || (!urgent && clock() - Preferences.LastAttempt < TimeSpan.FromDays(1))))) return;
+        if (Busy || (!manual && (!Preferences.Automatic || (!urgent && clock() - Preferences.LastAttempt < AutomaticInterval)))) return;
         Busy = true; Preferences.LastAttempt = clock(); Status = "Checking for updates…"; Persist();
         try {
             using var response = await client.GetAsync("https://api.github.com/repos/mahlernim/agent-quota-monitor-windows/releases?per_page=100");
