@@ -45,7 +45,9 @@ Documentation images render the same native controls with synthetic sample data.
 
 The native account tests exercise ordering, draft conflicts, account controls, and separate operation and connection feedback through synthetic HTTP responses. Append `-- <output.png>` to their command to render a sample Settings window without connecting provider accounts.
 
-Backend tests cover compatibility, startup deadlines, cancellation, and process ownership. Lifecycle tests exercise delayed responses during shutdown, malformed snapshots, floating-window preferences, and simultaneous launches. The backend identity marker prevents accidental connection to a different service but does not authenticate local callers.
+Python persistence tests cover discovery misses, Claude session expiry, network failure classification, wake requests, and the Antigravity CLI install offer. Upgrade tests cover the reader's version echo. Update policy tests also cover installer detection and SHA-256 verified downloads with redirect restrictions.
+
+Backend tests cover compatibility, startup deadlines, cancellation, process ownership, and replacement of a reader from another app version. Lifecycle tests exercise delayed responses during shutdown, malformed snapshots, floating-window preferences, and simultaneous launches. The backend identity marker prevents accidental connection to a different service but does not authenticate local callers.
 
 The real startup test uses Windows sockets and the native connection flow to launch and stop a Python reader. It creates isolated encrypted settings with all providers disabled. To check a packaged reader, append `--backend <path-to-quota-backend.exe>` to the startup test command.
 
@@ -54,5 +56,13 @@ The real startup test uses Windows sockets and the native connection flow to lau
 Build the installer with `./Build-Installer.ps1 -BundleDirectory <portable-build-folder>` after installing Inno Setup 6. Both build scripts read the same default version from the native project. If the portable build used `-Version`, pass the same override to the installer script. The installer script rejects a version that does not match the packaged executable, and the Inno Setup definition requires an explicitly supplied `AppVersion`.
 
 Validate installation, upgrades, removal, and preservation of settings before publishing. Run update policy tests with `dotnet run --project tests/native-updates/UpdateTests.csproj`.
+
+Release checklist:
+
+1. Update the version in `native/AgentQuotaMonitor.csproj` and the download links in `README.md` and `docs/windows.md`.
+2. Run the validation commands, `./Build-Windows.ps1`, and `./Build-Installer.ps1`.
+3. Install over the previous release and confirm that settings, pins, and cached quota survive.
+4. Publish the installer, the portable ZIP, and both `.sha256` files with the release. **Install update** in the next version requires the installer and its checksum file.
+5. From the previous installed version, use **Install update** once the release is public.
 
 Include Windows version, app version, provider names, and sanitized error categories in issues. Never include credentials, authorization codes, private provider files, or personal quota screenshots. See [provider interfaces](provider-evidence.md) and [third-party notices](../THIRD-PARTY-NOTICES.md).
