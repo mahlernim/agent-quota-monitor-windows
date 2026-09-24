@@ -2,7 +2,7 @@
 
 See how much of your AI coding quota is left, when each window resets, and whether you are spending faster than time is passing. It lives in the Windows tray and never sends a prompt to find out.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.0)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.1)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -35,7 +35,7 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 
 ## Install
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 
@@ -51,12 +51,14 @@ Any combination works, and one provider is enough. If an official client is alre
 
 | Provider | Official source the monitor reads | How to connect |
 | --- | --- | --- |
-| OpenAI Codex | Codex app or CLI session | Settings, then **Sign in** |
-| Anthropic Claude (direct subscription) | Claude Code session | Settings, then **Sign in** |
+| OpenAI Codex | Codex app or CLI session | Settings, then **Sign in**, or **Install Codex** if it's missing |
+| Anthropic Claude (direct subscription) | Claude Code session | Settings, then **Sign in**, or **Install Claude Code** if it's missing |
 | Google Antigravity | Antigravity CLI (`agy`), or the running desktop app | Settings, then **Install CLI** or **Open desktop app** |
-| GitHub Copilot (optional) | GitHub CLI and Copilot SDK | One-time [Copilot setup](docs/copilot-setup.md), then **Sign in** |
+| GitHub Copilot (optional) | GitHub CLI and Copilot SDK | Settings, then **Set up Copilot** and **Connect**. See [Copilot setup](docs/copilot-setup.md) |
 
 A browser-only login may not create the session the monitor reads. Sign in through the official client instead.
+
+If Codex or Claude Code isn't installed, Settings and the main window offer its official installer in place of **Sign in**. The confirmation shows the exact command, and it runs in a visible PowerShell window only after you choose OK. Clients installed while the monitor runs are found within a minute.
 
 The official clients renew their own sessions while you use them. If a session lapses, open that client (Codex, or Claude Code) and the monitor resumes by itself. Settings shows when a Claude Code session expires and when a Codex session was last renewed.
 
@@ -113,7 +115,9 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | The Antigravity CLI isn't installed and the desktop app is closed | No Antigravity source is running | **Install CLI**, or open the desktop app |
 | The Antigravity CLI needs sign-in | The CLI session lapsed | **Copy command**, then run `agy -p /usage` in a terminal |
 | Codex didn't accept the saved session | The Codex session lapsed | Open Codex, or **Sign in** |
-| Your Claude Code session expired | Claude Code hasn't renewed its session recently | Open Claude Code. The monitor resumes by itself |
+| Your Claude Code session expired | Claude Code renews its session only when used, even if it's already open | Send any message in Claude Code. The monitor resumes by itself |
+| Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
+| GitHub Copilot isn't set up yet, or Copilot is set up | Setup is incomplete, or no GitHub account is linked | **Set up Copilot**, then **Connect** |
 | No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
 | The provider changed its data format | A provider update changed its data | **Check for updates** |
 | Reset since the last read (ring tooltip) | The window reset after the value was read | Wait for the next reading. The old value is hidden |
@@ -126,13 +130,13 @@ Settings has an optional **Start with Windows (in the tray)** switch. It is off 
 
 ## Updates
 
-The monitor checks GitHub for a new release shortly after startup, at most once a day. When a release is available, a banner appears in the main window.
+The monitor checks GitHub for a new release shortly after startup and then at most every 3 hours. When a release is available, a banner appears in the main window.
 
 - **Install update** (installed copies only) downloads the installer from this project's GitHub release, verifies it against the published SHA-256 checksum, closes the monitor, and opens the installer. Nothing is installed without your confirmation, and nothing runs if verification fails.
 - **Download update** opens the release page instead. Portable copies always use this. Quit the monitor before replacing the extracted files.
 - **Later** postpones the reminder for a day. **Skip this version** hides that release.
 
-**Check for updates** in Settings checks immediately. You can turn off automatic checks there. Settings, cached quota, and account bindings are kept across updates.
+**Check now** in Settings checks immediately. You can turn off automatic checks there. Settings, cached quota, and account bindings are kept across updates.
 
 To uninstall, use Windows **Installed apps**. App files, shortcuts, and the startup entry are removed. Monitor settings and provider accounts are kept.
 
@@ -141,11 +145,11 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 - **An account is missing.** Sign in through the provider's official client, wait a minute, then press **Refresh**.
 - **Antigravity goes stale when the desktop app closes.** Install the Antigravity CLI from Settings. See [Google Antigravity](#google-antigravity).
 - **An Antigravity CLI account is stale.** Wait for the next eligible read shown in Settings, then press **Refresh**. If the CLI needs sign-in, run `agy` in a terminal, sign in, run `agy -p /usage`, and refresh again.
-- **Claude says the session expired.** Open Claude Code. If Claude Code itself reports that you are signed out, use **Sign in** in Settings.
+- **Claude says the session expired, but Claude Code is open.** An open Claude Code renews its session only when it's used. Send any message in it, and the monitor resumes within a minute. Use **Sign in** only if Claude Code itself says you're signed out.
 - **Codex says the session wasn't accepted.** Open the Codex app or CLI. If that doesn't help, use **Sign in**.
 - **Codex Sign in stops right away.** The Codex client exited before sign-in started. Update it with `npm install -g @openai/codex@latest`, check `~/.codex/config.toml`, or sign in through the Codex app.
 - **Claude says the read was rejected.** Check `claude auth status`, open Claude Code to let it renew its session, and press **Refresh**. If it still fails, sign in again through Claude Code.
-- **Copilot shows nothing.** Complete the one-time [Copilot setup](docs/copilot-setup.md), then use **Sign in** and finish the prompts in the console window.
+- **Copilot shows nothing.** Choose **Set up Copilot** in Settings, then **Connect**. See [Copilot setup](docs/copilot-setup.md).
 - **The quota reader is unavailable.** Click the refresh icon, which retries the connection. If it stays unavailable, use **Quit** and reopen the monitor. After an upgrade, the monitor replaces a reader left over from the previous version automatically.
 - **The portable copy does nothing when launched.** Make sure the whole ZIP was extracted, including the `backend` folder.
 - **An update could not be verified.** Nothing was installed. Try again later or use **Download update**.
