@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -190,6 +191,8 @@ internal static class Program
             confirmCliInstall: _ => confirmInstall, startCliInstall: () => ++installs,
             confirmInstall: (_, _) => confirmInstall, startInstall: clientInstalls.Add)
         { WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000, ShowActivated = false, ShowInTaskbar = false };
+        bool closed = false;
+        window.Closed += (_, _) => closed = true;
         try
         {
             window.Show();
@@ -350,6 +353,8 @@ internal static class Program
                 "Unavailable backend blocks account reads and writes while preserving the Settings window and draft");
             backendReady = true;
             Click(Field<Button>(window, "_cancelOrder"));
+            Check(body.Children.OfType<TextBlock>().SelectMany(block => block.Inlines.OfType<System.Windows.Documents.Hyperlink>())
+                .Any(link => link.NavigateUri?.AbsoluteUri == "https://github.com/mahlernim/agent-quota-monitor-windows/issues"), "Settings links to the project's issue page");
             if (previewPath is not null)
             {
                 JsonObject preview = JsonNode.Parse(Snapshot("sample-codex", "sample-claude", "sample-copilot"))!.AsObject();
@@ -384,8 +389,13 @@ internal static class Program
                 encoder.Save(output);
                 Console.WriteLine("Synthetic Settings preview saved to " + path);
             }
+            Click(Field<Button>(window, "_editOrder"));
+            PressEscape(window);
+            Check(!layout.Editing && window.IsVisible, "Esc discards an unsaved order draft before it closes Settings");
+            PressEscape(window);
+            Check(closed, "Esc closes Settings when nothing is being edited");
         }
-        finally { window.Close(); owner.Close(); }
+        finally { if (!closed) window.Close(); owner.Close(); }
     }
 
     private static async Task TestCopilot(AccountsWindow window, SyntheticBackend handler, JsonObject status, List<OfficialInstall> installs)
@@ -522,6 +532,8 @@ internal static class Program
     private static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
     private static Task Call(object target, string name, params object[] args) => (Task)target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args)!;
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    private static void PressEscape(Window window) => window.RaiseEvent(
+        new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
     // Drag and drop and Alt+arrow keys both call MoveRow on the unsaved draft.
     private static bool Move(AccountsWindow window, string id, int offset) =>
         (bool)window.GetType().GetMethod("MoveRow", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { id, offset })!;

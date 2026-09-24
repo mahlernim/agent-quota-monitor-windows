@@ -74,6 +74,8 @@ public sealed class MainWindow : Window
         _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); _notice.Visibility = Visibility.Collapsed; };
         _scroll.Content = _groups;
         root.Children.Add(_scroll);
+        // Closing hides the window to the tray, so Esc is a safe shortcut for it.
+        KeyDown += (_, e) => { if (e.Key == Key.Escape && !e.Handled) { e.Handled = true; Close(); } };
     }
 
     internal void ShowBackendError(string message)
