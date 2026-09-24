@@ -1,10 +1,10 @@
 # Building and contributing
 
-The Windows application uses WPF on .NET 8. A separate Python backend reads quotas and exposes a loopback API for the native app. It does not serve a browser dashboard.
+The Windows application uses WPF on .NET 10. A separate Python backend reads quotas and exposes a loopback API for the native app. It does not serve a browser dashboard.
 
 ## Build
 
-On Windows x64, install .NET 8 SDK and Python 3.12, then run `./Build-Windows.ps1`. It creates a portable ZIP and SHA-256 file under `dist/` and runs an offline packaged rendering check. The default release version comes from `native/AgentQuotaMonitor.csproj`. Use `-Version` only when building an explicit version override.
+On Windows x64, install .NET 10 SDK and Python 3.12, then run `./Build-Windows.ps1`. It creates a portable ZIP and SHA-256 file under `dist/` and runs an offline packaged rendering check. The default release version comes from `native/AgentQuotaMonitor.csproj`. Use `-Version` only when building an explicit version override.
 
 For development, prepare the backend Python environment and the build tools, then generate the icon before running `./Start-Windows.ps1`.
 
@@ -35,9 +35,9 @@ python tests/check_native_startup.py dotnet
 dotnet run --project tests/native-updates/UpdateTests.csproj
 ```
 
-Use a .NET 8 SDK and Node.js 22 for the validation commands. Icon generation requires the build environment above and creates the ignored `build/robot-ring.ico` resource. The tests use synthetic provider responses and isolated loopback fixtures. They do not require a running monitor or provider sign-in.
+Use a .NET 10 SDK and Node.js 22 for the validation commands. Icon generation requires the build environment above and creates the ignored `build/robot-ring.ico` resource. The tests use synthetic provider responses and isolated loopback fixtures. They do not require a running monitor or provider sign-in.
 
-The Windows validation workflow runs these checks for pull requests and pushes to `main`. It also runs the native rendering self-test. GitHub Actions prepares Python 3.12, Node.js 22, and .NET 8, installs the pinned build dependencies, and generates the icon before compiling. CI does not package or publish releases.
+The Windows validation workflow runs these checks for pull requests and pushes to `main`. It also runs the native rendering self-test. GitHub Actions prepares Python 3.12, Node.js 22, and .NET 10, installs the pinned build dependencies, and generates the icon before compiling. CI does not package or publish releases.
 
 Clean-machine, accessibility, mixed-DPI, and sleep/resume testing remains limited. Startup command checks do not replace a real Windows sign-in test.
 

@@ -198,7 +198,7 @@ public sealed class App : Application
         if (release is null || stopping || updateProgress is not null || main is null) return;
         string version = release.Tag.TrimStart('v');
         var answer = MessageBox.Show(main, $"Install version {version} now?\n\n" +
-            "The monitor downloads the installer from this project's GitHub release, checks it against the published SHA-256 checksum, " +
+            "The monitor downloads the installer from the official Agent Quota Monitor release on GitHub, checks it against the published SHA-256 checksum, " +
             "closes itself, and opens the installer. Your settings and cached quota are kept.",
             "Install update", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
         if (answer != MessageBoxResult.OK || stopping) return;

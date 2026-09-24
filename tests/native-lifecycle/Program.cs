@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using AgentQuotaMonitor;
 
@@ -22,7 +23,7 @@ internal static class Program
 {
     private static int checks;
     private static readonly string[] Cases = { "late-status", "late-preferences", "late-startup", "snapshots", "owned-quit", "external-quit", "cleanup-failure", "instances",
-        "retry-success", "retry-parallel", "retry-quit", "retry-poll" };
+        "retry-success", "retry-parallel", "retry-quit", "retry-poll", "escape" };
     [STAThread]
     private static int Main(string[] args)
     {
@@ -210,6 +211,20 @@ internal static class Program
                         Check(handler.Requests == 0 && Field<object?>(app, "timer") is null && Field<object?>(app, "updateTimer") is null && Field<object?>(app, "updates") is null,
                             "A startup continuation cannot create polls or update timers after Quit");
                         Check(exits == 1 && stops == 1 && hides == 0, "Startup shutdown runs cleanup once without hiding preferences");
+                        break;
+                    }
+                    case "escape":
+                    {
+                        // The app cancels a main window close and hides it to the tray instead.
+                        int closes = 0;
+                        System.ComponentModel.CancelEventHandler hide = (_, ev) => { ++closes; ev.Cancel = true; main.Hide(); };
+                        main.Closing += hide;
+                        main.Show();
+                        var press = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(main)!, 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent };
+                        main.RaiseEvent(press);
+                        Check(closes == 1 && press.Handled && !main.IsVisible, "Esc closes the main window through the hide-to-tray path");
+                        main.Closing -= hide;
+                        await Call(app, "Quit");
                         break;
                     }
                     case "cleanup-failure":

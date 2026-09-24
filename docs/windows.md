@@ -4,9 +4,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 ## Install and launch
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -32,7 +32,7 @@ Accounts remain separate by verified identity, even when email labels match. Dir
 - Drag a ring to reorder it within its account, or drag an account name to reorder accounts. Alt with the arrow keys does the same for a focused ring.
 - Hover a ring for percentages, reset times, and pace. Hover a toolbar icon to see what it does.
 - The floating monitor icon shows or hides the floating monitor. Drag it to move it, double-click it to show the main window, and right-click it for **Size** and **Opacity**.
-- **Close** hides the main window to the tray. **Quit** exits and stops the quota reader if this app started it.
+- **Close** or **Esc** hides the main window to the tray. **Esc** also closes Settings. **Quit** exits and stops the quota reader if this app started it.
 
 The thick outer ring shows quota remaining in the provider's color. The thin gray inner ring shows time remaining when the reset time is known. Percentage text turns amber when quota remaining falls below half of time remaining, and red below one quarter.
 
@@ -65,7 +65,7 @@ The monitor checks GitHub's public releases API without credentials, shortly aft
 
 When an update is available, the banner offers these choices.
 
-- **Install update** (installed copies). Downloads the installer from this project's GitHub release, verifies its published SHA-256 checksum, closes the monitor, and opens the installer. Nothing runs if verification fails.
+- **Install update** (installed copies). Downloads the installer from the official Agent Quota Monitor release on GitHub, verifies its published SHA-256 checksum, closes the monitor, and opens the installer. Nothing runs if verification fails.
 - **Download update**. Opens the release page. Portable users should quit the monitor and replace all extracted files.
 - **Later** and **Skip this version**. Postpone the reminder for a day, or hide that release.
 
@@ -79,6 +79,7 @@ Uninstall the installed version through Windows Installed apps. This removes app
 - **An Antigravity CLI account is stale.** Wait for the next eligible read shown in Settings. If the CLI needs sign-in, run `agy` in a terminal, sign in, run `agy -p /usage`, and press **Refresh**.
 - **The quota reader is unavailable.** Click the refresh icon, which retries the connection. If it stays unavailable, use **Quit** and reopen the monitor.
 - **The portable copy does nothing.** Confirm that the complete archive was extracted.
+- **Report a problem or suggest an idea.** Choose **Report it on GitHub** in Settings, or open the [issue page](https://github.com/mahlernim/agent-quota-monitor-windows/issues).
 
 ## Privacy and local data
 
@@ -86,6 +87,6 @@ The monitor reads official client sessions without taking over sign-in or renewa
 
 Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.1) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.2) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

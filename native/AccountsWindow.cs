@@ -113,6 +113,14 @@ public sealed class AccountsWindow : Window
             if (!_closed) _timer.Start();
         };
         Closed += (_, _) => { _closed = true; _timer.Stop(); };
+        // Esc backs out of order editing first, like Cancel, then closes Settings like the title bar button.
+        KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape || e.Handled) return;
+            e.Handled = true;
+            if (_layout.Editing) { if (_cancelOrder.IsEnabled) _cancelOrder.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
+            else Close();
+        };
     }
 
     private static TextBlock Heading(string text) => new()
@@ -120,13 +128,13 @@ public sealed class AccountsWindow : Window
         Text = text, FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, Margin = new Thickness(0, 4, 0, 2)
     };
 
-    private static TextBlock Hint(string text, string? link = null)
+    private static TextBlock Hint(string text, string? link = null, string linkText = "Learn more")
     {
         var block = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Ui.Muted, FontSize = 12, Margin = new Thickness(0, 2, 0, 4) };
         block.Inlines.Add(new Run(text));
         if (link is not null)
         {
-            var hyperlink = new Hyperlink(new Run("Learn more")) { NavigateUri = new Uri(link) };
+            var hyperlink = new Hyperlink(new Run(linkText)) { NavigateUri = new Uri(link) };
             hyperlink.RequestNavigate += (_, e) =>
             {
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
@@ -181,6 +189,7 @@ public sealed class AccountsWindow : Window
             Closed += (_, _) => _updates.Changed -= UpdateStatus;
             UpdateStatus();
         }
+        body.Children.Add(Hint("Found a bug or have an idea?", UpdateService.Repository + "/issues", "Report it on GitHub"));
         body.Children.Add(new Separator { Margin = new Thickness(0, 4, 0, 6) });
         body.Children.Add(Heading("Monitored providers"));
         body.Children.Add(Hint("Changes save right away. Sign-in uses each provider's official client, and the monitor never switches accounts."));

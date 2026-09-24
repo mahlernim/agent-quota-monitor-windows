@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Version>0.3.1</Version>
-    <OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework>
+    <Version>0.3.2</Version>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>agent-quota-monitor-windows</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\build\robot-ring.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <ItemGroup><Resource Include="..\build\robot-ring.ico" Link="robot-ring.ico" /></ItemGroup>
 </Project>

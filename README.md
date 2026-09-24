@@ -2,7 +2,7 @@
 
 See how much of your AI coding quota is left, when each window resets, and whether you are spending faster than time is passing. It lives in the Windows tray and never sends a prompt to find out.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.1)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.2)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -35,7 +35,7 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 
 ## Install
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.1/agent-quota-monitor-windows-0.3.1-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.2/agent-quota-monitor-windows-0.3.2-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 
@@ -96,7 +96,7 @@ Hover any ring for exact values, the reset time, pace, and, when something is wr
 - **Drag a ring** to reorder it within its account, or **drag an account name** to reorder accounts. With the keyboard, press Alt with the arrow keys on a focused ring. Pins and the tray choice follow their rings.
 - **Toolbar icons.** Refresh, floating monitor, Settings, and Quit. Hover an icon to see what it does.
 - **Floating monitor.** Drag to move it, double-click to open the main window, and right-click for **Size** (75 to 200%) and **Opacity** (35 to 100%). Its size, opacity, and position are remembered.
-- **Close** hides the main window to the tray. **Quit** exits and stops the quota reader it started.
+- **Close** or **Esc** hides the main window to the tray. **Quit** exits and stops the quota reader it started.
 
 ### Names on rings
 
@@ -104,7 +104,7 @@ Rings show short names such as **Codex 5h** or **Gemini 7d**. The tray icon uses
 
 ### Settings
 
-Each account takes one row with its status. **Details** shows the last and next read, session times, and the reading source. The copy icon copies support details without credentials or your account label. To reorder accounts there, choose **Edit order**, drag rows or press Alt with Up and Down, then **Save order**.
+Each account takes one row with its status. **Details** shows the last and next read, session times, and the reading source. The copy icon copies support details without credentials or your account label. To reorder accounts there, choose **Edit order**, drag rows or press Alt with Up and Down, then **Save order**. **Esc** closes Settings, or discards an unsaved order first.
 
 ## Stale readings and what they mean
 
@@ -132,7 +132,7 @@ Settings has an optional **Start with Windows (in the tray)** switch. It is off 
 
 The monitor checks GitHub for a new release shortly after startup and then at most every 3 hours. When a release is available, a banner appears in the main window.
 
-- **Install update** (installed copies only) downloads the installer from this project's GitHub release, verifies it against the published SHA-256 checksum, closes the monitor, and opens the installer. Nothing is installed without your confirmation, and nothing runs if verification fails.
+- **Install update** (installed copies only) downloads the installer from the official Agent Quota Monitor release on GitHub, verifies it against the published SHA-256 checksum, closes the monitor, and opens the installer. Nothing is installed without your confirmation, and nothing runs if verification fails.
 - **Download update** opens the release page instead. Portable copies always use this. Quit the monitor before replacing the extracted files.
 - **Later** postpones the reminder for a day. **Skip this version** hides that release.
 
@@ -153,6 +153,7 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 - **The quota reader is unavailable.** Click the refresh icon, which retries the connection. If it stays unavailable, use **Quit** and reopen the monitor. After an upgrade, the monitor replaces a reader left over from the previous version automatically.
 - **The portable copy does nothing when launched.** Make sure the whole ZIP was extracted, including the `backend` folder.
 - **An update could not be verified.** Nothing was installed. Try again later or use **Download update**.
+- **Something else is wrong, or you have an idea.** Choose **Report it on GitHub** in Settings, or open the [issue page](https://github.com/mahlernim/agent-quota-monitor-windows/issues). Include the copied account details rather than screenshots of your quota.
 
 ## Privacy
 

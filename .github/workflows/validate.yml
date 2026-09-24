@@ -43,7 +43,7 @@ jobs:
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       - name: Install build dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-build.txt
       - name: Run Python tests
@@ -61,7 +61,7 @@ jobs:
       - name: Check native rendering
         run: |
           $report = Join-Path $env:RUNNER_TEMP 'agent-quota-rendering.json'
-          $app = Join-Path $PWD 'native/bin/Release/net8.0-windows/agent-quota-monitor-windows.exe'
+          $app = Join-Path $PWD 'native/bin/Release/net10.0-windows/agent-quota-monitor-windows.exe'
           $process = Start-Process -FilePath $app -ArgumentList '--self-test-output', ('"' + $report + '"') -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(30000)) { throw 'Native rendering check timed out.' }
           if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $report)) { throw 'Native rendering check failed.' }
