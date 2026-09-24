@@ -263,18 +263,20 @@ public sealed class MainWindow : Window
         };
         var overlay = new Grid();
         border.Child = overlay;
+        // The whole card selects the tray quota. The pin sits above it with its own click.
         var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
-        overlay.Children.Add(stack);
-        var donut = new Donut { Width = 58, Height = 58 };
-        var select = new Button { Content = donut, Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent,
-            Focusable = true, Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Center };
-        select.Template = TransparentTemplate();
-        stack.Children.Add(select);
+        var donut = new Donut { Width = 58, Height = 58, HorizontalAlignment = HorizontalAlignment.Center };
+        stack.Children.Add(donut);
         var label = new FitText { Width = CardWidth - 8, Height = 16, FontSize = 11, Margin = new Thickness(0, 2, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(label);
+        var select = new Button { Content = stack, Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent,
+            Focusable = true, Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
+        select.Template = TransparentTemplate();
+        overlay.Children.Add(select);
         var tray = Icons.Create(Icons.Inbox, 12, Ui.Accent);
         tray.HorizontalAlignment = HorizontalAlignment.Left; tray.VerticalAlignment = VerticalAlignment.Top; tray.Margin = new Thickness(6, 5, 0, 0);
-        tray.ToolTip = "Shown in the system tray";
+        tray.IsHitTestVisible = false;
         overlay.Children.Add(tray);
         var stale = new Border
         {
@@ -284,8 +286,8 @@ public sealed class MainWindow : Window
             Child = new TextBlock { Text = "stale", FontSize = 9, Foreground = Ui.WarningText }
         };
         overlay.Children.Add(stale);
-        var insertLeft = new Rectangle { Width = 3, Fill = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Collapsed, RadiusX = 1.5, RadiusY = 1.5 };
-        var insertRight = new Rectangle { Width = 3, Fill = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Right, Visibility = Visibility.Collapsed, RadiusX = 1.5, RadiusY = 1.5 };
+        var insertLeft = new Rectangle { Width = 3, Fill = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Collapsed, RadiusX = 1.5, RadiusY = 1.5, IsHitTestVisible = false };
+        var insertRight = new Rectangle { Width = 3, Fill = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Right, Visibility = Visibility.Collapsed, RadiusX = 1.5, RadiusY = 1.5, IsHitTestVisible = false };
         overlay.Children.Add(insertLeft); overlay.Children.Add(insertRight);
         var glyph = PinGlyph();
         var pin = PinButton(glyph);
@@ -525,11 +527,17 @@ public sealed class MainWindow : Window
         Stretch = Stretch.None
     };
 
+    /// <summary>A transparent but hit-testable surface, so empty card space still accepts clicks.</summary>
     private static ControlTemplate TransparentTemplate()
     {
         var template = new ControlTemplate(typeof(Button));
+        var surface = new FrameworkElementFactory(typeof(Border));
+        surface.SetValue(Border.BackgroundProperty, Brushes.Transparent);
         var content = new FrameworkElementFactory(typeof(ContentPresenter));
-        template.VisualTree = content;
+        content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+        surface.AppendChild(content);
+        template.VisualTree = surface;
         return template;
     }
 

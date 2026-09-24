@@ -179,3 +179,18 @@ class IdentityTests(unittest.TestCase):
         monitor.rows[account['id']]['status'] = 'stale'
         self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [account['id']])
         self.assertIn(legacy['id'], monitor.rows)
+
+    def test_hiding_the_cli_card_does_not_revive_the_legacy_desktop_card(self):
+        monitor = Monitor(Store(), clock=lambda: 1000)
+        legacy = providers.account('antigravity', 'legacy', 'same@example.com',
+                                   'Official running Antigravity local service',
+                                   lambda: (cli.parse_usage(USAGE), 'same@example.com'))
+        monitor.refresh_one(legacy)
+        monitor.rows[legacy['id']]['status'] = 'stale'
+        account = cli.cli_account()
+        monitor.refresh_one(account)
+        self.assertTrue(monitor.remove_account(account['id']))
+        self.assertEqual(monitor.snapshot()['accounts'], [])
+        monitor.restore_accounts()
+        self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [account['id']])
+        self.assertIn(legacy['id'], monitor.rows)

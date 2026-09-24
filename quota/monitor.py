@@ -288,9 +288,10 @@ class Monitor:
             enabled = self.enabled.copy() if self.enabled is not None else None
         now = self.clock()
         # Keep the established CLI card on failures rather than revive desktop duplicates.
-        # Legacy rows and pins remain on disk without merging identities by email.
+        # Hiding the CLI card must not revive them either. Legacy rows and pins remain
+        # on disk without merging identities by email.
         if any(r['provider'] == 'antigravity' and r.get('source', '').startswith('Official Antigravity CLI')
-               and r.get('lastSuccess') and r['id'] not in hidden for r in rows):
+               and r.get('lastSuccess') for r in rows):
             rows = [r for r in rows if r.get('source') != 'Official running Antigravity local service']
         for label in self.desired_google:
             # This is a requested connection, not a verified or merged account.

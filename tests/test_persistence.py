@@ -184,6 +184,55 @@ class CodexRenewalTests(unittest.TestCase):
             self.assertIsNone(providers.codex_renewed(value))
 
 
+class ClientDetectionTests(unittest.TestCase):
+    def test_missing_session_and_client_is_reported_as_not_installed(self):
+        missing = providers.Path('Z:/aqm-test-missing/auth.json')
+        with patch.object(providers, 'client_missing', return_value=True):
+            with self.assertRaises(providers.ReadError) as raised:
+                providers.load_session('codex', missing)
+        self.assertEqual(raised.exception.code, 'client_not_installed')
+        with patch.object(providers, 'client_missing', return_value=False):
+            with self.assertRaises(providers.ReadError) as raised:
+                providers.load_session('claude', missing)
+        self.assertEqual(raised.exception.code, 'local_session_unavailable')
+
+    def test_saved_path_entries_are_added_once_and_throttled(self):
+        import sys, types
+        fake = types.SimpleNamespace(HKEY_LOCAL_MACHINE=1, HKEY_CURRENT_USER=2)
+        values = {1: r'C:\Windows', 2: r'C:\Users\me\AppData\Local\Programs\OpenAI\Codex\bin;C:\Windows'}
+        class Key:
+            def __init__(self, root): self.root = root
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+        fake.OpenKey = lambda root, key: Key(root)
+        fake.QueryValueEx = lambda handle, name: (values[handle.root], 1)
+        now = [1000.0]
+        with patch.dict(sys.modules, {'winreg': fake}), patch.dict(os.environ, {'PATH': r'C:\Windows'}), \
+                patch.object(providers.os, 'name', 'nt'), patch.object(providers, '_path_checked', [0.0]):
+            providers.refresh_path(clock=lambda: now[0])
+            self.assertEqual(os.environ['PATH'], r'C:\Windows;C:\Users\me\AppData\Local\Programs\OpenAI\Codex\bin')
+            values[2] += r';C:\Later'
+            now[0] += 10
+            providers.refresh_path(clock=lambda: now[0])
+            self.assertNotIn('Later', os.environ['PATH'])
+            now[0] += 30
+            providers.refresh_path(clock=lambda: now[0])
+            self.assertTrue(os.environ['PATH'].endswith(r';C:\Later'))
+
+    def test_clients_installed_while_running_are_found(self):
+        now = [100.0]
+        installed = set()
+        link = connections.Connections(Monitor(MemoryVault(), clock=lambda: 1000),
+                                       resolver=lambda provider: ['client.exe'] if provider in installed else None,
+                                       clock=lambda: now[0])
+        with patch('quota.antigravity_cli.command', side_effect=providers.ReadError('antigravity_cli_unavailable')):
+            self.assertFalse(link.snapshot()['clients']['claude'])
+            installed.add('claude')
+            self.assertFalse(link.snapshot()['clients']['claude'])
+            now[0] += connections.CLIENT_RECHECK_SECONDS
+            self.assertTrue(link.snapshot()['clients']['claude'])
+
+
 class NetworkTests(unittest.TestCase):
     def raise_url_error(self, reason):
         class Opener:

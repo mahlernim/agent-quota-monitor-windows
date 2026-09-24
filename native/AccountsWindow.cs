@@ -73,12 +73,18 @@ public sealed class AccountsWindow : Window
     });
     private readonly Func<Window, bool> _confirmCliInstall;
     private readonly Action _startCliInstall;
+    private readonly Func<Window, OfficialInstall, bool> _confirmInstall;
+    private readonly Action<OfficialInstall> _startInstall;
+    private readonly Dictionary<string, Button> _clientInstallButtons = [];
 
     internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null, Func<bool>? backendReady = null,
-        Func<Window, bool>? confirmCliInstall = null, Action? startCliInstall = null)
+        Func<Window, bool>? confirmCliInstall = null, Action? startCliInstall = null,
+        Func<Window, OfficialInstall, bool>? confirmInstall = null, Action<OfficialInstall>? startInstall = null)
     {
         _confirmCliInstall = confirmCliInstall ?? AntigravityCliInstall.Confirm;
         _startCliInstall = startCliInstall ?? AntigravityCliInstall.Start;
+        _confirmInstall = confirmInstall ?? ((window, installer) => installer.Confirm(window));
+        _startInstall = startInstall ?? (installer => installer.Start());
         _updates = updates;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -157,7 +163,8 @@ public sealed class AccountsWindow : Window
             var updateRow = new DockPanel { Margin = new Thickness(0, 2, 0, 4), LastChildFill = true };
             var auto = new CheckBox { Content = "Check for updates automatically", IsChecked = _updates.Preferences.Automatic, VerticalAlignment = VerticalAlignment.Center };
             auto.Click += (_, _) => _updates.SetAutomatic(auto.IsChecked == true);
-            var check = Ui.Button("Check for updates", () => _ = _updates.Check(true));
+            var check = Ui.Button("Check now", () => _ = _updates.Check(true));
+            AutomationProperties.SetName(check, "Check for updates now");
             DockPanel.SetDock(check, Dock.Right);
             updateRow.Children.Add(check);
             updateRow.Children.Add(auto);
@@ -185,6 +192,16 @@ public sealed class AccountsWindow : Window
             DockPanel.SetDock(signIn, Dock.Right);
             row.Children.Add(signIn);
             _signInButtons[provider] = signIn;
+            if (provider is "codex" or "claude")
+            {
+                OfficialInstall installer = provider == "codex" ? OfficialInstall.Codex : OfficialInstall.Claude;
+                var install = Ui.Apply(new Button { Content = installer.Title, Tag = "install:" + provider, Visibility = Visibility.Collapsed,
+                    ToolTip = "Shows the official install command first. Runs only after you confirm." });
+                install.Click += (_, _) => InstallClient(installer);
+                DockPanel.SetDock(install, Dock.Right);
+                row.Children.Add(install);
+                _clientInstallButtons[provider] = install;
+            }
             if (provider == "antigravity")
             {
                 AutomationProperties.SetName(_installCli, "Install the official Antigravity CLI");
@@ -331,6 +348,13 @@ public sealed class AccountsWindow : Window
         {
             foreach ((string provider, Button button) in _signInButtons)
                 button.IsEnabled = clients.TryGetProperty(provider, out JsonElement available) && available.ValueKind == JsonValueKind.True;
+            // A missing Codex or Claude client offers its official installer in place of a disabled Sign in.
+            foreach ((string provider, Button install) in _clientInstallButtons)
+            {
+                bool missing = clients.TryGetProperty(provider, out JsonElement found) && found.ValueKind == JsonValueKind.False;
+                install.Visibility = missing ? Visibility.Visible : Visibility.Collapsed;
+                _signInButtons[provider].Visibility = missing ? Visibility.Collapsed : Visibility.Visible;
+            }
             // Offer the install only when the reader positively reports that agy is missing.
             _installCli.Visibility = clients.TryGetProperty("antigravityCli", out JsonElement cli) && cli.ValueKind == JsonValueKind.False
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -627,6 +651,17 @@ public sealed class AccountsWindow : Window
     private async Task StartConnectionAsync(string provider) =>
         await PostAsync("/api/connections/start", new { provider },
             provider == "antigravity" ? "Opening Antigravity desktop app. CLI accounts sign in through agy in a terminal." : "Official sign-in started.");
+
+    private void InstallClient(OfficialInstall installer)
+    {
+        if (_closed || !_confirmInstall(this, installer)) return;
+        try
+        {
+            _startInstall(installer);
+            ShowSuccess("The official installer opened in PowerShell. When it finishes, choose Sign in here.");
+        }
+        catch (Exception) { ShowError("PowerShell couldn't be started. Run the install command shown in the confirmation yourself."); }
+    }
 
     private void InstallCli()
     {

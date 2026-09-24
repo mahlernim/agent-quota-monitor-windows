@@ -65,6 +65,42 @@ def request(url, headers=None, body=None):
         raise ReadError('connection_or_response_error') from None
 
 
+_path_checked = [0.0]
+
+
+def refresh_path(clock=time.monotonic):
+    """Add PATH entries saved since startup, so newly installed official clients are found."""
+    if os.name != 'nt' or clock() - _path_checked[0] < 30:
+        return
+    _path_checked[0] = clock()
+    try:
+        import winreg
+        saved = []
+        for root, key in ((winreg.HKEY_LOCAL_MACHINE, r'SYSTEM\CurrentControlSet\Control\Session Manager\Environment'),
+                          (winreg.HKEY_CURRENT_USER, 'Environment')):
+            try:
+                with winreg.OpenKey(root, key) as handle:
+                    saved.extend(os.path.expandvars(winreg.QueryValueEx(handle, 'Path')[0]).split(';'))
+            except OSError:
+                continue
+    except ImportError:
+        return
+    current = os.environ.get('PATH', '').split(';')
+    known = {os.path.normcase(entry.rstrip('\\')) for entry in current if entry}
+    added = [entry for entry in saved if entry and os.path.normcase(entry.rstrip('\\')) not in known]
+    if added:
+        os.environ['PATH'] = ';'.join(current + added)
+
+
+def client_missing(provider):
+    """True only when no official client for the provider can be found."""
+    from .connections import client_command
+    try:
+        return client_command(provider) is None
+    except (OSError, ValueError):
+        return False
+
+
 def load(path):
     try:
         return json.loads(Path(path).read_text(encoding='utf-8-sig'))
@@ -77,9 +113,19 @@ def account(provider, subject, label, source, reader, identity_status='provider 
                 source=source, identityStatus=identity_status, read=reader)
 
 
+def load_session(provider, path):
+    """Load an official session file, telling a missing client apart from a missing session."""
+    try:
+        return load(path)
+    except ReadError:
+        if not Path(path).exists() and client_missing(provider):
+            raise ReadError('client_not_installed') from None
+        raise
+
+
 def codex_account():
     path = Path(os.environ.get('CODEX_HOME', HOME / '.codex')) / 'auth.json'
-    d = load(path)
+    d = load_session('codex', path)
     tokens = d.get('tokens') or {}
     subject = tokens.get('account_id')
     if not subject or not tokens.get('access_token'):
@@ -121,7 +167,7 @@ def claude_expiry(oauth):
 
 def claude_account():
     path = HOME / '.claude/.credentials.json'
-    expires = claude_expiry(load(path).get('claudeAiOauth'))
+    expires = claude_expiry(load_session('claude', path).get('claudeAiOauth'))
     metadata = load(HOME / '.claude.json').get('oauthAccount') or {}
     subject = metadata.get('accountUuid')
     if not subject:

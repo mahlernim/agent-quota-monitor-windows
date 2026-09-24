@@ -53,7 +53,12 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             "Codex did not accept the saved session. Open the Codex app or CLI to renew it. The monitor resumes by itself afterward. Sign in again only if that does not help.",
         "sign_in_required" => "Session expired or rejected. Sign in through the official client.",
         "session_expired" when Provider == "claude" =>
-            "The Claude Code session expired. Open Claude Code to renew it. The monitor resumes automatically after Claude Code renews the session.",
+            "The Claude Code session expired. An open but idle Claude Code renews it only when used, so send any message in Claude Code. " +
+            "The monitor resumes by itself. Sign in again only if Claude Code reports that you are signed out.",
+        "client_not_installed" when Provider == "codex" =>
+            "Codex isn't installed on this computer. Install it from Settings or the main window, then choose Sign in.",
+        "client_not_installed" when Provider == "claude" =>
+            "Claude Code isn't installed on this computer. Install it from Settings or the main window, then choose Sign in.",
         "session_expired" => "The official session expired. Open the official client to renew it.",
         "antigravity_cli_unavailable" =>
             "The Antigravity CLI (agy) is not installed and the Antigravity desktop app is closed. Install the official CLI from Settings to read quota without the desktop app, or open the desktop app. Gemini CLI does not report Antigravity quota.",
@@ -92,7 +97,9 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 "antigravity_cli_unavailable" => new("The Antigravity CLI isn't installed and the desktop app is closed.", "install-cli", "Install CLI"),
                 "local_session_unavailable" when IsAntigravityDesktop => new("The Antigravity desktop app is closed.", "open-desktop", "Open desktop app"),
                 "sign_in_required" when IsAntigravityDesktop => new("The Antigravity desktop session was rejected.", "open-desktop", "Open desktop app"),
-                "session_expired" when Provider == "claude" => new("Your Claude Code session expired. Open Claude Code to renew it."),
+                "session_expired" when Provider == "claude" => new("Your Claude Code session expired. Send any message in Claude Code to renew it."),
+                "client_not_installed" when Provider == "codex" => new("Codex isn't installed.", "install-codex", "Install Codex"),
+                "client_not_installed" when Provider == "claude" => new("Claude Code isn't installed.", "install-claude", "Install Claude Code"),
                 "session_expired" => new("The session expired. Open the official client to renew it."),
                 "sign_in_required" when Provider == "codex" => new("Codex didn't accept the saved session. Open Codex, or sign in again.", "sign-in", "Sign in"),
                 "sign_in_required" when Provider == "claude" => new("Claude didn't accept the saved session. Open Claude Code, or sign in again.", "sign-in", "Sign in"),
