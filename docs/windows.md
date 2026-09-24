@@ -4,17 +4,17 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 ## Install and launch
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.4/agent-quota-monitor-windows-0.2.4-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.4/agent-quota-monitor-windows-0.2.4-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
 ## Connect your providers
 
-Open **Settings**, select your providers, and click **Save monitored providers**. Existing sessions from official coding clients are detected within a minute. A browser sign-in alone may not be enough.
+Open **Settings** (the gear icon) and select your providers. Changes save right away. Existing sessions from official coding clients are detected within a minute. A browser sign-in alone may not be enough.
 
-- **Codex and Claude.** **Sign in** launches the official client's sign-in. Install the official clients first.
+- **Codex and Claude.** **Sign in** launches the official client's sign-in. Install the official clients first. The clients renew their own sessions while you use them. If a session lapses, open that client and the monitor resumes by itself.
 - **Antigravity.** The official Antigravity CLI (`agy`) lets the monitor read quota while the desktop app is closed. When `agy` is missing, **Install CLI** shows Google's exact install command, `irm https://antigravity.google/cli/install.ps1 | iex`, and runs it in a visible PowerShell window only after you confirm. That window then runs `agy -p /usage` so you can sign in. You can also follow the [official instructions](https://antigravity.google/docs/cli/install) yourself. **Open desktop app** opens the Antigravity desktop app, which can supply readings while it runs. Gemini CLI does not report Antigravity quota. API-key mode is not supported.
 - **Copilot.** Needs the optional [one-time setup](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/copilot-setup.md). **Sign in** opens the official GitHub CLI and browser. Leave the console open until sign-in finishes.
 
@@ -22,29 +22,34 @@ After a successful CLI reading, the Antigravity account marked **CLI** replaces 
 
 Accounts remain separate by verified identity, even when email labels match. Direct Claude subscriptions are separate from Claude or GPT allowance supplied by Antigravity. Use a provider's own client to change accounts. The monitor never switches accounts automatically.
 
-**Remove** hides an account and stops monitoring it without signing out or deleting credentials. **Restore hidden accounts** brings it back.
+**Hide** (the crossed-out eye in Settings) stops monitoring an account without signing out or deleting credentials. **Restore hidden accounts** brings it back.
 
 ## Use the monitor
 
-- Click a ring to choose the system-tray quota. Its label shows **Tray**.
+- Click a ring to choose the system-tray quota. It gets a blue outline and a small tray icon.
 - Click the pin at a ring's top-right corner to pin or unpin it on the floating monitor. Filled violet means pinned.
-- Hover a ring for percentages, reset times, pace, and guidance when a reading has a problem.
-- **Floating** shows or hides the floating monitor. Drag it to move it, double-click it to show the main window, and right-click it for **Size** and **Opacity**.
-- **Reorder** moves accounts up or down and rings left or right. Each move saves immediately.
+- Right-click a ring to show it in the tray, pin it, move it, move its account, or copy its details.
+- Drag a ring to reorder it within its account, or drag an account name to reorder accounts. Alt with the arrow keys does the same for a focused ring.
+- Hover a ring for percentages, reset times, and pace. Hover a toolbar icon to see what it does.
+- The floating monitor icon shows or hides the floating monitor. Drag it to move it, double-click it to show the main window, and right-click it for **Size** and **Opacity**.
 - **Close** hides the main window to the tray. **Quit** exits and stops the quota reader if this app started it.
 
 The thick outer ring shows quota remaining in the provider's color. The thin gray inner ring shows time remaining when the reset time is known. Percentage text turns amber when quota remaining falls below half of time remaining, and red below one quarter.
 
-Settings shows each account's identity, reading source, last successful read, next eligible read, and when an official session expires.
+Rings show short names such as **Codex 5h**. The tray icon uses initials: CX, CL, AG (Antigravity Gemini), AC (Antigravity Claude and GPT), and CP. Change both under **Quota names** in Settings. Names never change colors or account grouping.
+
+In Settings, each account takes one row. **Details** shows the last and next read, session times, and the reading source. The copy icon copies support details without credentials or your account label.
 
 ## Stale readings
 
-A gray **STALE** ring preserves the last value that could be read. It does not mean zero, and a missing window never means unlimited. A value read before its window reset is shown as unknown until a new reading arrives. The ring tooltip and Settings explain the cause.
+A gray ring with a **stale** badge preserves the last value that could be read. It does not mean zero, and a missing window never means unlimited. A value read before its window reset is shown as unknown until a new reading arrives. A banner under the account explains the cause and offers one action.
 
 - **Antigravity CLI missing and desktop app closed.** Use **Install CLI**, or open the desktop app.
+- **Antigravity CLI needs sign-in.** **Copy command**, then run `agy -p /usage` in a terminal.
+- **Codex didn't accept the session.** Open Codex, or use **Sign in**.
 - **Claude Code session expired.** Open Claude Code. The monitor resumes once Claude Code renews its session.
-- **No network connection.** The monitor retries every five minutes and again when Windows reconnects or wakes from sleep.
-- **Provider format changed.** Check for a monitor update. With automatic checks on, the monitor checks once by itself.
+- **No network connection.** Use **Retry**, or wait. The monitor retries every five minutes and again when Windows reconnects or wakes from sleep.
+- **Provider format changed.** Use **Check for updates**. With automatic checks on, the monitor checks once by itself.
 
 When an official app closes, its recent reading stays live for up to ten minutes before turning stale. **Refresh** respects provider cooldowns.
 
@@ -70,7 +75,7 @@ Uninstall the installed version through Windows Installed apps. This removes app
 
 - **An account is missing.** Confirm that the official client has a valid session, wait a minute, and press **Refresh**.
 - **An Antigravity CLI account is stale.** Wait for the next eligible read shown in Settings. If the CLI needs sign-in, run `agy` in a terminal, sign in, run `agy -p /usage`, and press **Refresh**.
-- **The quota reader is unavailable.** Click **Retry connection**. If it stays unavailable, use **Quit** and reopen the monitor.
+- **The quota reader is unavailable.** Click the refresh icon, which retries the connection. If it stays unavailable, use **Quit** and reopen the monitor.
 - **The portable copy does nothing.** Confirm that the complete archive was extracted.
 
 ## Privacy and local data
@@ -79,6 +84,6 @@ The monitor reads official client sessions without taking over sign-in or renewa
 
 Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.4) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.0) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.
