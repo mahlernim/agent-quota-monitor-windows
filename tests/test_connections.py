@@ -139,6 +139,24 @@ class ConnectionTests(unittest.TestCase):
         self.connection.worker.join(3)
         self.assertEqual(self.connection.job['state'], 'failed')
 
+    def test_early_codex_exit_explains_possible_fixes_without_output(self):
+        self.process.status = 1
+        self.connection.start('codex')
+        self.connection.worker.join(3)
+        message = self.connection.job['message']
+        self.assertEqual(self.connection.job['state'], 'failed')
+        self.assertIn('exited before sign-in could start', message)
+        self.assertIn('npm install -g @openai/codex@latest', message)
+
+    def test_late_codex_exit_keeps_the_generic_failure(self):
+        now = [100]
+        self.connection.clock = lambda: now[0]
+        self.connection.job = dict(id='late', provider='codex', state='waiting', startedAt=100, deadline=700, accountId=None)
+        self.process.status = 1
+        now[0] = 160
+        self.connection._run(['official.exe'], copy.deepcopy(self.connection.job), threading.Event())
+        self.assertNotIn('exited before sign-in', self.connection.job['message'])
+
     def test_successful_client_exit_still_requires_fresh_quota(self):
         self.process.status = 0
         observed = threading.Event()
