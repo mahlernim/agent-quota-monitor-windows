@@ -45,7 +45,7 @@ Documentation images render the same native controls with synthetic sample data.
 
 The native account tests exercise ordering, draft conflicts, account controls, and separate operation and connection feedback through synthetic HTTP responses. Append `-- <output.png>` to their command to render a sample Settings window without connecting provider accounts.
 
-Python persistence tests cover discovery misses, Claude session expiry, network failure classification, wake requests, and the Antigravity CLI install offer. Upgrade tests cover the reader's version echo. Update policy tests also cover installer detection and SHA-256 verified downloads with redirect restrictions.
+Python persistence tests cover discovery misses, Claude session expiry, network failure classification, wake requests, and the Antigravity CLI install offer. Upgrade tests cover the reader's version echo and quota name validation. Native account checks cover problem actions per provider and source, serialized provider saves, quota names, and the Details and Copy details contents. The rendering self-test covers uniform cards, the ring context menu, drag offsets, and label fitting. Update policy tests also cover installer detection and SHA-256 verified downloads with redirect restrictions.
 
 Backend tests cover compatibility, startup deadlines, cancellation, process ownership, and replacement of a reader from another app version. Lifecycle tests exercise delayed responses during shutdown, malformed snapshots, floating-window preferences, and simultaneous launches. The backend identity marker prevents accidental connection to a different service but does not authenticate local callers.
 

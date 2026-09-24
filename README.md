@@ -2,7 +2,7 @@
 
 See how much of your AI coding quota is left, when each window resets, and whether you are spending faster than time is passing. It lives in the Windows tray and never sends a prompt to find out.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.4/agent-quota-monitor-windows-0.2.4-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.4/agent-quota-monitor-windows-0.2.4-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.2.4)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.0)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -18,6 +18,7 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 - **Pace, not just percentages.** Each ring compares quota left with time left in its window and warns you in amber or red when you are ahead of pace.
 - **Uses the sign-ins you already have.** Quotas are read through the official clients' existing sessions. The monitor never takes over sign-in, renews tokens, or switches accounts.
 - **Honest when data is old.** Values that could not be refreshed stay visible in gray with the reason, and values from before a reset are shown as unknown.
+- **Fixes where you look.** When an account has a problem, a short banner under it explains why and offers the one action that helps.
 - **Private by design.** No telemetry and no model prompts. Local data is encrypted for your Windows account, and the reader listens on loopback only.
 
 ## Contents
@@ -34,9 +35,9 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 
 ## Install
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.2.4/agent-quota-monitor-windows-0.2.4-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.0/agent-quota-monitor-windows-0.3.0-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
-3. Open **Settings**, tick the providers you use, and click **Save monitored providers**.
+3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 
 Python and .NET runtimes are bundled. You still need the official coding client for each provider you use.
 
@@ -50,12 +51,14 @@ Any combination works, and one provider is enough. If an official client is alre
 
 | Provider | Official source the monitor reads | How to connect |
 | --- | --- | --- |
-| OpenAI Codex | Codex CLI session | Settings, then **Sign in** |
+| OpenAI Codex | Codex app or CLI session | Settings, then **Sign in** |
 | Anthropic Claude (direct subscription) | Claude Code session | Settings, then **Sign in** |
 | Google Antigravity | Antigravity CLI (`agy`), or the running desktop app | Settings, then **Install CLI** or **Open desktop app** |
 | GitHub Copilot (optional) | GitHub CLI and Copilot SDK | One-time [Copilot setup](docs/copilot-setup.md), then **Sign in** |
 
 A browser-only login may not create the session the monitor reads. Sign in through the official client instead.
+
+The official clients renew their own sessions while you use them. If a session lapses, open that client (Codex, or Claude Code) and the monitor resumes by itself. Settings shows when a Claude Code session expires and when a Codex session was last renewed.
 
 ### Google Antigravity
 
@@ -73,7 +76,7 @@ After a successful CLI reading, the account marked **CLI** replaces desktop-sour
 
 Accounts are matched by stable provider identity, never by email label, so two accounts with the same address stay separate. Direct Claude subscriptions are kept apart from the Claude and GPT allowance supplied by Antigravity. To change accounts, use the provider's own client.
 
-**Remove** in Settings hides an account and stops monitoring it. It does not sign you out or touch credentials. **Restore hidden accounts** brings it back.
+**Hide** (the crossed-out eye in Settings) stops monitoring an account. It does not sign you out or touch credentials. **Restore hidden accounts** brings it back.
 
 ## Read a quota ring
 
@@ -85,26 +88,35 @@ Hover any ring for exact values, the reset time, pace, and, when something is wr
 
 ## Everyday use
 
-- **Click a ring** to show that quota in the system tray. The chosen ring is labelled **Tray**.
+- **Click a ring** to show that quota in the system tray. The chosen ring gets a blue outline and a small tray icon.
 - **Click the pin** at a ring's top-right corner to pin or unpin it on the floating monitor. Filled violet means pinned.
-- **Toolbar.** Refresh, Floating, Reorder, Settings, and Quit.
-- **Reorder** moves accounts up or down and rings left or right. Each move saves immediately, and pins and the tray choice follow their rings.
+- **Right-click a ring** to show it in the tray, pin it, move it, move its account, or copy its details.
+- **Drag a ring** to reorder it within its account, or **drag an account name** to reorder accounts. With the keyboard, press Alt with the arrow keys on a focused ring. Pins and the tray choice follow their rings.
+- **Toolbar icons.** Refresh, floating monitor, Settings, and Quit. Hover an icon to see what it does.
 - **Floating monitor.** Drag to move it, double-click to open the main window, and right-click for **Size** (75 to 200%) and **Opacity** (35 to 100%). Its size, opacity, and position are remembered.
 - **Close** hides the main window to the tray. **Quit** exits and stops the quota reader it started.
 
-Settings shows each account's identity, reading source, last successful read, next eligible read, and when an official session expires.
+### Names on rings
+
+Rings show short names such as **Codex 5h** or **Gemini 7d**. The tray icon uses initials: CX (Codex), CL (Claude), AG (Antigravity Gemini), AC (Antigravity Claude and GPT), and CP (Copilot). Change both under **Quota names** in Settings. Long names are narrowed to fit, and the floating monitor falls back to initials when a name doesn't fit. Names never change colors or which account a ring belongs to.
+
+### Settings
+
+Each account takes one row with its status. **Details** shows the last and next read, session times, and the reading source. The copy icon copies support details without credentials or your account label. To reorder accounts there, choose **Edit order**, drag rows or press Alt with Up and Down, then **Save order**.
 
 ## Stale readings and what they mean
 
-A gray **STALE** ring shows the last value the monitor could read. It never means zero, and a missing window never means unlimited. The ring tooltip and Settings explain the cause.
+A gray ring with a **stale** badge shows the last value the monitor could read. It never means zero, and a missing window never means unlimited. A banner under the account explains the cause and offers the fix.
 
-| What you see | What it means | What to do |
+| Banner | What it means | Action |
 | --- | --- | --- |
-| Antigravity CLI is not installed and the desktop app is closed | No Antigravity source is running | Use **Install CLI** in Settings, or open the desktop app |
-| The Claude Code session expired | Claude Code has not renewed its session recently | Open Claude Code. The monitor resumes by itself once the session is renewed |
-| No network connection | Requests could not reach the provider | Nothing. The monitor retries every five minutes and again when Windows reconnects or wakes |
-| The provider changed its response format | A provider update changed its data | Check for a monitor update. The monitor checks once on its own if automatic checks are on |
-| Reset since the last read | The window has reset since the value was read | Wait for the next reading. The old value is hidden because it no longer applies |
+| The Antigravity CLI isn't installed and the desktop app is closed | No Antigravity source is running | **Install CLI**, or open the desktop app |
+| The Antigravity CLI needs sign-in | The CLI session lapsed | **Copy command**, then run `agy -p /usage` in a terminal |
+| Codex didn't accept the saved session | The Codex session lapsed | Open Codex, or **Sign in** |
+| Your Claude Code session expired | Claude Code hasn't renewed its session recently | Open Claude Code. The monitor resumes by itself |
+| No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
+| The provider changed its data format | A provider update changed its data | **Check for updates** |
+| Reset since the last read (ring tooltip) | The window reset after the value was read | Wait for the next reading. The old value is hidden |
 
 When an official app closes, its recent reading stays live until it is ten minutes old, then turns stale. **Refresh** always respects provider cooldowns. Settings shows when each account can be read again.
 
@@ -130,9 +142,11 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 - **Antigravity goes stale when the desktop app closes.** Install the Antigravity CLI from Settings. See [Google Antigravity](#google-antigravity).
 - **An Antigravity CLI account is stale.** Wait for the next eligible read shown in Settings, then press **Refresh**. If the CLI needs sign-in, run `agy` in a terminal, sign in, run `agy -p /usage`, and refresh again.
 - **Claude says the session expired.** Open Claude Code. If Claude Code itself reports that you are signed out, use **Sign in** in Settings.
+- **Codex says the session wasn't accepted.** Open the Codex app or CLI. If that doesn't help, use **Sign in**.
+- **Codex Sign in stops right away.** The Codex client exited before sign-in started. Update it with `npm install -g @openai/codex@latest`, check `~/.codex/config.toml`, or sign in through the Codex app.
 - **Claude says the read was rejected.** Check `claude auth status`, open Claude Code to let it renew its session, and press **Refresh**. If it still fails, sign in again through Claude Code.
 - **Copilot shows nothing.** Complete the one-time [Copilot setup](docs/copilot-setup.md), then use **Sign in** and finish the prompts in the console window.
-- **The quota reader is unavailable.** Click **Retry connection** in the toolbar. If it stays unavailable, use **Quit** and reopen the monitor. After an upgrade, the monitor replaces a reader left over from the previous version automatically.
+- **The quota reader is unavailable.** Click the refresh icon, which retries the connection. If it stays unavailable, use **Quit** and reopen the monitor. After an upgrade, the monitor replaces a reader left over from the previous version automatically.
 - **The portable copy does nothing when launched.** Make sure the whole ZIP was extracted, including the `backend` folder.
 - **An update could not be verified.** Nothing was installed. Try again later or use **Download update**.
 

@@ -4,7 +4,7 @@ These integrations were exercised on Windows during development. Internal provid
 
 ## Codex
 
-Reads the official Codex session and its account-scoped `/wham/usage` response. Account identity must match. Window durations are interpreted explicitly rather than assuming primary means five hours. Official login owns credential renewal. The [app-server interface](https://learn.chatgpt.com/docs/app-server) is a possible future replacement for the internal HTTP reader.
+Reads the official Codex session and its account-scoped `/wham/usage` response. Account identity must match. Window durations are interpreted explicitly rather than assuming primary means five hours. Official login owns credential renewal. The non-secret `last_refresh` value in `auth.json` is shown as the time the session was last renewed. The access token is never decoded, and no expiry is predicted, because `auth.json` has no separate expiry field and the token lifetime is not documented. On one Windows machine in September 2026, Codex CLI 0.120 could not load a `config.toml` that set a `service_tier` value only newer clients understand, so sign-in exited at once. Sign-in reports such early exits with possible fixes and still discards client output. The [app-server interface](https://learn.chatgpt.com/docs/app-server) is a possible future replacement for the internal HTTP reader.
 
 ## Direct Claude
 
