@@ -51,10 +51,11 @@ internal static class PresentationChecks
         var pins = new HashSet<string> { a.Key };
         var window = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {});
         window.SetData(new[] { a, b }, a.Key, pins);
-        var first = Texts(window).Where(t => t.StartsWith("claude · Account ")).ToArray();
+        var first = Texts(window).Where(t => t.StartsWith("Account ")).ToArray();
         window.SetData(new[] { b, a }, a.Key, pins);
-        var reordered = Texts(window).Where(t => t.StartsWith("claude · Account ")).ToArray();
-        Check(first.SequenceEqual(new[] { "claude · Account A", "claude · Account B" }), "Initial account order is rendered");
+        var reordered = Texts(window).Where(t => t.StartsWith("Account ")).ToArray();
+        Check(first.SequenceEqual(new[] { "Account A", "Account B" }) && Texts(window).Count(t => t == "Anthropic Claude") == 2,
+            "Initial account order is rendered with two-line provider and account headers");
         Check(reordered.SequenceEqual(first.Reverse()), "Saved backend account order is rendered");
         using (var orderedData = JsonDocument.Parse("""
             {"ringOrder":[{"accountId":"a","groupId":"g","bucketId":"second"},
@@ -73,8 +74,10 @@ internal static class PresentationChecks
             Check(cells.Select(cell => cell.ToolTip?.ToString()).SequenceEqual(orderedRings.Select(item => item.Tooltip)),
                 "Floating monitor preserves the same saved ring order");
         }
-        Check(Texts(window).Count(t => t.Contains("Tray")) == 1 && pins.SetEquals(new[] { a.Key }),
-            "Reordering retains a single tray selection and stable pins");
+        Check(window.Cards.Values.Count(card => card.Tray.Visibility == Visibility.Visible) == 1 && window.Cards[a.Key].Tray.Visibility == Visibility.Visible &&
+            pins.SetEquals(new[] { a.Key }), "Reordering retains a single tray marker and stable pins");
+        Check(window.Cards.Values.All(card => card.Border.Width == MainWindow.CardWidth && card.Border.Height == MainWindow.CardHeight &&
+            card.Border.BorderThickness == window.Cards[a.Key].Border.BorderThickness), "Tray, stale, and ordinary cards share one size and border");
         window.SetData(Array.Empty<QuotaItem>(), a.Key, pins);
         Check(Texts(window).Any(t => t.Contains("Open Settings")), "Empty state points to native Settings");
         CheckPins(Check);
@@ -88,30 +91,33 @@ internal static class PresentationChecks
         var second = new QuotaItem { Key = "second", AccountId = "a", Provider = "claude", Account = "A", Group = "Quota", Window = "7d" };
         QuotaItem? moved = null;
         int direction = 0;
-        var window = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {},
-            (item, value) => { moved = item; direction = value; });
-        window.SetData(new[] { first, second }, null, new HashSet<string>());
-        var arrange = Elements<Button>(window).Single(button => button.Content is string text && text == "Reorder");
-        arrange.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        var earlier = Elements<Button>(window).Single(button => AutomationProperties.GetName(button).StartsWith("Move earlier") &&
-            AutomationProperties.GetName(button).EndsWith("5h"));
-        check(!earlier.IsEnabled, "First ring cannot move before its account boundary");
-        var later = Elements<Button>(window).First(button => AutomationProperties.GetName(button).StartsWith("Move later"));
-        later.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        check(ReferenceEquals(moved, first) && direction == 1, "Main monitor move control sends the selected ring and direction");
         var other = new QuotaItem { Key = "other", AccountId = "b", Provider = "codex", Account = "B", Group = "Quota", Window = "5h" };
         string? movedAccount = null;
         int accountDirection = 0;
-        var accountWindow = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {}, null,
-            (id, value) => { movedAccount = id; accountDirection = value; });
-        accountWindow.SetData(new[] { first, second, other }, null, new HashSet<string>());
-        Elements<Button>(accountWindow).Single(button => button.Content is string text && text == "Reorder")
-            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        var firstUp = Elements<Button>(accountWindow).Single(button => AutomationProperties.GetName(button) == "Move account earlier claude A");
-        check(!firstUp.IsEnabled, "First account cannot move before the visible account boundary");
-        var firstDown = Elements<Button>(accountWindow).Single(button => AutomationProperties.GetName(button) == "Move account later claude A");
-        firstDown.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        check(movedAccount == "a" && accountDirection == 1, "Same Reorder mode sends the selected account and direction");
+        var window = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {},
+            (item, value) => { moved = item; direction = value; }, (id, value) => { movedAccount = id; accountDirection = value; });
+        window.SetData(new[] { first, second, other }, null, new HashSet<string>());
+        check(!Elements<Button>(window).Any(button => button.Content is string text && text == "Reorder"), "Reorder mode is gone from the toolbar");
+        MenuItem Entry(ContextMenu menu, string header) => menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == header);
+        var menu = new ContextMenu();
+        window.FillMenu(menu, window.Cards[first.Key]);
+        check(!Entry(menu, "Move left").IsEnabled && Entry(menu, "Move right").IsEnabled && !Entry(menu, "Move account up").IsEnabled &&
+            Entry(menu, "Move account down").IsEnabled && Entry(menu, "Show in tray").IsEnabled && Entry(menu, "Pin to floating monitor").IsEnabled &&
+            Entry(menu, "Copy details").IsEnabled, "The ring menu offers tray, pin, moves inside account boundaries, and copy");
+        Entry(menu, "Move right").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        check(ReferenceEquals(moved, first) && direction == 1, "The ring menu sends the selected ring and direction");
+        Entry(menu, "Move account down").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        check(movedAccount == "a" && accountDirection == 1, "The ring menu sends the ring's account and direction");
+        check(window.RingOffset(first.Key, second, after: true) == 1 && window.RingOffset(second.Key, first, after: false) == -1 &&
+            window.RingOffset(first.Key, second, after: false) is null && window.RingOffset(first.Key, other, after: false) is null,
+            "Dropping a ring moves it within its own account only");
+        check(window.AccountOffset("a", "b") == 1 && window.AccountOffset("b", "a") == -1 && window.AccountOffset("a", "a") is null,
+            "Dropping an account header moves it among visible accounts");
+        var fit = new FitText { Text = "Claude and GPT 5h", Fallback = "AC 5h", FontSize = 11 };
+        var squeezed = fit.Choose(MainWindow.CardWidth - 8);
+        var narrow = fit.Choose(40);
+        check(squeezed.Text == "Claude and GPT 5h" && squeezed.Scale >= FitText.MinScale && !squeezed.Trim && narrow.Text == "AC 5h",
+            "Long names narrow to fit and fall back to initials instead of overflowing");
     }
 
     private static void CheckPercentageFormatting(Action<bool, string> check)
@@ -159,7 +165,8 @@ internal static class PresentationChecks
             Left = -32000, Top = -32000, ShowInTaskbar = false, ShowActivated = false,
             WindowStartupLocation = WindowStartupLocation.Manual
         };
-        Button Pin(string account) => Elements<Button>(window).Single(button => AutomationProperties.GetName(button).Contains(account));
+        Button Pin(string account) => Elements<Button>(window).Single(button => AutomationProperties.GetName(button).Contains(account) &&
+            (AutomationProperties.GetName(button).StartsWith("Pin ") || AutomationProperties.GetName(button).StartsWith("Unpin ")));
         Path Glyph(Button button) => (Path)((Viewbox)button.Content).Child;
         void FlushUi() => window.Dispatcher.Invoke(() => {}, DispatcherPriority.ApplicationIdle, CancellationToken.None, TimeSpan.FromSeconds(5));
         try

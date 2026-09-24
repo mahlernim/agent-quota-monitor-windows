@@ -12,7 +12,26 @@ public sealed class QuotaItem
     public string GroupId { get; init; } = "";
     public string BucketId { get; init; } = "";
     public string Provider { get; init; } = "";
+    /// <summary>Internal quota code. It selects the identity color and is never user-editable.</summary>
     public string Code { get; init; } = "";
+    /// <summary>Quota type for display names, derived from the internal code when not set.</summary>
+    public string Type
+    {
+        get => type.Length > 0 ? type : Code switch
+        {
+            "CX" => "codex", "CL" => "claude", "GM" => "antigravity-gemini", "CG" => "antigravity-claude-gpt", "CP" => "copilot", _ => ""
+        };
+        init => type = value;
+    }
+    private readonly string type = "";
+    public string Initials => QuotaNames.For(Type).Initials;
+    public string Name => QuotaNames.For(Type).Name;
+    /// <summary>Readable ring label, such as "Codex 5h". Copilot pools keep their pool names.</summary>
+    public string Label => Provider == "copilot"
+        ? Group.Contains("Inline") ? "Inline" : Group.Contains("Premium") ? "Premium" : "Included"
+        : Name + " " + QuotaNames.ShortWindow(Window);
+    /// <summary>Compact label for tight spaces, such as "AG 5h".</summary>
+    public string ShortLabel => Initials + " " + QuotaNames.ShortWindow(Window);
     public string Account { get; init; } = "";
     public string Group { get; init; } = "";
     public string Window { get; init; } = "";
@@ -70,7 +89,7 @@ public sealed class QuotaItem
             var quotaText = unlimited ? "Unlimited" : remaining.HasValue ? Percent(remaining.Value) + " remaining" : "Unknown";
             var pace = time.HasValue ? $"\n{Percent(time.Value)} time left · {(remaining >= time ? "Within pace" : "Faster usage")}" : "";
             result.Add(new QuotaItem { Key = MakeKey(aid, gid, bid), AccountId = aid, GroupId = gid, BucketId = bid,
-                Provider = provider, Code = code, Account = Text(a, "label"), Group = group, Window = window,
+                Provider = provider, Code = code, Type = QuotaNames.TypeFor(provider, group), Account = Text(a, "label"), Group = group, Window = window,
                 Status = status, Remaining = remaining, Unlimited = unlimited, TimeRemaining = time, ResetText = resetText,
                 Tooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · {quotaText}\n{status.ToUpperInvariant()} · {resetText}{pace}{note}" });
         }

@@ -27,12 +27,21 @@ internal static class PreviewImages
         Add("copilot", "CP", "Included AI credits", "Month", 88, 0);
         var pins = new HashSet<string> { "CX5h", "CL7d", "GM5h", "CG7d" };
         var main = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {});
-        main.SetData(rows, "CX5h", pins);
-        Save((FrameworkElement)main.Content, 744, 292, Path.Combine(directory, "main-window.png"));
+        var accounts = new List<AccountStatus>
+        {
+            Sample("codex", "live", ""), Sample("claude", "live", ""),
+            // A recent desktop reading stays live while the banner explains the closed source.
+            Sample("antigravity", "live", "antigravity_cli_unavailable", "Official running Antigravity local service"), Sample("copilot", "live", "")
+        };
+        main.SetData(rows, "CX5h", pins, accounts);
+        Save((FrameworkElement)main.Content, 820, 430, Path.Combine(directory, "main-window.png"));
         var floating = new FloatingWindow(() => {}, () => {});
         floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
         Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "floating-monitor.png"));
     }
+    private static AccountStatus Sample(string provider, string status, string error, string source = "Synthetic preview data") =>
+        new(provider, provider, "sample@example.test", status, source, "Verified stable identity", error, 1790000000, 1790000300);
+
     private static void Save(FrameworkElement element, double width, double height, string path)
     {
         element.Measure(new Size(width, height)); element.Arrange(new Rect(0, 0, width, height)); element.UpdateLayout();

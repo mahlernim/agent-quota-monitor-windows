@@ -86,10 +86,10 @@ public sealed class TrayController : IDisposable
                 }
             }
 
-            string label = item?.Unlimited == true ? "∞" : (item?.Code ?? "AQ");
-            if (label.Length > 2)
-                label = label[..2];
-            using var font = new Font("Segoe UI", label == "∞" ? 19 : 14, FontStyle.Bold, GraphicsUnit.Pixel);
+            string label = item?.Unlimited == true ? "∞" : (item?.Initials ?? "AQ");
+            if (label.Length > QuotaNames.MaxInitials)
+                label = label[..QuotaNames.MaxInitials];
+            using var font = new Font("Segoe UI", label == "∞" ? 19 : label.Length >= 3 ? 10 : 14, FontStyle.Bold, GraphicsUnit.Pixel);
             bool lightTaskbar = false;
             try { lightTaskbar = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0) is int theme && theme == 1; }
             catch (Exception) { }
@@ -131,7 +131,7 @@ public sealed class TrayController : IDisposable
             return "Agent Quota Monitor · No quota selected";
         string percent = item.Unlimited ? "Unlimited" : ValidPercent(item.Remaining) is double value ? QuotaItem.Percent(value) : "Unknown";
         string status = item.Stale ? "stale" : item.Status ?? "unknown status";
-        string primary = $"{item.Code}{item.Window} {percent} {status}";
+        string primary = $"{item.Label} {percent} {status}";
         string account = string.IsNullOrWhiteSpace(item.Account) ? string.Empty : " · " + item.Account;
         string text = (primary + account).Replace('\r', ' ').Replace('\n', ' ');
         return text.Length <= 127 ? text : text[..124] + "...";
