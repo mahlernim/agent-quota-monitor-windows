@@ -106,7 +106,7 @@ class Connections:
             self.job = dict(id=uuid.uuid4().hex, provider=provider, accountId=account_id,
                             expectedLabel=target['label'] if target else None,
                             state='starting', startedAt=now, deadline=now+600,
-                            message='Opening the official client…')
+                            message='Opening Antigravity desktop app…' if provider == 'antigravity' else 'Opening the official client…')
             self.worker = threading.Thread(target=self._run, args=(command, copy.deepcopy(self.job), self.stop), daemon=True)
             self.worker.start()
             return copy.deepcopy(self.job)
@@ -121,7 +121,7 @@ class Connections:
             if not self.job or self.job['id'] != job_id:
                 raise ValueError('Connection has already changed.')
             self.stop.set()
-            message = 'Stopped waiting. Antigravity stays open and signed in.' if self.job['provider'] == 'antigravity' else 'Stopped waiting. Existing sign-ins are preserved. You can close the authorization tab.'
+            message = 'Stopped waiting. An opened Antigravity desktop app stays open. Existing sign-ins are preserved.' if self.job['provider'] == 'antigravity' else 'Stopped waiting. Existing sign-ins are preserved. You can close the authorization tab.'
             self._set(job_id, 'cancelled', message)
 
     def _verify(self, job):
@@ -151,18 +151,22 @@ class Connections:
             rediscovered = False
             with self.lock:
                 self.process = process
-            self._set(job_id, 'waiting', 'Follow the GitHub CLI sign-in window and browser. The monitor verifies the quota afterward.' if job['provider'] == 'copilot' else 'Complete sign-in in Antigravity, then leave the app open.' if desktop else 'Complete sign-in in the browser opened by the official client. This renews that client’s session too.')
+            if desktop:
+                self.monitor.next_discovery = 0
+                self._set(job_id, 'opened', 'Antigravity desktop app opened. Complete sign-in there if needed, then press Refresh. CLI accounts use agy in a terminal.')
+                return
+            self._set(job_id, 'waiting', 'Follow the GitHub CLI sign-in window and browser. The monitor verifies the quota afterward.' if job['provider'] == 'copilot' else 'Complete sign-in in the browser opened by the official client. This renews that client’s session too.')
             while not stop.wait(1):
                 if self.clock() >= job['deadline']:
                     self._set(job_id, 'timed_out', 'Connection timed out. Existing sign-ins are preserved. Retry when ready.')
                     break
                 status = process.poll()
-                if not desktop and status is not None:
+                if status is not None:
                     if status != 0:
                         self._set(job_id, 'failed', 'The official client could not finish sign-in. Retry, or complete sign-in in its terminal.')
                         break
                     self._set(job_id, 'verifying', 'Sign-in finished. Waiting for an account-verified quota read. Provider cooldowns still apply.')
-                if desktop or status == 0:
+                if status == 0:
                     if not rediscovered:
                         if job['provider'] == 'copilot':
                             from .copilot import bind_current_account

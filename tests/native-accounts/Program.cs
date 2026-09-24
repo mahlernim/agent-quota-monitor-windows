@@ -87,6 +87,42 @@ internal static class Program
         suspended["accounts"]![0]!["retryState"] = "suspended";
         suspended["accounts"]![0]!["nextAttempt"] = null;
         Check(Parse(suspended.ToJsonString())[0].Guidance.Contains("Automatic reads are paused"), "Suspended retry state has explicit native guidance");
+
+        AccountStatus Antigravity(string source, string error)
+        {
+            JsonObject sample = JsonNode.Parse(Snapshot("antigravity"))!.AsObject();
+            JsonObject row = sample["accounts"]![0]!.AsObject();
+            row["provider"] = "antigravity";
+            row["source"] = source;
+            row["error"] = error;
+            return Parse(sample.ToJsonString())[0];
+        }
+        const string cliSource = "Official Antigravity CLI /usage (desktop app not required)";
+        const string desktopSource = "Official running Antigravity local service";
+        foreach (string error in new[] { "sign_in_required", "local_session_unavailable" })
+        {
+            string cliGuidance = Antigravity(cliSource, error).Guidance;
+            Check(cliGuidance.Contains("run agy -p /usage", StringComparison.Ordinal) &&
+                cliGuidance.Contains("press Refresh", StringComparison.Ordinal) &&
+                !cliGuidance.Contains("desktop app", StringComparison.Ordinal),
+                "Stale Antigravity CLI " + error + " points to interactive CLI recovery");
+            string desktopGuidance = Antigravity(desktopSource, error).Guidance;
+            Check(desktopGuidance.Contains("Antigravity desktop app", StringComparison.Ordinal) &&
+                !desktopGuidance.Contains("agy", StringComparison.Ordinal),
+                "Antigravity desktop " + error + " stays with desktop recovery");
+        }
+        Check(Antigravity(cliSource, "antigravity_cli_failed").Guidance.Contains("run agy -p /usage", StringComparison.Ordinal),
+            "Failed CLI reads retain the CLI recovery command");
+        Check(Antigravity(cliSource, "antigravity_cli_auth_unsupported").Guidance.Contains("custom provider", StringComparison.Ordinal) &&
+            Antigravity(cliSource, "antigravity_cli_auth_unsupported").Guidance.Contains("API key", StringComparison.Ordinal),
+            "Unsupported Antigravity auth mode points to configuration recovery");
+        JsonObject claudeSample = JsonNode.Parse(Snapshot("claude"))!.AsObject();
+        claudeSample["accounts"]![0]!["provider"] = "claude";
+        claudeSample["accounts"]![0]!["error"] = "sign_in_required";
+        string claudeGuidance = Parse(claudeSample.ToJsonString())[0].Guidance;
+        Check(claudeGuidance.Contains("claude auth status", StringComparison.Ordinal) &&
+            claudeGuidance.Contains("read still fails after renewal", StringComparison.Ordinal),
+            "Rejected Claude quota reads distinguish client renewal from full sign-in");
     }
 
     private static async Task TestWindow(string? previewPath)
@@ -105,6 +141,12 @@ internal static class Program
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Field<DispatcherTimer>(window, "_timer").Stop();
             await Call(window, "PollAsync");
+            var signInButtons = Field<Dictionary<string, Button>>(window, "_signInButtons");
+            Check((string)signInButtons["antigravity"].Content == "Open desktop app", "Antigravity action identifies the desktop client");
+            var body = (StackPanel)((ScrollViewer)((DockPanel)window.Content).Children.OfType<ScrollViewer>().Single()).Content;
+            Check(body.Children.OfType<TextBlock>().Any(block => block.Text.Contains("Antigravity Open desktop app", StringComparison.Ordinal) &&
+                block.Text.Contains("agy -p /usage", StringComparison.Ordinal)),
+                "Settings explains that CLI recovery uses a separate terminal session");
             AccountLayoutState layout = Field<AccountLayoutState>(window, "_layout");
             Check(layout.Loaded && layout.Displayed.Count == 3, "The actual Settings window reads the synthetic backend");
             Click(Field<Button>(window, "_editOrder"));
@@ -164,6 +206,10 @@ internal static class Program
             Check(details.Contains("Verified stable identity") && details.Contains("Synthetic official client") && details.Contains("Last successful read") && details.Contains("Next eligible read") && details.Contains("Synthetic plan"), "Native account details retain browser diagnostics");
             await Call(window, "StartConnectionAsync", "codex");
             Check(handler.LastPath == "/api/connections/start" && JsonNode.Parse(handler.LastBody!)!["provider"]!.GetValue<string>() == "codex", "Official sign-in retains the selected provider");
+            await Call(window, "StartConnectionAsync", "antigravity");
+            Check(handler.LastPath == "/api/connections/start" && JsonNode.Parse(handler.LastBody!)!["provider"]!.GetValue<string>() == "antigravity" &&
+                Field<TextBlock>(window, "_message").Text.Contains("Opening Antigravity desktop app", StringComparison.Ordinal),
+                "Antigravity action requests the desktop client and does not claim CLI sign-in");
             await Call(window, "RemoveAsync", "b");
             Check(handler.LastPath == "/api/accounts/remove" && JsonNode.Parse(handler.LastBody!)!["accountId"]!.GetValue<string>() == "b", "Account removal retains its stable identity");
             await Call(window, "RestoreAsync");
