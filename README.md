@@ -1,8 +1,10 @@
 # Agent Quota Monitor for Windows
 
-See how much of your AI coding quota is left, when each window resets, and whether you are spending faster than time is passing. It lives in the Windows tray and never sends a prompt to find out.
+Keep your AI coding quotas in view without opening each provider. Agent Quota Monitor brings OpenAI Codex, Anthropic Claude, Google Antigravity, and GitHub Copilot into one Windows tray app. See what remains, when it resets, and whether your usage is ahead of pace. Pin the quotas you care about to a compact floating monitor.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.4)
+It uses your official clients' existing sign-ins and sends no model prompts to check quota.
+
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.5/agent-quota-monitor-windows-0.3.5-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.5/agent-quota-monitor-windows-0.3.5-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.5)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -14,12 +16,12 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 
 ## Why use it
 
-- **One glance for every subscription.** OpenAI Codex, Anthropic Claude, Google Antigravity, and GitHub Copilot quotas appear side by side.
+- **One place for your coding quotas.** Use any combination of the four supported providers. One provider is enough.
 - **Pace, not just percentages.** Each ring compares quota left with time left in its window and warns you in amber or red when you are ahead of pace.
-- **Uses the sign-ins you already have.** Quotas are read through the official clients' existing sessions. The monitor never takes over sign-in, renews tokens, or switches accounts.
+- **Uses your existing sign-ins.** Connect through each provider's official client. Authentication and session renewal stay with that client.
 - **Honest when data is old.** Values that could not be refreshed stay visible in gray with the reason, and values from before a reset are shown as unknown.
 - **Fixes where you look.** When an account has a problem, a short banner under it explains why and offers the one action that helps.
-- **Private by design.** No telemetry and no model prompts. Local data is encrypted for your Windows account, and the reader listens on loopback only.
+- **Local and private.** No telemetry or model prompts. Monitor settings and cached quota are encrypted for your Windows account.
 
 ## Contents
 
@@ -35,11 +37,12 @@ See how much of your AI coding quota is left, when each window resets, and wheth
 
 ## Install
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.4/agent-quota-monitor-windows-0.3.4-setup-win-x64.exe). No administrator rights are needed.
+For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
+
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.5/agent-quota-monitor-windows-0.3.5-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
-
-Python and .NET runtimes are bundled. You still need the official coding client for each provider you use.
+4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
 
 **Portable copy.** Download the ZIP, extract **all** files into a permanent folder, and run `agent-quota-monitor-windows.exe`. Do not run it from inside the ZIP. Keep the `backend` folder beside the executable.
 
@@ -47,7 +50,7 @@ The installer and application are unsigned, so Windows may show an unknown-publi
 
 ## Connect your providers
 
-Any combination works, and one provider is enough. If an official client is already signed in, its account appears within a minute without any action.
+Enable only the providers you use. Existing official sessions are normally discovered within a minute. The first reading may take longer if the provider is unavailable or a cooldown is active.
 
 | Provider | Official source the monitor reads | How to connect |
 | --- | --- | --- |
@@ -60,7 +63,7 @@ A browser-only login may not create the session the monitor reads. Sign in throu
 
 If Codex or Claude Code isn't installed, Settings and the main window offer its official installer in place of **Sign in**. The confirmation shows the exact command, and it runs in a visible PowerShell window only after you choose OK. Clients installed while the monitor runs are found within a minute.
 
-The official clients manage their own sessions. With Claude Code 2.1.281 or a newer 2.x version, the monitor runs its built-in `/usage` command without a model message, so Claude Code handles authentication and renewal during quota reads. Temporary read failures retry automatically. If the login itself needs attention, follow the account banner. Claude's **Sign in** works without sending a message. Older Claude clients, or clients whose version cannot be checked, use the saved-session reader and show its token expiry in Settings. Codex shows when its session was last renewed.
+The official clients manage their own sessions. If a login needs attention, follow its account banner. Temporary read failures retry automatically and keep the previous reading marked stale.
 
 ### Anthropic Claude
 
@@ -72,7 +75,11 @@ The monitor reads the sign-in saved by **Claude Code**, Anthropic's command-line
 
 The account appears once its quota has been read.
 
-Use Claude Code 2.1.281 or a newer 2.x version for CLI-managed quota reads. Settings shows **Claude Code CLI (session managed by CLI)** as the source. This path reads the session and all-model weekly windows without opening Claude Code's credential file. It uses the default subscription login. Environment overrides for API keys, credentials, providers, and custom configuration directories are ignored only in the monitor's CLI subprocesses. Your environment and Claude Code settings stay unchanged.
+Use Claude Code 2.1.281 or a newer 2.x version for quota reads through its built-in `/usage` command. Claude Code handles authentication and renewal during that read. No message or available model quota is needed. Settings shows **Claude Code CLI (session managed by CLI)**. This source reports the session and all-model weekly windows. Model-specific windows are not currently available through it.
+
+The monitor uses the default Claude Code subscription login. API keys, alternate endpoints, and custom configuration directories set in environment variables do not redirect its reads. Your environment and client settings stay unchanged.
+
+Older clients, or clients whose version cannot be checked, use the saved-session reader. Settings shows that session's expiry. If it expires, choose **Sign in**. Signing in does not reset quota. A failed version check is retried after five minutes.
 
 ### Google Antigravity
 
@@ -115,7 +122,7 @@ An Antigravity window explicitly reported as **Disabled** keeps its ring and sav
 
 ### Names on rings
 
-Rings show short names such as **Codex 5h** or **Gemini 7d**. The tray icon uses initials: CX (Codex), CL (Claude), AG (Antigravity Gemini), AC (Antigravity Claude and GPT), and CP (Copilot). Change both under **Quota names** in Settings. Long names are narrowed to fit, and the floating monitor falls back to initials when a name doesn't fit. Names never change colors or which account a ring belongs to.
+Rings show short names such as **Codex 5h** or **Gemini 7d**. The default tray initials are CX for Codex, CL for Claude, AG for Antigravity Gemini, AC for Antigravity Claude and GPT, and CP for Copilot. Change both under **Quota names** in Settings. Long names are narrowed to fit, and the floating monitor falls back to initials when a name doesn't fit. Names never change colors or which account a ring belongs to.
 
 ### Settings
 
@@ -137,7 +144,9 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | The monitor could not interpret the provider response | The response contains data the monitor does not recognize | **Check for updates** |
 | Reset since the last read (ring tooltip) | The window reset after the value was read | Wait for the next reading. The old value is hidden |
 
-When an official app closes, its recent reading stays live until it is ten minutes old, then turns stale. **Refresh** always respects provider cooldowns. Settings shows when each account can be read again.
+If a source becomes unavailable, its cached reading becomes stale. When discovery no longer finds an account, a recent reading can remain live for up to ten minutes. Closing a desktop app does not stop monitoring when its CLI or saved session can still supply quota.
+
+**Refresh** reads eligible accounts without bypassing provider cooldowns. An unchanged percentage can still be a successful refresh. If it reports no new readings, open **Settings → Details** to see the next eligible read and any error. Retry schedules are kept across app updates, so a corrected reader may wait until that time.
 
 ## Start with Windows
 
@@ -173,13 +182,14 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 
 ## Privacy
 
-- Credentials stay with the official clients. The monitor reads their existing sessions and never renews, copies, or logs tokens.
+- Authentication stays with the official clients. Depending on the source, the monitor invokes a quota-only client command or reads an existing session for a quota request. It does not maintain a separate login, refresh tokens itself, or store raw credentials in its own data.
+- Official clients may renew their sessions when invoked. Tokens, cookies, and authorization headers are excluded from monitor logs and copied support details.
 - It never sends prompts to a model, starts usage windows, or routes traffic through a proxy.
 - Settings and cached quota are encrypted for your Windows account under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry.
 - The quota reader talks to the app over loopback only. It is meant for a trusted personal computer and does not isolate access from other local programs.
 - There is no telemetry. Update checks use GitHub's public releases API without credentials.
 
-Provider interfaces are internal to those products and can change without notice, which may interrupt readings.
+Some provider interfaces are internal and can change without notice. The monitor shows only the quota windows a source reports. Missing data is never treated as unlimited.
 
 ## More
 
