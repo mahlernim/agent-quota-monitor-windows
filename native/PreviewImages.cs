@@ -38,6 +38,16 @@ internal static class PreviewImages
         var floating = new FloatingWindow(() => {}, () => {});
         floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
         Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "floating-monitor.png"));
+        // Include the provider's disabled state in visual QA without changing live settings.
+        rows[6] = new QuotaItem { Key = "CG5h", AccountId = "antigravity", GroupId = "Claude and GPT models",
+            Provider = "antigravity", Account = "sample@example.test", Code = "CG", Group = "Claude and GPT models",
+            Window = "5h", Status = "live", Disabled = true, Tooltip = "Sample data · Disabled by provider" };
+        pins.Remove("CG7d"); pins.Add("CG5h");
+        accounts[2] = Sample("antigravity", "live", "", "Official Antigravity CLI /usage (desktop app not required)");
+        main.SetData(rows, "CG5h", pins, accounts);
+        Save((FrameworkElement)main.Content, 820, 430, Path.Combine(directory, "disabled-window.png"));
+        floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
+        Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "disabled-floating.png"));
     }
     private static AccountStatus Sample(string provider, string status, string error, string source = "Synthetic preview data") =>
         new(provider, provider, "sample@example.test", status, source, "Verified stable identity", error, 1790000000, 1790000300);

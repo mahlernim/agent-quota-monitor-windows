@@ -88,17 +88,18 @@ def parse_usage(text):
         if identity in seen:
             raise ReadError('schema_changed')
         seen.add(identity)
+        key, seconds = windows[window]
+        group = groups.setdefault(names[name], dict(id=names[name], label=name, buckets=[]))
         # The CLI explicitly reports inactive windows as disabled with no reset.
         # Do not invent a percentage or discard the other active windows.
         if remaining == 'disabled' and reset == '':
+            group['buckets'].append(dict(model.bucket(key, window, None, seconds), disabled=True))
             continue
         if not re.fullmatch(r'\d+(?:\.\d+)?%', remaining):
             raise ReadError('schema_changed')
         value = model.percent(float(remaining[:-1]))
         if value is None or model.timestamp(reset) is None:
             raise ReadError('schema_changed')
-        key, seconds = windows[window]
-        group = groups.setdefault(names[name], dict(id=names[name], label=name, buckets=[]))
         group['buckets'].append(model.bucket(key, window, value, seconds, reset))
     if not groups:
         raise ReadError('quota_not_reported')

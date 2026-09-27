@@ -217,7 +217,7 @@ class Monitor:
         row.update(groups=old.get('groups', []), lastSuccess=old.get('lastSuccess'), lastAttempt=now)
         try:
             groups, label = account['read']()
-            if not groups or not any(b.get('remaining') is not None or b.get('unlimited') is True or b.get('amountRemaining') is not None or b.get('entitlement') is not None for g in groups for b in g['buckets']):
+            if not groups or not any(b.get('remaining') is not None or b.get('disabled') is True or b.get('unlimited') is True or b.get('amountRemaining') is not None or b.get('entitlement') is not None for g in groups for b in g['buckets']):
                 raise providers.ReadError('quota_not_reported')
             row.update(groups=groups, label=label, lastSuccess=now, status='live', error=None,
                        failures=0, nextAttempt=deadline(now, INTERVAL))

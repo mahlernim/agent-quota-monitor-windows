@@ -98,6 +98,8 @@ The percentage turns **amber** when quota remaining falls below half of time rem
 
 Hover any ring for exact values, the reset time, pace, and, when something is wrong, what to do about it.
 
+An Antigravity window explicitly reported as **Disabled** keeps its ring and saved pin. It shows no percentage or countdown and returns to its normal display when the provider reports an active window. Disabled does not mean zero or unlimited.
+
 ## Everyday use
 
 - **Click a ring** to show that quota in the system tray. The chosen ring gets a blue outline and a small tray icon.

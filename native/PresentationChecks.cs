@@ -23,12 +23,12 @@ internal static class PresentationChecks
     {
         var now = new DateTimeOffset(2026, 9, 22, 0, 0, 0, TimeSpan.Zero);
         QuotaItem Read(string status = "live", double? remaining = 70, int? duration = 18000,
-            DateTimeOffset? reset = null, bool available = true, bool unlimited = false)
+            DateTimeOffset? reset = null, bool available = true, bool unlimited = false, bool disabled = false)
         {
             var data = new { accounts = new[] { new { id = "account", provider = "claude", label = "Sample",
                 status, groups = new[] { new { id = "group", label = "Sample quota", buckets = new[] {
                     new { id = "bucket", label = "Sample window", remaining, windowSeconds = duration,
-                        resetsAt = reset?.ToString("O"), available, unlimited } } } } } } };
+                        resetsAt = reset?.ToString("O"), available, unlimited, disabled } } } } } } };
             using var document = JsonDocument.Parse(JsonSerializer.Serialize(data));
             return QuotaItem.Parse(document.RootElement, now).Single();
         }
@@ -45,6 +45,26 @@ internal static class PresentationChecks
         Check(Read(available: false, reset: now.AddHours(2)).TimeRemaining is null, "Unavailable bucket has no time ring");
         Check(Read(remaining: null, unlimited: true).Unlimited, "Explicit unlimited remains distinct from unknown");
         Check(!Read(remaining: null).Unlimited, "Missing quota is not unlimited");
+        var disabledRing = Read(disabled: true, reset: now.AddHours(2), unlimited: true);
+        Check(disabledRing.Disabled && disabledRing.Remaining is null && disabledRing.TimeRemaining is null && !disabledRing.Unlimited,
+            "Disabled takes precedence over conflicting numeric and unlimited fields");
+        Check(Donut.LabelFor(disabledRing) == "Disabled" && TrayController.BuildTooltip(disabledRing).Contains("Disabled") &&
+            disabledRing.Tooltip.Contains("Window disabled by provider") && !disabledRing.Tooltip.Contains("%"),
+            "Disabled is explicit in ring and tray text with no percentage or countdown");
+        Check(Read(status: "stale", disabled: true).Stale && Read(status: "stale", disabled: true).Disabled,
+            "A cached disabled state still carries the stale indicator");
+        var disabledMain = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {});
+        var preservedPins = new HashSet<string> { Read().Key };
+        disabledMain.SetData(new[] { Read() }, Read().Key, preservedPins);
+        disabledMain.SetData(new[] { disabledRing }, Read().Key, preservedPins);
+        Check(disabledRing.Key == Read().Key && disabledMain.Cards.ContainsKey(disabledRing.Key) &&
+            disabledMain.Cards[disabledRing.Key].Tray.Visibility == Visibility.Visible && preservedPins.Contains(disabledRing.Key),
+            "Disabling a window retains the card, pin, and tray selection");
+        var disabledFloating = new FloatingWindow(() => {}, () => {});
+        disabledFloating.SetData(new[] { disabledRing });
+        var disabledCells = (StackPanel)((Border)disabledFloating.Content).Child;
+        Check(disabledCells.Children.Count == 1 && ((StackPanel)disabledCells.Children[0]).Children.OfType<Donut>().Single().Item == disabledRing,
+            "Disabled pinned rings remain in the floating monitor");
 
         var a = new QuotaItem { Key = "a", AccountId = "a", Provider = "claude", Account = "Account A", Code = "CL" };
         var b = new QuotaItem { Key = "b", AccountId = "b", Provider = "claude", Account = "Account B", Code = "CL" };

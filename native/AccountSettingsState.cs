@@ -174,6 +174,11 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             foreach (JsonElement bucket in buckets.EnumerateArray())
             {
                 var parts = new List<string>();
+                if (bucket.TryGetProperty("disabled", out JsonElement disabled) && disabled.ValueKind == JsonValueKind.True)
+                {
+                    lines.Add($"{groupLabel} · {Text(bucket, "label")} · Disabled by provider");
+                    continue;
+                }
                 double? amount = Number(bucket, "amountRemaining"), entitlement = Number(bucket, "entitlement"), used = Number(bucket, "used");
                 string unit = Text(bucket, "unit");
                 if (amount.HasValue || entitlement.HasValue)

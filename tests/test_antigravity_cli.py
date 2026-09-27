@@ -42,11 +42,15 @@ class ParsingTests(unittest.TestCase):
 
     def test_disabled_window_preserves_other_quotas_without_inventing_a_value(self):
         disabled = 'Claude and GPT models\tFive Hour Limit Remaining\tdisabled\t\n'
-        self.assertEqual(cli.parse_usage(USAGE + disabled), cli.parse_usage(USAGE))
-        self.assertEqual(cli.parse_usage(disabled + USAGE), cli.parse_usage(USAGE))
-        with self.assertRaises(providers.ReadError) as caught:
-            cli.parse_usage(disabled)
-        self.assertEqual(caught.exception.code, 'quota_not_reported')
+        for text in (USAGE + disabled, disabled + USAGE, disabled):
+            groups = {g['id']: g for g in cli.parse_usage(text)}
+            bucket = next(b for b in groups['claude-gpt']['buckets'] if b['id'] == '5h')
+            self.assertIs(bucket['disabled'], True)
+            self.assertIsNone(bucket['remaining'])
+            self.assertIsNone(bucket['resetsAt'])
+            self.assertEqual(bucket['windowSeconds'], 18000)
+            if text != disabled:
+                self.assertEqual(groups['gemini'], cli.parse_usage(USAGE)[0])
 
     def test_disabled_rows_do_not_hide_duplicates_or_malformed_values(self):
         disabled = 'Claude and GPT models\tFive Hour Limit Remaining\tdisabled\t\n'
@@ -169,20 +173,48 @@ class IdentityTests(unittest.TestCase):
         monitor.refresh_one(account)
         self.assertEqual(self.usage.call_count, 2)
 
-    def test_disabled_window_replaces_previous_active_window_on_success(self):
+    def test_disabled_window_keeps_ring_identity_and_recovers_on_success(self):
         now = [1000]
         monitor = Monitor(Store(), clock=lambda: now[0])
         account = cli.cli_account()
         row = 'Claude and GPT models\tFive Hour Limit Remaining\t'
         self.usage.return_value = cli.parse_usage(USAGE + row + '50%\t2026-09-28T12:11:37Z\n')
         monitor.refresh_one(account)
+        before = monitor.snapshot()['accounts'][0]['groups'][1]['buckets'][1]
         now[0] = 1301
         self.usage.return_value = cli.parse_usage(USAGE + row + 'disabled\t\n')
         monitor.refresh_one(account)
         result = monitor.snapshot()['accounts'][0]
         self.assertIsNone(result['error'])
         self.assertEqual(result['lastSuccess'], 1301)
-        self.assertEqual([b['id'] for b in result['groups'][1]['buckets']], ['weekly'])
+        self.assertEqual([b['id'] for b in result['groups'][1]['buckets']], ['weekly', '5h'])
+        disabled = result['groups'][1]['buckets'][1]
+        self.assertEqual(disabled['id'], before['id'])
+        self.assertTrue(disabled['disabled'])
+        self.assertIsNone(disabled['remaining'])
+        self.assertIsNone(disabled['resetsAt'])
+        now[0] = 1602
+        self.usage.return_value = cli.parse_usage(USAGE + row + '70%\t2026-09-28T12:11:37Z\n')
+        monitor.refresh_one(account)
+        active = monitor.snapshot()['accounts'][0]['groups'][1]['buckets'][1]
+        self.assertEqual(active['id'], before['id'])
+        self.assertEqual(active['remaining'], 70)
+        self.assertFalse(active.get('disabled', False))
+
+    def test_all_disabled_is_a_success_and_remains_cached_after_failure(self):
+        now = [1000]
+        monitor = Monitor(Store(), clock=lambda: now[0])
+        account = cli.cli_account()
+        self.usage.return_value = cli.parse_usage('Claude and GPT models\tFive Hour Limit Remaining\tdisabled\t\n')
+        monitor.refresh_one(account)
+        self.assertEqual(monitor.snapshot()['accounts'][0]['status'], 'live')
+        now[0] = 1301
+        self.usage.side_effect = providers.ReadError('antigravity_cli_timeout')
+        monitor.refresh_one(account)
+        row = monitor.snapshot()['accounts'][0]
+        self.assertEqual(row['status'], 'stale')
+        self.assertEqual(row['lastSuccess'], 1000)
+        self.assertTrue(row['groups'][0]['buckets'][0]['disabled'])
 
     def test_desktop_unavailable_still_returns_cli(self):
         with patch.object(providers, 'antigravity_desktop_accounts', side_effect=providers.ReadError('local_discovery_failed')):

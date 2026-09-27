@@ -39,9 +39,9 @@ public sealed class Donut : FrameworkElement
         track.Freeze();
         DrawTrack(dc, center, outerRadius, 6, track);
         var tint = ToBrush(item.Color, Color.FromRgb(86, 100, 119));
-        if (!item.Stale && item.Remaining is double remaining)
+        if (!item.Stale && !item.Disabled && item.Remaining is double remaining)
             DrawProgress(dc, center, outerRadius, 6, Clamp(remaining), tint);
-        if (!item.Stale && item.TimeRemaining is double time)
+        if (!item.Stale && !item.Disabled && item.TimeRemaining is double time)
         {
             DrawTrack(dc, center, innerRadius, 2, track);
             DrawProgress(dc, center, innerRadius, 2, Clamp(time), Brushes.Gray);
@@ -61,7 +61,7 @@ public sealed class Donut : FrameworkElement
         dc.DrawText(formatted, new Point(center.X - formatted.Width / 2, center.Y - formatted.Height / 2));
     }
 
-    internal static string LabelFor(QuotaItem item) => item.Unlimited ? "∞" : item.Remaining is double value ? QuotaItem.Percent(value) : "?";
+    internal static string LabelFor(QuotaItem item) => item.Disabled ? "Disabled" : item.Unlimited ? "∞" : item.Remaining is double value ? QuotaItem.Percent(value) : "?";
 
     private static double Clamp(double value) => Math.Max(0, Math.Min(100, value));
 

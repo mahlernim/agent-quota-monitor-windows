@@ -21,6 +21,8 @@ Open **Settings** (the gear icon) and select your providers. Changes save right 
 
 The monitor displays one Antigravity source at a time. CLI is preferred. A fresh desktop reading replaces the CLI card during a CLI failure, and CLI returns when it recovers. If the desktop source is also unavailable, only the CLI error card remains. Each source retains its own identity and saved pins. Provider cooldowns and hidden-account choices are respected.
 
+A window explicitly reported as **Disabled** keeps its ring and saved pin without a percentage or countdown. It returns to its normal display when the provider reports an active window. Disabled does not mean zero or unlimited.
+
 Accounts remain separate by verified identity, even when email labels match. Direct Claude subscriptions are separate from Claude or GPT allowance supplied by Antigravity. Use a provider's own client to change accounts. The monitor never switches accounts automatically.
 
 **Hide** (the crossed-out eye in Settings) stops monitoring an account without signing out or deleting credentials. **Restore hidden accounts** brings it back.
