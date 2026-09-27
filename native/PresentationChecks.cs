@@ -103,6 +103,78 @@ internal static class PresentationChecks
         CheckPins(Check);
         CheckArrange(Check);
         CheckPercentageFormatting(Check);
+        CheckWeeklyExhaustion(Check);
+    }
+
+    private static void CheckWeeklyExhaustion(Action<bool, string> check)
+    {
+        var now = DateTimeOffset.UtcNow;
+        System.Text.Json.Nodes.JsonObject Fixture() => System.Text.Json.Nodes.JsonNode.Parse("""
+            {"accounts":[{"id":"cli-a","provider":"antigravity","label":"Sample","status":"live",
+            "groups":[{"id":"claude-gpt","label":"Claude and GPT models","buckets":[
+            {"id":"5h","label":"5h","windowSeconds":18000,"disabled":true,"remaining":null,"resetsAt":null},
+            {"id":"weekly","label":"Weekly","windowSeconds":604800,"remaining":0}]}]}]}
+            """)!.AsObject();
+        var data = Fixture();
+        var account = data["accounts"]![0]!;
+        var group = account["groups"]![0]!;
+        var shortBucket = group["buckets"]![0]!;
+        var weekly = group["buckets"]![1]!;
+        account["lastSuccess"] = now.ToUnixTimeSeconds();
+        weekly["resetsAt"] = now.AddDays(3).ToString("O");
+        QuotaItem Read(DateTimeOffset? at = null)
+        {
+            using var doc = JsonDocument.Parse(data.ToJsonString());
+            return QuotaItem.Parse(doc.RootElement, at ?? now).First();
+        }
+        void Disabled(string name) => check(Donut.LabelFor(Read()) == "Disabled", name);
+        var blocked = Read();
+        check(Donut.LabelFor(blocked) == "0%" && blocked.Tooltip.Contains("0% available · Weekly limit reached") &&
+            TrayController.BuildTooltip(blocked).Contains("Weekly limit reached"), "Weekly exhaustion explains zero availability in the ring and tray");
+        check(blocked.Disabled && blocked.Remaining is null && blocked.TimeRemaining is null && !blocked.Unlimited &&
+            blocked.ResetText.StartsWith("Weekly reset") && !blocked.Tooltip.Contains("time left"), "Derived zero preserves the disabled window without inventing five-hour timing");
+        using (var doc = JsonDocument.Parse(account.ToJsonString()))
+            check(AccountStatus.From(doc.RootElement).QuotaDetails.Contains("0% available · Weekly limit reached") &&
+                AccountStatus.From(doc.RootElement).QuotaDetails.Contains("Weekly reset"), "Account details explain the same weekly restriction");
+        check(shortBucket["remaining"] is null && shortBucket["resetsAt"] is null, "Presentation leaves raw provider fields unchanged");
+        var pins = new HashSet<string> { blocked.Key };
+        var main = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {});
+        main.SetData(new[] { blocked }, blocked.Key, pins);
+        var floating = new FloatingWindow(() => {}, () => {});
+        floating.SetData(new[] { blocked });
+        check(main.Cards[blocked.Key].Tray.Visibility == Visibility.Visible && pins.Contains(blocked.Key) &&
+            Elements<Donut>(floating).Single().Item == blocked, "Weekly exhaustion retains the selected card and pinned floating ring");
+        blocked.MarkDisconnected();
+        check(Donut.LabelFor(blocked) == "Disabled" && !blocked.Tooltip.Contains("0% available") &&
+            !TrayController.BuildTooltip(blocked).Contains("Weekly limit reached"), "Disconnect removes inferred availability");
+        account["status"] = "stale"; Disabled("Stale data cannot establish weekly exhaustion"); account["status"] = "live";
+        account["error"] = "reader_failed"; Disabled("A source failure cannot establish weekly exhaustion"); account["error"] = null;
+        account["lastSuccess"] = now.AddSeconds(-601).ToUnixTimeSeconds(); Disabled("Old live data cannot establish weekly exhaustion");
+        account["lastSuccess"] = null; Disabled("Unknown freshness cannot establish weekly exhaustion");
+        account["lastSuccess"] = now.AddMinutes(1).ToUnixTimeSeconds(); Disabled("Future readings cannot establish weekly exhaustion");
+        account["lastSuccess"] = now.ToUnixTimeSeconds();
+        foreach (double? value in new double?[] { null, 0.01, 50, -1 })
+        { weekly["remaining"] = value; Disabled("Only exact weekly zero establishes exhaustion"); }
+        weekly["remaining"] = 0;
+        weekly["disabled"] = true; Disabled("Disabled weekly quota does not establish exhaustion"); weekly["disabled"] = false;
+        weekly["unlimited"] = true; Disabled("Unlimited weekly quota does not establish exhaustion"); weekly["unlimited"] = false;
+        foreach (string? reset in new[] { null, "invalid", now.ToString("O"), now.AddSeconds(-1).ToString("O"), now.AddDays(8).ToString("O") })
+        { weekly["resetsAt"] = reset; Disabled("A valid future weekly reset is required"); }
+        weekly["resetsAt"] = now.AddDays(3).ToString("O");
+        check(Donut.LabelFor(Read(now.AddDays(3))) == "Disabled", "A later snapshot stops inferring zero at the weekly reset");
+        account["provider"] = "claude"; Disabled("Direct Claude is not Antigravity"); account["provider"] = "antigravity";
+        var buckets = group["buckets"]!.AsArray();
+        buckets.Add(weekly.DeepClone()); Disabled("Ambiguous weekly buckets cannot establish exhaustion"); buckets.RemoveAt(2);
+        buckets.RemoveAt(1);
+        var otherGroup = group.DeepClone(); otherGroup["id"] = "gemini"; otherGroup["buckets"]!.AsArray().Add(weekly.DeepClone());
+        account["groups"]!.AsArray().Add(otherGroup); Disabled("Another model group cannot lend its weekly quota");
+        account["groups"]!.AsArray().RemoveAt(1);
+        var otherAccount = account.DeepClone(); otherAccount["id"] = "desktop-a";
+        otherAccount["groups"]![0]!["buckets"]!.AsArray().Add(weekly.DeepClone());
+        data["accounts"]!.AsArray().Add(otherAccount); Disabled("Another source with the same label cannot lend its weekly quota");
+        data["accounts"]!.AsArray().RemoveAt(1); buckets.Add(weekly);
+        shortBucket["disabled"] = false; shortBucket["remaining"] = 25;
+        check(Donut.LabelFor(Read()) == "25%" && Read().Key == blocked.Key, "An active window keeps its own reading and stable selection identity");
     }
 
     private static void CheckArrange(Action<bool, string> check)

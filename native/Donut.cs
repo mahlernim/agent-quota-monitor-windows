@@ -61,7 +61,7 @@ public sealed class Donut : FrameworkElement
         dc.DrawText(formatted, new Point(center.X - formatted.Width / 2, center.Y - formatted.Height / 2));
     }
 
-    internal static string LabelFor(QuotaItem item) => item.Disabled ? "Disabled" : item.Unlimited ? "∞" : item.Remaining is double value ? QuotaItem.Percent(value) : "?";
+    internal static string LabelFor(QuotaItem item) => item.WeeklyLimitReached ? "0%" : item.Disabled ? "Disabled" : item.Unlimited ? "∞" : item.Remaining is double value ? QuotaItem.Percent(value) : "?";
 
     private static double Clamp(double value) => Math.Max(0, Math.Min(100, value));
 

@@ -129,7 +129,7 @@ public sealed class TrayController : IDisposable
     {
         if (item is null)
             return "Agent Quota Monitor · No quota selected";
-        string percent = item.Disabled ? "Disabled" : item.Unlimited ? "Unlimited" : ValidPercent(item.Remaining) is double value ? QuotaItem.Percent(value) : "Unknown";
+        string percent = item.WeeklyLimitReached ? "0% available · Weekly limit reached" : item.Disabled ? "Disabled" : item.Unlimited ? "Unlimited" : ValidPercent(item.Remaining) is double value ? QuotaItem.Percent(value) : "Unknown";
         string status = item.Stale ? "stale" : item.Status ?? "unknown status";
         string primary = $"{item.Label} {percent} {status}";
         string account = string.IsNullOrWhiteSpace(item.Account) ? string.Empty : " · " + item.Account;
