@@ -72,6 +72,7 @@ def profile(access):
 
 def parse_usage(text):
     groups = {}
+    seen = set()
     names = {'Gemini Models': 'gemini', 'Claude and GPT models': 'claude-gpt'}
     windows = {'Weekly Limit Remaining': ('weekly', 604800), 'Five Hour Limit Remaining': ('5h', 18000)}
     for line in text.splitlines():
@@ -81,15 +82,23 @@ def parse_usage(text):
         if len(fields) != 4:
             raise ReadError('schema_changed')
         name, window, remaining, reset = fields
-        if name not in names or window not in windows or not re.fullmatch(r'\d+(?:\.\d+)?%', remaining):
+        if name not in names or window not in windows:
+            raise ReadError('schema_changed')
+        identity = (names[name], windows[window][0])
+        if identity in seen:
+            raise ReadError('schema_changed')
+        seen.add(identity)
+        # The CLI explicitly reports inactive windows as disabled with no reset.
+        # Do not invent a percentage or discard the other active windows.
+        if remaining == 'disabled' and reset == '':
+            continue
+        if not re.fullmatch(r'\d+(?:\.\d+)?%', remaining):
             raise ReadError('schema_changed')
         value = model.percent(float(remaining[:-1]))
         if value is None or model.timestamp(reset) is None:
             raise ReadError('schema_changed')
         key, seconds = windows[window]
         group = groups.setdefault(names[name], dict(id=names[name], label=name, buckets=[]))
-        if any(b['id'] == key for b in group['buckets']):
-            raise ReadError('schema_changed')
         group['buckets'].append(model.bucket(key, window, value, seconds, reset))
     if not groups:
         raise ReadError('quota_not_reported')

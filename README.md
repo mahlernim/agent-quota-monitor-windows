@@ -82,7 +82,7 @@ The official Antigravity CLI (`agy`) is the recommended source. It lets the moni
 - Gemini CLI is a different product and does not report Antigravity subscription quota.
 - API-key and custom-provider modes are not supported for subscription monitoring.
 
-After a successful CLI reading, the account marked **CLI** replaces desktop-source cards. Pin quotas on that account to keep them in the floating monitor.
+While the CLI is healthy, the account marked **CLI** replaces desktop-source cards. If a CLI quota read fails, the monitor tries the running desktop app and shows its readings on a separate account card. The CLI card keeps its error until it recovers. Desktop and CLI accounts have separate pins because the desktop source does not supply the same verified account ID. Provider cooldowns and hidden-account choices are respected.
 
 ### Accounts stay separate
 
@@ -129,7 +129,7 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
 | GitHub Copilot isn't set up yet, or Copilot is set up | Setup is incomplete, or no GitHub account is linked | **Set up Copilot**, then **Connect** |
 | No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
-| The provider changed its data format | A provider update changed its data | **Check for updates** |
+| The monitor could not interpret the provider response | The response contains data the monitor does not recognize | **Check for updates** |
 | Reset since the last read (ring tooltip) | The window reset after the value was read | Wait for the next reading. The old value is hidden |
 
 When an official app closes, its recent reading stays live until it is ten minutes old, then turns stale. **Refresh** always respects provider cooldowns. Settings shows when each account can be read again.

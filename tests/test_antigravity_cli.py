@@ -1,7 +1,7 @@
 import json
 import subprocess
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from quota import antigravity_cli as cli, providers
 from quota.monitor import Monitor
 from test_removal import Store
@@ -39,6 +39,23 @@ class ParsingTests(unittest.TestCase):
                      USAGE.replace('Gemini Models', 'Unknown Group')):
             with self.subTest(text=text), self.assertRaises(providers.ReadError):
                 cli.parse_usage(text)
+
+    def test_disabled_window_preserves_other_quotas_without_inventing_a_value(self):
+        disabled = 'Claude and GPT models\tFive Hour Limit Remaining\tdisabled\t\n'
+        self.assertEqual(cli.parse_usage(USAGE + disabled), cli.parse_usage(USAGE))
+        self.assertEqual(cli.parse_usage(disabled + USAGE), cli.parse_usage(USAGE))
+        with self.assertRaises(providers.ReadError) as caught:
+            cli.parse_usage(disabled)
+        self.assertEqual(caught.exception.code, 'quota_not_reported')
+
+    def test_disabled_rows_do_not_hide_duplicates_or_malformed_values(self):
+        disabled = 'Claude and GPT models\tFive Hour Limit Remaining\tdisabled\t\n'
+        active = disabled.replace('disabled\t', '50%\t2026-09-28T12:11:37Z')
+        for extra in (disabled + disabled, disabled + active, active + disabled,
+                      disabled.replace('disabled\t', 'disabled\t2026-09-28T12:11:37Z'),
+                      disabled.replace('disabled', 'unknown')):
+            with self.subTest(extra=extra), self.assertRaises(providers.ReadError):
+                cli.parse_usage(USAGE + extra)
 
     def test_subprocess_is_quota_only_bounded_and_redacts_failure(self):
         with patch.object(cli, 'command', return_value=['agy.exe', '-p', '/usage', '--print-timeout', '20s']), patch.object(cli.subprocess, 'run') as run:
@@ -152,6 +169,21 @@ class IdentityTests(unittest.TestCase):
         monitor.refresh_one(account)
         self.assertEqual(self.usage.call_count, 2)
 
+    def test_disabled_window_replaces_previous_active_window_on_success(self):
+        now = [1000]
+        monitor = Monitor(Store(), clock=lambda: now[0])
+        account = cli.cli_account()
+        row = 'Claude and GPT models\tFive Hour Limit Remaining\t'
+        self.usage.return_value = cli.parse_usage(USAGE + row + '50%\t2026-09-28T12:11:37Z\n')
+        monitor.refresh_one(account)
+        now[0] = 1301
+        self.usage.return_value = cli.parse_usage(USAGE + row + 'disabled\t\n')
+        monitor.refresh_one(account)
+        result = monitor.snapshot()['accounts'][0]
+        self.assertIsNone(result['error'])
+        self.assertEqual(result['lastSuccess'], 1301)
+        self.assertEqual([b['id'] for b in result['groups'][1]['buckets']], ['weekly'])
+
     def test_desktop_unavailable_still_returns_cli(self):
         with patch.object(providers, 'antigravity_desktop_accounts', side_effect=providers.ReadError('local_discovery_failed')):
             self.assertEqual(len(providers.antigravity_accounts()), 1)
@@ -167,7 +199,7 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(len(found), 1)
         desktop.assert_not_called()
 
-    def test_successful_cli_suppresses_legacy_card_even_when_stale(self):
+    def test_successful_cli_suppresses_desktop_until_stale(self):
         monitor = Monitor(Store(), clock=lambda: 1000, desired_google=['same@example.com'])
         legacy = providers.account('antigravity', 'legacy', 'same@example.com',
                                    'Official running Antigravity local service',
@@ -177,8 +209,85 @@ class IdentityTests(unittest.TestCase):
         monitor.refresh_one(account)
         self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [account['id']])
         monitor.rows[account['id']]['status'] = 'stale'
-        self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [account['id']])
+        self.assertEqual({r['id'] for r in monitor.snapshot()['accounts']}, {account['id'], legacy['id']})
         self.assertIn(legacy['id'], monitor.rows)
+
+
+class DesktopFallbackTests(unittest.TestCase):
+    def setUp(self):
+        self.now = [1000]
+        self.monitor = Monitor(Store(), clock=lambda: self.now[0])
+        self.monitor.enabled = {'antigravity'}
+        self.cli_read = Mock(return_value=(cli.parse_usage(USAGE), 'same@example.com · CLI'))
+        self.desktop_read = Mock(return_value=(cli.parse_usage(USAGE), 'same@example.com'))
+        self.cli = providers.account('antigravity', 'cli-subject', 'same@example.com · CLI',
+                                     'Official Antigravity CLI /usage (desktop app not required)', self.cli_read)
+        self.desktop = providers.account('antigravity', 'desktop-session', 'same@example.com',
+                                         'Official running Antigravity local service', self.desktop_read)
+        for target, value in [('antigravity_accounts', [self.cli]), ('antigravity_desktop_accounts', [self.desktop])]:
+            p = patch.object(providers, target, return_value=value)
+            setattr(self, target, p.start())
+            self.addCleanup(p.stop)
+
+    def test_read_failure_uses_separate_desktop_identity_and_recovers_to_cli(self):
+        self.monitor.refresh()
+        self.antigravity_desktop_accounts.assert_not_called()
+        self.now[0] = 1301
+        self.cli_read.side_effect = providers.ReadError('schema_changed')
+        self.monitor.refresh()
+        rows = {r['id']: r for r in self.monitor.snapshot()['accounts']}
+        self.assertEqual(set(rows), {self.cli['id'], self.desktop['id']})
+        self.assertEqual(rows[self.cli['id']]['error'], 'schema_changed')
+        self.assertEqual(rows[self.desktop['id']]['status'], 'live')
+        self.assertEqual(rows[self.cli['id']]['lastSuccess'], 1000)
+        self.assertEqual(rows[self.desktop['id']]['lastSuccess'], 1301)
+        self.now[0] = 1362
+        self.monitor.refresh()
+        self.assertEqual(self.cli_read.call_count, 2)
+        self.desktop_read.assert_called_once()
+        self.now[0] = 1602
+        self.cli_read.side_effect = None
+        self.monitor.refresh()
+        self.assertEqual([r['id'] for r in self.monitor.snapshot()['accounts']], [self.cli['id']])
+        self.assertIn(self.desktop['id'], self.monitor.rows)
+
+    def test_desktop_failure_keeps_cli_error_and_retry_schedule(self):
+        self.cli_read.side_effect = providers.ReadError('antigravity_cli_timeout')
+        self.antigravity_desktop_accounts.side_effect = providers.ReadError('local_discovery_failed')
+        self.monitor.refresh()
+        row = self.monitor.snapshot()['accounts'][0]
+        self.assertEqual(row['error'], 'antigravity_cli_timeout')
+        self.assertEqual(row['nextAttempt'], 1300)
+
+    def test_cooldowns_never_trigger_desktop_quota_reads(self):
+        for code, delay in [('rate_limited', 0), ('rate_limited', 7200), ('provider_http_503', 7200)]:
+            with self.subTest(code=code, delay=delay):
+                self.monitor.rows.clear()
+                self.monitor.next_discovery = 0
+                self.cli_read.side_effect = providers.ReadError(code, delay)
+                self.monitor.refresh()
+        self.antigravity_desktop_accounts.assert_not_called()
+        self.desktop_read.assert_not_called()
+
+    def test_hidden_cli_does_not_trigger_fallback(self):
+        self.monitor.hidden.add(self.cli['id'])
+        self.monitor.refresh()
+        self.cli_read.assert_not_called()
+        self.antigravity_desktop_accounts.assert_not_called()
+
+    def test_hidden_desktop_is_not_read_on_cli_failure(self):
+        self.monitor.hidden.add(self.desktop['id'])
+        self.cli_read.side_effect = providers.ReadError('schema_changed')
+        self.monitor.refresh()
+        self.desktop_read.assert_not_called()
+        self.assertEqual([r['id'] for r in self.monitor.snapshot()['accounts']], [self.cli['id']])
+
+    def test_cli_discovery_failure_does_not_hide_working_desktop(self):
+        self.monitor.refresh()
+        self.now[0] = 1061
+        self.antigravity_accounts.return_value = [self.desktop]
+        self.monitor.refresh()
+        self.assertIn(self.desktop['id'], [r['id'] for r in self.monitor.snapshot()['accounts']])
 
     def test_hiding_the_cli_card_does_not_revive_the_legacy_desktop_card(self):
         monitor = Monitor(Store(), clock=lambda: 1000)
@@ -187,7 +296,7 @@ class IdentityTests(unittest.TestCase):
                                    lambda: (cli.parse_usage(USAGE), 'same@example.com'))
         monitor.refresh_one(legacy)
         monitor.rows[legacy['id']]['status'] = 'stale'
-        account = cli.cli_account()
+        account = self.cli
         monitor.refresh_one(account)
         self.assertTrue(monitor.remove_account(account['id']))
         self.assertEqual(monitor.snapshot()['accounts'], [])

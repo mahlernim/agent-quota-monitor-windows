@@ -16,6 +16,21 @@ WAKE_ERRORS = frozenset(('network_unavailable', 'connection_or_response_error'))
 RING_FIELDS = {'accountId', 'groupId', 'bucketId'}
 
 
+def is_antigravity_cli(row):
+    return row.get('provider') == 'antigravity' and row.get('source', '').startswith('Official Antigravity CLI')
+
+
+def suppress_antigravity_desktop(row, hidden, now):
+    if not is_antigravity_cli(row):
+        return False
+    # Hiding an established CLI card must not revive desktop cards. Nor should
+    # changing source bypass a provider cooldown, even without a numeric delay.
+    if row['id'] in hidden or row.get('providerCooldown') or row.get('error') == 'rate_limited' or row.get('retryState') == 'suspended':
+        return True
+    success = row.get('lastSuccess')
+    return row.get('status') == 'live' and not row.get('error') and finite_number(success) and now - success <= INTERVAL * 2
+
+
 def ring_ids(order):
     if not isinstance(order, list) or len(order) > 100:
         raise ValueError('Invalid ring order')
@@ -212,6 +227,17 @@ class Monitor:
         with self.lock:
             self.rows[key] = row
 
+    def _refresh_accounts(self, accounts):
+        for account in {a['id']: a for a in accounts}.values():
+            try:
+                self.refresh_one(account)
+            except Exception:
+                # One broken source must not prevent unrelated readers progressing.
+                with self.lock:
+                    old = self.rows.get(account['id'])
+                    if old:
+                        old.update(status='stale' if old.get('lastSuccess') else 'pending', error='reader_failed')
+
     def wake(self):
         """Retry reads that failed only because the network was unavailable, as after sleep."""
         now = self.clock()
@@ -243,6 +269,22 @@ class Monitor:
                     found.extend(result if isinstance(result, list) else [result])
                 except Exception as err:
                     discovery_errors[provider] = err.code if isinstance(err, providers.ReadError) else 'local_discovery_failed'
+            self._refresh_accounts(found)
+            # Discovery can find a CLI session whose quota read still fails.
+            # Read the desktop as an independent source, never relabel its quota
+            # as belonging to the CLI's verified Google subject.
+            cli_accounts = [a for a in found if is_antigravity_cli(a)]
+            with self.lock:
+                fallback = cli_accounts and not any(
+                    suppress_antigravity_desktop(self.rows.get(a['id'], a), self.hidden, now)
+                    for a in cli_accounts)
+            if fallback:
+                try:
+                    desktop = providers.antigravity_desktop_accounts()
+                except Exception:
+                    desktop = []
+                found.extend(desktop)
+                self._refresh_accounts(desktop)
             ids = {a['id'] for a in found}
             with self.lock:
                 for key, row in list(self.rows.items()):
@@ -261,15 +303,6 @@ class Monitor:
                         self.rows.pop(placeholder, None)
                     elif self.enabled is not None and provider in self.enabled and not any(r['provider'] == provider for r in self.rows.values()):
                         self.rows[placeholder] = dict(id=placeholder, provider=provider, label='Sign-in needed', source='No readable official session', identityStatus='Unverified', groups=[], status='pending', error=discovery_errors.get(provider, 'local_session_unavailable'), lastSuccess=None)
-            for account in {a['id']: a for a in found}.values():
-                try:
-                    self.refresh_one(account)
-                except Exception:
-                    # A bad account must not prevent unrelated readers progressing.
-                    with self.lock:
-                        old = self.rows.get(account['id'])
-                        if old:
-                            old.update(status='stale' if old.get('lastSuccess') else 'pending', error='reader_failed')
             with self.lock:
                 try:
                     self.vault.save(self.rows)
@@ -287,11 +320,9 @@ class Monitor:
             order = {key: i for i, key in enumerate(self.order)}
             enabled = self.enabled.copy() if self.enabled is not None else None
         now = self.clock()
-        # Keep the established CLI card on failures rather than revive desktop duplicates.
-        # Hiding the CLI card must not revive them either. Legacy rows and pins remain
-        # on disk without merging identities by email.
-        if any(r['provider'] == 'antigravity' and r.get('source', '').startswith('Official Antigravity CLI')
-               and r.get('lastSuccess') for r in rows):
+        # A healthy CLI suppresses desktop duplicates. A failed CLI stays visible
+        # with its own error while desktop fallback uses its independent identity.
+        if any(suppress_antigravity_desktop(r, hidden, now) for r in rows):
             rows = [r for r in rows if r.get('source') != 'Official running Antigravity local service']
         for label in self.desired_google:
             # This is a requested connection, not a verified or merged account.
