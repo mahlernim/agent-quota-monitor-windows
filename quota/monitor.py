@@ -20,6 +20,15 @@ def is_antigravity_cli(row):
     return row.get('provider') == 'antigravity' and row.get('source', '').startswith('Official Antigravity CLI')
 
 
+def is_antigravity_desktop(row):
+    return row.get('provider') == 'antigravity' and row.get('source') == 'Official running Antigravity local service'
+
+
+def fresh_reading(row, now):
+    success = row.get('lastSuccess')
+    return row.get('status') == 'live' and not row.get('error') and finite_number(success) and now - success <= INTERVAL * 2
+
+
 def suppress_antigravity_desktop(row, hidden, now):
     if not is_antigravity_cli(row):
         return False
@@ -27,8 +36,7 @@ def suppress_antigravity_desktop(row, hidden, now):
     # changing source bypass a provider cooldown, even without a numeric delay.
     if row['id'] in hidden or row.get('providerCooldown') or row.get('error') == 'rate_limited' or row.get('retryState') == 'suspended':
         return True
-    success = row.get('lastSuccess')
-    return row.get('status') == 'live' and not row.get('error') and finite_number(success) and now - success <= INTERVAL * 2
+    return fresh_reading(row, now)
 
 
 def ring_ids(order):
@@ -320,10 +328,18 @@ class Monitor:
             order = {key: i for i, key in enumerate(self.order)}
             enabled = self.enabled.copy() if self.enabled is not None else None
         now = self.clock()
-        # A healthy CLI suppresses desktop duplicates. A failed CLI stays visible
-        # with its own error while desktop fallback uses its independent identity.
-        if any(suppress_antigravity_desktop(r, hidden, now) for r in rows):
-            rows = [r for r in rows if r.get('source') != 'Official running Antigravity local service']
+        # Select one source family for display. Retain each source's identity,
+        # cached readings, errors, and pins without merging accounts by email.
+        cli_rows = [r for r in rows if is_antigravity_cli(r)]
+        if cli_rows:
+            desktop_rows = [r for r in rows if is_antigravity_desktop(r) and r['id'] not in hidden
+                            and fresh_reading(r, now) and not self.polling_error]
+            if desktop_rows and not any(suppress_antigravity_desktop(r, hidden, now) for r in cli_rows):
+                selected = {r['id'] for r in desktop_rows}
+                rows = [r for r in rows if not is_antigravity_cli(r)
+                        and (not is_antigravity_desktop(r) or r['id'] in selected)]
+            else:
+                rows = [r for r in rows if not is_antigravity_desktop(r)]
         for label in self.desired_google:
             # This is a requested connection, not a verified or merged account.
             if not any(r['provider'] == 'antigravity' and (r['label'] == label or r.get('accountEmail') == label) for r in rows):

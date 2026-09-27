@@ -82,7 +82,7 @@ The official Antigravity CLI (`agy`) is the recommended source. It lets the moni
 - Gemini CLI is a different product and does not report Antigravity subscription quota.
 - API-key and custom-provider modes are not supported for subscription monitoring.
 
-While the CLI is healthy, the account marked **CLI** replaces desktop-source cards. If a CLI quota read fails, the monitor tries the running desktop app and shows its readings on a separate account card. The CLI card keeps its error until it recovers. Desktop and CLI accounts have separate pins because the desktop source does not supply the same verified account ID. Provider cooldowns and hidden-account choices are respected.
+The monitor displays one Antigravity source at a time. It prefers **CLI**, which works with the desktop app closed. If the CLI fails and the running desktop app supplies a fresh reading, only the desktop account is shown until the CLI recovers. If neither source can refresh, the CLI card keeps its last reading and error without adding an old desktop card. Each source retains its own account identity and saved pins. Provider cooldowns and hidden-account choices are respected.
 
 ### Accounts stay separate
 

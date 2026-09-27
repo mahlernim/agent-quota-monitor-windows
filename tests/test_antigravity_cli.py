@@ -209,7 +209,7 @@ class IdentityTests(unittest.TestCase):
         monitor.refresh_one(account)
         self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [account['id']])
         monitor.rows[account['id']]['status'] = 'stale'
-        self.assertEqual({r['id'] for r in monitor.snapshot()['accounts']}, {account['id'], legacy['id']})
+        self.assertEqual([r['id'] for r in monitor.snapshot()['accounts']], [legacy['id']])
         self.assertIn(legacy['id'], monitor.rows)
 
 
@@ -236,10 +236,10 @@ class DesktopFallbackTests(unittest.TestCase):
         self.cli_read.side_effect = providers.ReadError('schema_changed')
         self.monitor.refresh()
         rows = {r['id']: r for r in self.monitor.snapshot()['accounts']}
-        self.assertEqual(set(rows), {self.cli['id'], self.desktop['id']})
-        self.assertEqual(rows[self.cli['id']]['error'], 'schema_changed')
+        self.assertEqual(set(rows), {self.desktop['id']})
+        self.assertEqual(self.monitor.rows[self.cli['id']]['error'], 'schema_changed')
         self.assertEqual(rows[self.desktop['id']]['status'], 'live')
-        self.assertEqual(rows[self.cli['id']]['lastSuccess'], 1000)
+        self.assertEqual(self.monitor.rows[self.cli['id']]['lastSuccess'], 1000)
         self.assertEqual(rows[self.desktop['id']]['lastSuccess'], 1301)
         self.now[0] = 1362
         self.monitor.refresh()
@@ -250,6 +250,44 @@ class DesktopFallbackTests(unittest.TestCase):
         self.monitor.refresh()
         self.assertEqual([r['id'] for r in self.monitor.snapshot()['accounts']], [self.cli['id']])
         self.assertIn(self.desktop['id'], self.monitor.rows)
+
+    def test_stale_cached_desktop_never_duplicates_failed_cli(self):
+        self.monitor.refresh_one(self.desktop)
+        self.now[0] = 2000
+        self.cli_read.side_effect = providers.ReadError('schema_changed')
+        self.antigravity_desktop_accounts.return_value = []
+        self.monitor.refresh()
+        self.assertEqual([r['id'] for r in self.monitor.snapshot()['accounts']], [self.cli['id']])
+        self.assertIn(self.desktop['id'], self.monitor.rows)
+
+    def test_closed_desktop_does_not_replace_cli_with_open_app_guidance(self):
+        self.monitor.refresh_one(self.desktop)
+        self.now[0] = 1061
+        self.cli_read.side_effect = providers.ReadError('schema_changed')
+        self.antigravity_desktop_accounts.return_value = []
+        self.monitor.refresh()
+        rows = self.monitor.snapshot()['accounts']
+        self.assertEqual([r['id'] for r in rows], [self.cli['id']])
+        self.assertEqual(rows[0]['error'], 'schema_changed')
+
+    def test_cached_fallback_is_not_shown_during_cli_cooldown(self):
+        self.monitor.refresh_one(self.desktop)
+        self.cli_read.side_effect = providers.ReadError('rate_limited', 7200)
+        self.monitor.refresh()
+        self.assertEqual([r['id'] for r in self.monitor.snapshot()['accounts']], [self.cli['id']])
+        self.antigravity_desktop_accounts.assert_not_called()
+
+    def test_hidden_fresh_desktop_does_not_hide_cli(self):
+        self.monitor.refresh_one(self.desktop)
+        self.monitor.hidden.add(self.desktop['id'])
+        self.cli_read.side_effect = providers.ReadError('schema_changed')
+        self.monitor.refresh()
+        self.assertEqual([r['id'] for r in self.monitor.snapshot()['accounts']], [self.cli['id']])
+
+    def test_desktop_only_setup_remains_visible(self):
+        self.antigravity_accounts.return_value = [self.desktop]
+        self.monitor.refresh()
+        self.assertEqual([r['id'] for r in self.monitor.snapshot()['accounts']], [self.desktop['id']])
 
     def test_desktop_failure_keeps_cli_error_and_retry_schedule(self):
         self.cli_read.side_effect = providers.ReadError('antigravity_cli_timeout')
