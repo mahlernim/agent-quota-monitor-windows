@@ -135,7 +135,7 @@ class ClaudeExpiryTests(unittest.TestCase):
                 patch.object(providers.Path, 'stat') as stat, patch.object(providers, 'request') as request, \
                 patch.object(providers.time, 'time', return_value=2_001):
             stat.return_value.st_mtime_ns = 1
-            account = providers.claude_account()
+            account = providers.claude_legacy_account()
             self.assertEqual(account['sessionExpiresAt'], 2000)
             with self.assertRaises(providers.ReadError) as raised:
                 account['read']()
@@ -149,7 +149,7 @@ class ClaudeExpiryTests(unittest.TestCase):
                     patch.object(providers, 'request', return_value={'account': {'uuid': 'expected'}}) as request, \
                     patch.object(providers.time, 'time', return_value=1_999):
                 stat.return_value.st_mtime_ns = 1
-                account = providers.claude_account()
+                account = providers.claude_legacy_account()
                 account['read']()
             self.assertEqual(request.call_count, 2)
 

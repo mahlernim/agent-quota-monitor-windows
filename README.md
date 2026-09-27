@@ -60,7 +60,7 @@ A browser-only login may not create the session the monitor reads. Sign in throu
 
 If Codex or Claude Code isn't installed, Settings and the main window offer its official installer in place of **Sign in**. The confirmation shows the exact command, and it runs in a visible PowerShell window only after you choose OK. Clients installed while the monitor runs are found within a minute.
 
-The official clients renew their own sessions while you use them. If a session lapses, follow the account banner to sign in or open the official client. Claude's **Sign in** works without sending a message. Settings shows when a Claude Code session expires and when a Codex session was last renewed.
+The official clients manage their own sessions. With Claude Code 2.1.281 or a newer 2.x version, the monitor runs its built-in `/usage` command without a model message, so Claude Code handles authentication and renewal during quota reads. Temporary read failures retry automatically. If the login itself needs attention, follow the account banner. Claude's **Sign in** works without sending a message. Older Claude clients, or clients whose version cannot be checked, use the saved-session reader and show its token expiry in Settings. Codex shows when its session was last renewed.
 
 ### Anthropic Claude
 
@@ -71,6 +71,8 @@ The monitor reads the sign-in saved by **Claude Code**, Anthropic's command-line
 3. A Claude Code window and your browser open. Sign in in the browser. If the browser shows a code instead of returning, paste it into the Claude Code window.
 
 The account appears once its quota has been read.
+
+Use Claude Code 2.1.281 or a newer 2.x version for CLI-managed quota reads. Settings shows **Claude Code CLI (session managed by CLI)** as the source. This path reads the session and all-model weekly windows without opening Claude Code's credential file. It uses the default subscription login. Environment overrides for API keys, credentials, providers, and custom configuration directories are ignored only in the monitor's CLI subprocesses. Your environment and Claude Code settings stay unchanged.
 
 ### Google Antigravity
 
@@ -158,7 +160,8 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 - **An account is missing.** Sign in through the provider's official client, wait a minute, then press **Refresh**.
 - **Antigravity goes stale when the desktop app closes.** Install the Antigravity CLI from Settings. See [Google Antigravity](#google-antigravity).
 - **An Antigravity CLI account is stale.** Wait for the next eligible read shown in Settings, then press **Refresh**. If the CLI needs sign-in, run `agy` in a terminal, sign in, run `agy -p /usage`, and refresh again.
-- **Claude says the session expired, but Claude Code is open.** Choose **Sign in** on the account banner or in Settings and complete the browser login. No message is needed, even when your five-hour quota is exhausted. Signing in does not reset your quota. The monitor resumes by itself.
+- **Claude says the session expired, but Claude Code is open.** Older clients use the saved-token reader. Update Claude Code to use CLI-managed reads. If the official client still requires a new login, choose **Sign in** and complete the browser login. No message is needed, even when your five-hour quota is exhausted. Signing in does not reset your quota.
+- **Claude Code could not read quota.** Open Claude Code and run `/usage` to check its connection. The monitor keeps the last reading marked stale and retries automatically. A failed quota read alone does not mean you need to sign in again.
 - **Codex says the session wasn't accepted.** Open the Codex app or CLI. If that doesn't help, use **Sign in**.
 - **Codex Sign in stops right away.** The Codex client exited before sign-in started. Update it with `npm install -g @openai/codex@latest`, check `~/.codex/config.toml`, or sign in through the Codex app.
 - **Claude says the read was rejected.** Check `claude auth status`, open Claude Code to let it renew its session, and press **Refresh**. If it still fails, sign in again through Claude Code.

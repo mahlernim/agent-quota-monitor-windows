@@ -76,6 +76,9 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "copilot_auth_source_unsupported" => "The existing github.com GitHub CLI sign-in is required.",
         "copilot_read_timeout" => "Copilot quota read timed out.",
         "antigravity_cli_timeout" => "Antigravity CLI quota read timed out. Waiting to retry.",
+        "claude_cli_timeout" => "Claude Code quota read timed out. The monitor will retry automatically.",
+        "claude_cli_failed" => "Claude Code could not read quota. Open Claude Code and run /usage to check its connection. The monitor will retry automatically.",
+        "claude_cli_auth_unsupported" => "Claude Code did not select a direct subscription login. Check the default Claude Code account and its authentication settings.",
         "antigravity_cli_failed" => "Run agy interactively and sign in if prompted, then run agy -p /usage and press Refresh in the monitor.",
         "antigravity_cli_auth_unsupported" => "Antigravity CLI has a custom provider, API key, or unreadable auth settings. Restore Google account sign-in in agy, then run agy -p /usage and press Refresh in the monitor.",
         _ => "Quota reader unavailable. " + Error.Replace('_', ' ')
@@ -123,6 +126,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
     {
         "Official Codex session / usage endpoint" => "Codex app or CLI session",
         "Official Claude Code session / OAuth usage endpoint" => "Claude Code session",
+        "Official Claude Code CLI /usage" => "Claude Code CLI (session managed by CLI)",
         "Official running Antigravity local service" => "Antigravity desktop app",
         _ when IsAntigravityCli => "Antigravity CLI (agy)",
         _ when Provider == "copilot" && Source.Length > 0 => "GitHub CLI and Copilot SDK",
