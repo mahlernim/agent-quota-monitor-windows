@@ -58,7 +58,7 @@ public sealed class TrayController : IDisposable
             using var track = new Pen(System.Drawing.Color.FromArgb(215, 221, 226), 8) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             graphics.DrawEllipse(track, bounds);
 
-            double? remaining = ValidPercent(item?.Remaining);
+            double? remaining = item?.Disabled == true ? null : ValidPercent(item?.Remaining);
             System.Drawing.Color ring = RingColor(item, remaining);
             if (remaining is > 0)
             {
@@ -69,7 +69,7 @@ public sealed class TrayController : IDisposable
                     graphics.DrawArc(quota, bounds, -90, (float)(remaining.Value * 3.6));
             }
 
-            double? timeRemaining = ValidPercent(item?.TimeRemaining);
+            double? timeRemaining = item?.Disabled == true ? null : ValidPercent(item?.TimeRemaining);
             if (timeRemaining is not null)
             {
                 var innerBounds = RectangleF.Inflate(bounds, -5, -5);
@@ -86,7 +86,7 @@ public sealed class TrayController : IDisposable
                 }
             }
 
-            string label = item?.Unlimited == true ? "∞" : (item?.Initials ?? "AQ");
+            string label = item?.Unlimited == true && !item.Disabled ? "∞" : (item?.Initials ?? "AQ");
             if (label.Length > QuotaNames.MaxInitials)
                 label = label[..QuotaNames.MaxInitials];
             using var font = new Font("Segoe UI", label == "∞" ? 19 : label.Length >= 3 ? 10 : 14, FontStyle.Bold, GraphicsUnit.Pixel);
@@ -129,7 +129,7 @@ public sealed class TrayController : IDisposable
     {
         if (item is null)
             return "Agent Quota Monitor · No quota selected";
-        string percent = item.Unlimited ? "Unlimited" : ValidPercent(item.Remaining) is double value ? QuotaItem.Percent(value) : "Unknown";
+        string percent = item.Disabled ? "Disabled" : item.Unlimited ? "Unlimited" : ValidPercent(item.Remaining) is double value ? QuotaItem.Percent(value) : "Unknown";
         string status = item.Stale ? "stale" : item.Status ?? "unknown status";
         string primary = $"{item.Label} {percent} {status}";
         string account = string.IsNullOrWhiteSpace(item.Account) ? string.Empty : " · " + item.Account;

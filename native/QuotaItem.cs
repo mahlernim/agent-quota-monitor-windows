@@ -41,11 +41,12 @@ public sealed class QuotaItem
     public double? Remaining { get; init; }
     public double? TimeRemaining { get; set; }
     public bool Unlimited { get; init; }
+    public bool Disabled { get; init; }
     public bool Stale => Status != "live";
     public void MarkDisconnected() { Status = "stale"; TimeRemaining = null; Tooltip = "Disconnected · cached quota\n" + Tooltip.Replace("Disconnected · cached quota\n", ""); }
     public string IdentityColor => Code switch { "CX" => "#168f87", "CL" => "#c46843", "GM" => "#287bc1", "CG" => "#99734b", "CP" => "#488b74", _ => "#287bc1" };
-    public string Color => Stale ? "#89929d" : IdentityColor;
-    public string NumberColor => Stale ? "#89929d" : TimeRemaining is > 0 && Remaining.HasValue
+    public string Color => Stale || Disabled ? "#89929d" : IdentityColor;
+    public string NumberColor => Stale || Disabled ? "#89929d" : TimeRemaining is > 0 && Remaining.HasValue
         ? Remaining < TimeRemaining / 4 ? "#c54444" : Remaining < TimeRemaining / 2 ? "#c18a19" : "#25313d"
         : "#25313d";
     public object Selection => new { accountId = AccountId, groupId = GroupId, bucketId = BucketId };
@@ -67,12 +68,13 @@ public sealed class QuotaItem
             var provider = Text(a, "provider"); var group = Text(g, "label"); var status = Text(a, "status");
             var code = provider switch { "codex" => "CX", "claude" => "CL", "copilot" => "CP",
                 "antigravity" => group.Contains("Gemini", StringComparison.OrdinalIgnoreCase) ? "GM" : "CG", _ => "?" };
-            var remaining = Number(b, "remaining"); if (remaining is < 0 or > 100) remaining = null;
+            var disabled = b.TryGetProperty("disabled", out var d) && d.ValueKind == JsonValueKind.True;
+            var remaining = disabled ? null : Number(b, "remaining"); if (remaining is < 0 or > 100) remaining = null;
             var duration = Number(b, "windowSeconds");
             var window = duration == 18000 ? "5h" : duration == 604800 ? "7d" : Text(b, "windowKind") == "monthly" ? "Month" : Text(b, "label");
-            var unlimited = b.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True;
-            double? time = null; var resetText = "Reset unknown";
-            if (DateTimeOffset.TryParse(Text(b, "resetsAt"), out var reset))
+            var unlimited = !disabled && b.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True;
+            double? time = null; var resetText = disabled ? "Window disabled by provider" : "Reset unknown";
+            if (!disabled && DateTimeOffset.TryParse(Text(b, "resetsAt"), out var reset))
             {
                 var left = reset - (now ?? DateTimeOffset.UtcNow);
                 resetText = left.TotalSeconds > 0 ? $"Resets in {(int)left.TotalHours}h {left.Minutes}m · {reset.LocalDateTime:g}" : "Reset due · awaiting provider";
@@ -86,11 +88,11 @@ public sealed class QuotaItem
                     !(b.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.False)) time = left.TotalSeconds / duration * 100;
             }
             var aid = Text(a, "id"); var gid = Text(g, "id"); var bid = Text(b, "id");
-            var quotaText = unlimited ? "Unlimited" : remaining.HasValue ? Percent(remaining.Value) + " remaining" : "Unknown";
+            var quotaText = disabled ? "Disabled" : unlimited ? "Unlimited" : remaining.HasValue ? Percent(remaining.Value) + " remaining" : "Unknown";
             var pace = time.HasValue ? $"\n{Percent(time.Value)} time left · {(remaining >= time ? "Within pace" : "Faster usage")}" : "";
             result.Add(new QuotaItem { Key = MakeKey(aid, gid, bid), AccountId = aid, GroupId = gid, BucketId = bid,
                 Provider = provider, Code = code, Type = QuotaNames.TypeFor(provider, group), Account = Text(a, "label"), Group = group, Window = window,
-                Status = status, Remaining = remaining, Unlimited = unlimited, TimeRemaining = time, ResetText = resetText,
+                Status = status, Remaining = remaining, Unlimited = unlimited, Disabled = disabled, TimeRemaining = time, ResetText = resetText,
                 Tooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · {quotaText}\n{status.ToUpperInvariant()} · {resetText}{pace}{note}" });
         }
         return result;

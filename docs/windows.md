@@ -19,7 +19,9 @@ Open **Settings** (the gear icon) and select your providers. Changes save right 
 - **Antigravity.** The official Antigravity CLI (`agy`) lets the monitor read quota while the desktop app is closed. When `agy` is missing, **Install CLI** shows Google's exact install command, `irm https://antigravity.google/cli/install.ps1 | iex`, and runs it in a visible PowerShell window only after you confirm. That window then runs `agy -p /usage` so you can sign in. You can also follow the [official instructions](https://antigravity.google/docs/cli/install) yourself. **Open desktop app** opens the Antigravity desktop app, which can supply readings while it runs. Gemini CLI does not report Antigravity quota. API-key mode is not supported.
 - **Copilot.** Needs a one-time setup. **Set up Copilot** lists its steps, then installs any missing official tools with winget and the Copilot SDK in a visible window. **Connect** then links the account the GitHub CLI is signed in to. **Sign in** changes the account. See the [Copilot setup guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/copilot-setup.md).
 
-After a successful CLI reading, the Antigravity account marked **CLI** replaces desktop-source cards. Stored selections are kept and identities are never merged.
+The monitor displays one Antigravity source at a time. CLI is preferred. A fresh desktop reading replaces the CLI card during a CLI failure, and CLI returns when it recovers. If the desktop source is also unavailable, only the CLI error card remains. Each source retains its own identity and saved pins. Provider cooldowns and hidden-account choices are respected.
+
+A window explicitly reported as **Disabled** keeps its ring and saved pin without a percentage or countdown. It returns to its normal display when the provider reports an active window. Disabled does not mean zero or unlimited.
 
 Accounts remain separate by verified identity, even when email labels match. Direct Claude subscriptions are separate from Claude or GPT allowance supplied by Antigravity. Use a provider's own client to change accounts. The monitor never switches accounts automatically.
 
@@ -52,7 +54,7 @@ A gray ring with a **stale** badge preserves the last value that could be read. 
 - **Codex or Claude Code isn't installed.** Use **Install Codex** or **Install Claude Code**, then **Sign in**.
 - **Copilot isn't set up or linked.** Use **Set up Copilot**, then **Connect**.
 - **No network connection.** Use **Retry**, or wait. The monitor retries every five minutes and again when Windows reconnects or wakes from sleep.
-- **Provider format changed.** Use **Check for updates**. With automatic checks on, the monitor checks once by itself.
+- **The monitor could not interpret the provider response.** Use **Check for updates**. With automatic checks on, the monitor checks once by itself.
 
 When an official app closes, its recent reading stays live for up to ten minutes before turning stale. **Refresh** respects provider cooldowns.
 

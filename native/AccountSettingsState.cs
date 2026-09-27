@@ -65,7 +65,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             "The Antigravity CLI (agy) is not installed and the Antigravity desktop app is closed. Install the official CLI from Settings to read quota without the desktop app, or open the desktop app. Gemini CLI does not report Antigravity quota.",
         "network_unavailable" => "No network connection. The monitor retries every five minutes and again when the network returns.",
         "connection_or_response_error" => "The provider could not be reached or returned an unreadable response. Waiting to retry.",
-        "schema_changed" => "The provider changed its response format. Check for a monitor update in Settings.",
+        "schema_changed" => "The monitor could not interpret the provider response. Check for a monitor update in Settings.",
         "local_session_unavailable" => "Local session unavailable.",
         "independent_sign_in_needed" => "Official sign-in is needed.",
         "rate_limited" => "Provider rate limit. Waiting until the next eligible read.",
@@ -111,7 +111,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 "local_session_unavailable" when official => new("No readable session from the official client.", "sign-in", "Sign in"),
                 "network_unavailable" => new("No network connection.", "retry", "Retry"),
                 "connection_or_response_error" => new("The provider couldn't be reached.", "retry", "Retry"),
-                "schema_changed" => new("The provider changed its data format.", "check-updates", "Check for updates"),
+                "schema_changed" => new("The monitor could not interpret the provider response.", "check-updates", "Check for updates"),
                 "rate_limited" => new("Provider rate limit. Waiting for the next read."),
                 _ => new(Guidance.Split(". ")[0].TrimEnd('.') + ".")
             };
@@ -174,6 +174,11 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             foreach (JsonElement bucket in buckets.EnumerateArray())
             {
                 var parts = new List<string>();
+                if (bucket.TryGetProperty("disabled", out JsonElement disabled) && disabled.ValueKind == JsonValueKind.True)
+                {
+                    lines.Add($"{groupLabel} · {Text(bucket, "label")} · Disabled by provider");
+                    continue;
+                }
                 double? amount = Number(bucket, "amountRemaining"), entitlement = Number(bucket, "entitlement"), used = Number(bucket, "used");
                 string unit = Text(bucket, "unit");
                 if (amount.HasValue || entitlement.HasValue)

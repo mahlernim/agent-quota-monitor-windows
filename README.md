@@ -82,7 +82,7 @@ The official Antigravity CLI (`agy`) is the recommended source. It lets the moni
 - Gemini CLI is a different product and does not report Antigravity subscription quota.
 - API-key and custom-provider modes are not supported for subscription monitoring.
 
-After a successful CLI reading, the account marked **CLI** replaces desktop-source cards. Pin quotas on that account to keep them in the floating monitor.
+The monitor displays one Antigravity source at a time. It prefers **CLI**, which works with the desktop app closed. If the CLI fails and the running desktop app supplies a fresh reading, only the desktop account is shown until the CLI recovers. If neither source can refresh, the CLI card keeps its last reading and error without adding an old desktop card. Each source retains its own account identity and saved pins. Provider cooldowns and hidden-account choices are respected.
 
 ### Accounts stay separate
 
@@ -97,6 +97,8 @@ The thick outer ring is quota remaining, drawn in the provider's color. The thin
 The percentage turns **amber** when quota remaining falls below half of time remaining, and **red** below one quarter. For example, with 80% of the window left, amber starts under 40% quota and red under 20%. Without timing data there is no pace warning.
 
 Hover any ring for exact values, the reset time, pace, and, when something is wrong, what to do about it.
+
+An Antigravity window explicitly reported as **Disabled** keeps its ring and saved pin. It shows no percentage or countdown and returns to its normal display when the provider reports an active window. Disabled does not mean zero or unlimited.
 
 ## Everyday use
 
@@ -130,7 +132,7 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
 | GitHub Copilot isn't set up yet, or Copilot is set up | Setup is incomplete, or no GitHub account is linked | **Set up Copilot**, then **Connect** |
 | No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
-| The provider changed its data format | A provider update changed its data | **Check for updates** |
+| The monitor could not interpret the provider response | The response contains data the monitor does not recognize | **Check for updates** |
 | Reset since the last read (ring tooltip) | The window reset after the value was read | Wait for the next reading. The old value is hidden |
 
 When an official app closes, its recent reading stays live until it is ten minutes old, then turns stale. **Refresh** always respects provider cooldowns. Settings shows when each account can be read again.

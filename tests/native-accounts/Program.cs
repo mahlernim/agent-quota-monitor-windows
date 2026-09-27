@@ -177,6 +177,13 @@ internal static class Program
         QuotaItem live = Item(Card("live", "2026-09-24T10:00:00Z"));
         Check(live.Remaining == 40 && live.Tooltip.Contains("Reset due", StringComparison.Ordinal),
             "A live value past its reset keeps the provider reading while waiting");
+        JsonObject disabled = Card("live", "2026-09-24T14:00:00Z");
+        disabled["accounts"]![0]!["groups"]![0]!["buckets"]![0]!["disabled"] = true;
+        Check(Item(disabled).Disabled && Item(disabled).Remaining is null && Item(disabled).TimeRemaining is null,
+            "Disabled windows retain their item without percentage or countdown");
+        using JsonDocument disabledDocument = JsonDocument.Parse(disabled.ToJsonString());
+        Check(AccountStatus.From(disabledDocument.RootElement.GetProperty("accounts")[0]).QuotaDetails.Contains("Disabled by provider"),
+            "Account details and copied diagnostics explain disabled windows");
     }
 
     private static async Task TestWindow(string? previewPath)
