@@ -60,7 +60,7 @@ A browser-only login may not create the session the monitor reads. Sign in throu
 
 If Codex or Claude Code isn't installed, Settings and the main window offer its official installer in place of **Sign in**. The confirmation shows the exact command, and it runs in a visible PowerShell window only after you choose OK. Clients installed while the monitor runs are found within a minute.
 
-The official clients manage their own sessions. With Claude Code 2.1.281 or a newer 2.x version, the monitor runs its built-in `/usage` command without a model message, so Claude Code handles authentication and renewal during quota reads. Temporary read failures retry automatically. If the login itself needs attention, follow the account banner. Claude's **Sign in** works without sending a message. Older Claude clients use the saved-session reader and show its token expiry in Settings. Codex shows when its session was last renewed.
+The official clients manage their own sessions. With Claude Code 2.1.281 or a newer 2.x version, the monitor runs its built-in `/usage` command without a model message, so Claude Code handles authentication and renewal during quota reads. Temporary read failures retry automatically. If the login itself needs attention, follow the account banner. Claude's **Sign in** works without sending a message. Older Claude clients, or clients whose version cannot be checked, use the saved-session reader and show its token expiry in Settings. Codex shows when its session was last renewed.
 
 ### Anthropic Claude
 
@@ -72,7 +72,7 @@ The monitor reads the sign-in saved by **Claude Code**, Anthropic's command-line
 
 The account appears once its quota has been read.
 
-Use Claude Code 2.1.281 or a newer 2.x version for CLI-managed quota reads. Settings shows **Claude Code CLI (session managed by CLI)** as the source. This path reads the session and all-model weekly windows without opening Claude Code's credential file. It uses the default subscription login. Custom credential overrides and custom configuration directories are not supported by this path.
+Use Claude Code 2.1.281 or a newer 2.x version for CLI-managed quota reads. Settings shows **Claude Code CLI (session managed by CLI)** as the source. This path reads the session and all-model weekly windows without opening Claude Code's credential file. It uses the default subscription login. Environment overrides for API keys, credentials, providers, and custom configuration directories are ignored only in the monitor's CLI subprocesses. Your environment and Claude Code settings stay unchanged.
 
 ### Google Antigravity
 

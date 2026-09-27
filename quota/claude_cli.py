@@ -6,26 +6,27 @@ import re
 import subprocess
 import tempfile
 import threading
+import time
 
 from . import model
 from .providers import ReadError, account, load
 
 MIN_VERSION = (2, 1, 281)
 MAX_OUTPUT = 1024 * 1024
+VERSION_RETRY_SECONDS = 300
 SOURCE = 'Official Claude Code CLI /usage'
 _versions = {}
 _version_lock = threading.Lock()
 
 
 def environment():
-    # Reject overrides instead of silently reading a different subscription.
+    # Use the same default subscription as the local account metadata. Leave the
+    # parent's environment untouched, including user-wide API keys for other apps.
     overrides = ('CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN_FILE',
                  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
                  'ANTHROPIC_PROFILE', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
                  'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR')
-    if any(os.environ.get(name) for name in overrides):
-        raise ReadError('claude_cli_auth_unsupported')
-    env = dict(os.environ)
+    env = {name: value for name, value in os.environ.items() if name.upper() not in overrides}
     # This broad switch also disables usage retrieval in the tested CLI.
     env.pop('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', None)
     env.update(DISABLE_TELEMETRY='1', DISABLE_ERROR_REPORTING='1', DISABLE_AUTOUPDATER='1')
@@ -99,17 +100,26 @@ def supported_command():
         stat = Path(executable).stat()
         key = (executable, stat.st_mtime_ns, stat.st_size)
     except OSError:
-        raise ReadError('claude_cli_failed') from None
+        return None
     with _version_lock:
-        if key not in _versions:
-            code, text = run(executable, ['--version'], timeout=5)
-            match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)\s*', text)
-            if code or not match:
-                raise ReadError('claude_cli_failed')
-            version = tuple(map(int, match.groups()))
+        now = time.monotonic()
+        cached = _versions.get(key)
+        if cached is None or (cached[1] is not None and now >= cached[1]):
+            supported, retry_at = False, None
+            try:
+                code, text = run(executable, ['--version'], timeout=5)
+                match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)\s*', text)
+                if code or not match:
+                    raise ReadError('claude_cli_failed')
+                version = tuple(map(int, match.groups()))
+                supported = MIN_VERSION <= version < (3, 0, 0)
+            except (ReadError, ValueError):
+                # Capability discovery is a local probe, not a failed quota read.
+                # Preserve the legacy reader while bounding repeated probe attempts.
+                retry_at = time.monotonic() + VERSION_RETRY_SECONDS
             _versions.clear()
-            _versions[key] = MIN_VERSION <= version < (3, 0, 0)
-        return executable if _versions[key] else None
+            _versions[key] = supported, retry_at
+        return executable if _versions[key][0] else None
 
 
 def auth_status(executable):
@@ -187,7 +197,6 @@ def usage(executable):
 
 
 def cli_account(executable, home):
-    environment()
     metadata_path = home / '.claude.json'
 
     def identity():

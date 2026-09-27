@@ -117,11 +117,15 @@ class AccountTests(unittest.TestCase):
             account = cli.cli_account('claude.exe', self.home)
             self.assertEqual(account['read']()[0][0]['buckets'][0]['remaining'], 100)
 
-    def test_overrides_fail_without_launching_cli(self):
+    def test_inherited_overrides_do_not_block_default_account(self):
         for name in ('ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_OAUTH_TOKEN'):
-            with patch.dict(os.environ, {name: 'synthetic-secret'}), self.assertRaises(providers.ReadError) as caught:
-                cli.cli_account('claude.exe', self.home)
-            self.assertEqual(str(caught.exception), 'claude_cli_auth_unsupported')
+            with patch.dict(os.environ, {name: 'synthetic-secret'}), \
+                    patch.object(cli, 'auth_status', return_value=STATUS) as auth, \
+                    patch.object(cli, 'usage', return_value=cli.parse_usage(stream(events()))):
+                account = cli.cli_account('claude.exe', self.home)
+                self.assertEqual(account['read']()[1], META['emailAddress'])
+                self.assertEqual(auth.call_count, 2)
+                self.assertEqual(os.environ[name], 'synthetic-secret')
 
     def test_failure_keeps_stale_values_and_backoff(self):
         class Vault:
@@ -142,6 +146,44 @@ class AccountTests(unittest.TestCase):
 
 
 class RoutingTests(unittest.TestCase):
+    def test_failed_version_probe_falls_back_then_retries_after_cooldown(self):
+        for response in ((1, ''), (0, 'unrecognized version'), providers.ReadError('claude_cli_timeout')):
+            with self.subTest(response=response), tempfile.TemporaryDirectory() as directory:
+                exe = Path(directory) / 'claude.exe'; exe.write_text('binary')
+                now = [1000]
+                with patch('quota.connections.client_command', return_value=[str(exe), 'auth', 'login']), \
+                        patch.object(cli, 'run', side_effect=[response, (0, '2.1.281 (Claude Code)')]) as run, \
+                        patch('time.monotonic', side_effect=lambda: now[0]), \
+                        patch.object(providers, 'claude_legacy_account', return_value='legacy'):
+                    cli._versions.clear()
+                    self.assertEqual(providers.claude_account(), 'legacy')
+                    now[0] += 299
+                    self.assertEqual(providers.claude_account(), 'legacy')
+                    self.assertEqual(run.call_count, 1)
+                    now[0] += 1
+                    self.assertEqual(cli.supported_command(), str(exe))
+                    self.assertEqual(run.call_count, 2)
+
+    def test_upgrade_bypasses_failed_probe_cooldown(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exe = Path(directory) / 'claude.exe'; exe.write_text('old')
+            with patch('quota.connections.client_command', return_value=[str(exe), 'auth', 'login']), \
+                    patch.object(cli, 'run', side_effect=[(1, ''), (0, '2.1.281 (Claude Code)')]) as run:
+                cli._versions.clear()
+                self.assertIsNone(cli.supported_command())
+                exe.write_text('updated binary')
+                self.assertEqual(cli.supported_command(), str(exe))
+                self.assertEqual(run.call_count, 2)
+
+    def test_missing_executable_falls_back_without_probe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exe = Path(directory) / 'missing.exe'
+            with patch('quota.connections.client_command', return_value=[str(exe)]), \
+                    patch.object(cli, 'run') as run, \
+                    patch.object(providers, 'claude_legacy_account', return_value='legacy'):
+                self.assertEqual(providers.claude_account(), 'legacy')
+                run.assert_not_called()
+
     def test_cli_errors_never_fall_back_to_direct_http(self):
         with patch.object(cli, 'supported_command', return_value='claude.exe'), \
                 patch.object(cli, 'cli_account', side_effect=providers.ReadError('claude_cli_failed')), \
@@ -175,6 +217,21 @@ class RoutingTests(unittest.TestCase):
 
 
 class ProcessTests(unittest.TestCase):
+    def test_child_ignores_overrides_without_changing_parent_environment(self):
+        names = ('CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN_FILE',
+                 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
+                 'ANTHROPIC_PROFILE', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
+                 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR')
+        overrides = dict.fromkeys(names, 'synthetic-override')
+        overrides['AQM_CHILD_TEST'] = 'preserved'
+        with patch.dict(os.environ, overrides):
+            script = ('import os; '
+                      f'assert not any(name in os.environ for name in {names!r}); '
+                      'assert os.environ["AQM_CHILD_TEST"] == "preserved"; print("default subscription environment")')
+            code, text = cli.run(sys.executable, ['-c', script], timeout=5)
+            self.assertEqual((code, text.strip()), (0, 'default subscription environment'))
+            self.assertEqual({k: os.environ[k] for k in overrides}, overrides)
+
     def test_runtime_and_output_are_bounded_without_exposing_stdout(self):
         with patch.object(cli, 'environment', return_value=os.environ.copy()):
             for script, timeout, expected in (

@@ -78,7 +78,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "antigravity_cli_timeout" => "Antigravity CLI quota read timed out. Waiting to retry.",
         "claude_cli_timeout" => "Claude Code quota read timed out. The monitor will retry automatically.",
         "claude_cli_failed" => "Claude Code could not read quota. Open Claude Code and run /usage to check its connection. The monitor will retry automatically.",
-        "claude_cli_auth_unsupported" => "Claude monitoring needs the default Claude Code subscription login. A custom account directory, credential override, API key, or other provider is configured.",
+        "claude_cli_auth_unsupported" => "Claude Code did not select a direct subscription login. Check the default Claude Code account and its authentication settings.",
         "antigravity_cli_failed" => "Run agy interactively and sign in if prompted, then run agy -p /usage and press Refresh in the monitor.",
         "antigravity_cli_auth_unsupported" => "Antigravity CLI has a custom provider, API key, or unreadable auth settings. Restore Google account sign-in in agy, then run agy -p /usage and press Refresh in the monitor.",
         _ => "Quota reader unavailable. " + Error.Replace('_', ' ')
