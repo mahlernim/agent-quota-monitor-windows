@@ -51,7 +51,7 @@ class QuotaTests(unittest.TestCase):
             return {'claudeAiOauth':{'accessToken':'test-only'}} if str(path).endswith('.credentials.json') else {'oauthAccount':{'accountUuid':'expected','emailAddress':'same@example.com'}}
         with patch.object(providers,'load',side_effect=fixture), patch.object(Path,'stat') as stat, patch.object(providers,'request',return_value={'account':{'uuid':'different','email':'same@example.com'}}) as request:
             stat.return_value.st_mtime_ns=1
-            account=providers.claude_account()
+            account=providers.claude_legacy_account()
             with self.assertRaises(providers.ReadError) as raised:
                 account['read']()
             self.assertEqual(raised.exception.code,'identity_mismatch')

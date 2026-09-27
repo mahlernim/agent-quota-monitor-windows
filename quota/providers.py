@@ -166,6 +166,14 @@ def claude_expiry(oauth):
 
 
 def claude_account():
+    from .claude_cli import cli_account, supported_command
+    executable = supported_command()
+    if executable:
+        return cli_account(executable, HOME)
+    return claude_legacy_account()
+
+
+def claude_legacy_account():
     path = HOME / '.claude/.credentials.json'
     expires = claude_expiry(load_session('claude', path).get('claudeAiOauth'))
     metadata = load(HOME / '.claude.json').get('oauthAccount') or {}
