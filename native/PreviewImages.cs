@@ -35,6 +35,12 @@ internal static class PreviewImages
         };
         main.SetData(rows, "CX5h", pins, accounts);
         Save((FrameworkElement)main.Content, 820, 430, Path.Combine(directory, "main-window.png"));
+        main.SetConnectionState(true, false);
+        main.SetRefreshBusy(true);
+        Save((FrameworkElement)main.Content, 420, 430, Path.Combine(directory, "main-window-refreshing.png"));
+        main.SetRefreshBusy(false);
+        main.ShowNotice("Refresh complete · 3 accounts updated. 1 account needs attention. See account details.");
+        Save((FrameworkElement)main.Content, 420, 430, Path.Combine(directory, "main-window-refreshed.png"));
         var floating = new FloatingWindow(() => {}, () => {});
         floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
         Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "floating-monitor.png"));

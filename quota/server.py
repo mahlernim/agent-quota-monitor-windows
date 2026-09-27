@@ -34,6 +34,18 @@ def app_version(value):
 
 def handler(monitor, port, connections=None, version='development'):
     expected = f'127.0.0.1:{port}'
+    refresh_state = dict(id=0, state='idle')
+    refresh_guard = threading.Lock()
+
+    def manual_refresh():
+        try:
+            monitor.refresh()
+            state = 'complete'
+        except Exception:
+            state = 'failed'
+        with refresh_guard:
+            refresh_state['state'] = state
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -63,7 +75,11 @@ def handler(monitor, port, connections=None, version='development'):
             if not self.safe():
                 return self.send(403, b'{}')
             if self.path == '/api/status':
+                # Copy completion before the snapshot so completed results are included.
+                with refresh_guard:
+                    manual = refresh_state.copy()
                 data = monitor.snapshot()
+                data['manualRefresh'] = manual
                 data['backend'] = dict(name='agent-quota-monitor', protocolVersion=1, processId=os.getpid(), appVersion=version)
                 if connections:
                     data['connections'] = connections.snapshot()
@@ -158,7 +174,17 @@ def handler(monitor, port, connections=None, version='development'):
                     return self.send(503, b'{"error":"Could not save account preferences"}')
             if self.path not in ('/api/refresh', '/api/wake'):
                 return self.send(404, b'{}')
-            threading.Thread(target=monitor.wake if self.path == '/api/wake' else monitor.refresh, daemon=True).start()
+            if self.path == '/api/refresh':
+                with refresh_guard:
+                    if refresh_state['state'] != 'running':
+                        refresh_state.update(id=refresh_state['id'] + 1, state='running')
+                        try:
+                            threading.Thread(target=manual_refresh, daemon=True).start()
+                        except Exception:
+                            refresh_state['state'] = 'failed'
+                    request_id = refresh_state['id']
+                return self.send(202, json.dumps(dict(accepted=True, requestId=request_id)).encode())
+            threading.Thread(target=monitor.wake, daemon=True).start()
             self.send(202, b'{"accepted":true}')
     return Handler
 

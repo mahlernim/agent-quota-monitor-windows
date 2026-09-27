@@ -6,6 +6,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
@@ -29,6 +30,10 @@ public sealed class MainWindow : Window
     private readonly Action<AccountStatus, string> _accountAction;
     private readonly Action _openAccounts;
     private readonly Button _refresh;
+    private readonly TextBlock _refreshLabel = new() { Visibility = Visibility.Collapsed, Text = "Refreshing…",
+        Foreground = Ui.Muted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) };
+    private readonly RotateTransform _refreshRotation = new();
+    private bool _refreshBusy, _connectionReady, _connectionBusy, _spinning;
     private readonly WrapPanel _groups = new() { Margin = new Thickness(6, 0, 6, 6) };
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly Dictionary<string, CardView> _cards = new();
@@ -64,6 +69,11 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(toolbar, Dock.Top);
         root.Children.Add(toolbar);
         _refresh = Ui.IconButton(Icons.Refresh, "Refresh quotas", refresh);
+        var refreshIcon = (FrameworkElement)_refresh.Content;
+        refreshIcon.RenderTransformOrigin = new Point(.5, .5);
+        refreshIcon.RenderTransform = _refreshRotation;
+        ToolTipService.SetShowOnDisabled(_refresh, true);
+        toolbar.Children.Add(_refreshLabel);
         toolbar.Children.Add(_refresh);
         toolbar.Children.Add(Ui.IconButton(Icons.PictureInPicture, "Show or hide the floating monitor", showFloating));
         toolbar.Children.Add(Ui.IconButton(Icons.Settings, "Settings and accounts", accounts));
@@ -72,6 +82,7 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(_backendError, Dock.Top); root.Children.Add(_backendError);
         DockPanel.SetDock(_notice, Dock.Top); root.Children.Add(_notice);
         _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); _notice.Visibility = Visibility.Collapsed; };
+        Closed += (_, _) => { _noticeTimer.Stop(); _refreshRotation.BeginAnimation(RotateTransform.AngleProperty, null); };
         _scroll.Content = _groups;
         root.Children.Add(_scroll);
         // Closing hides the window to the tray, so Esc is a safe shortcut for it.
@@ -95,14 +106,37 @@ public sealed class MainWindow : Window
 
     internal void SetConnectionState(bool ready, bool connecting)
     {
+        _connectionReady = ready;
+        _connectionBusy = connecting;
         _preferencesEnabled = ready && !connecting;
         foreach (var card in _cards.Values)
             card.Select.IsEnabled = card.Pin.IsEnabled = _preferencesEnabled;
-        string name = connecting ? "Connecting" : ready ? "Refresh" : "Retry connection";
+        UpdateRefreshControl();
+    }
+
+    internal void SetRefreshBusy(bool busy)
+    {
+        _refreshBusy = busy;
+        if (busy) { _noticeTimer.Stop(); _notice.Visibility = Visibility.Collapsed; }
+        UpdateRefreshControl();
+    }
+
+    private void UpdateRefreshControl()
+    {
+        bool busy = _connectionBusy || _refreshBusy;
+        string name = _connectionBusy ? "Connecting" : _refreshBusy ? "Refreshing quotas" : _connectionReady ? "Refresh" : "Retry connection";
         AutomationProperties.SetName(_refresh, name);
-        _refresh.IsEnabled = !connecting;
-        _refresh.ToolTip = connecting ? "Connecting to the quota reader" : ready ? "Refresh quotas while respecting provider cooldowns"
+        _refresh.IsEnabled = !busy;
+        _refreshLabel.Text = _connectionBusy ? "Connecting…" : "Refreshing…";
+        _refreshLabel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        _refresh.ToolTip = _connectionBusy ? "Connecting to the quota reader" : _refreshBusy ? "Reading eligible accounts. Provider cooldowns still apply."
+            : _connectionReady ? "Refresh quotas while respecting provider cooldowns"
             : "Retry connection to the local quota reader and show its cached readings";
+        if (_spinning == busy) return;
+        _spinning = busy;
+        _refreshRotation.BeginAnimation(RotateTransform.AngleProperty, busy && SystemParameters.ClientAreaAnimation
+            ? new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1)) { RepeatBehavior = RepeatBehavior.Forever }
+            : null);
     }
 
     internal void SetReorderBusy(bool busy) => _reorderBusy = busy;
