@@ -105,6 +105,7 @@ Hover any ring for exact values, the reset time, pace, and, when something is wr
 - **Right-click a ring** to show it in the tray, pin it, move it, move its account, or copy its details.
 - **Drag a ring** to reorder it within its account, or **drag an account name** to reorder accounts. With the keyboard, press Alt with the arrow keys on a focused ring. Pins and the tray choice follow their rings.
 - **Toolbar icons.** Refresh, floating monitor, Settings, and Quit. Hover an icon to see what it does.
+- **Refresh feedback.** The refresh icon spins with a “Refreshing…” label while the reader works. A brief message reports updated accounts, no new readings, or a failure. Provider cooldowns still apply, and repeated clicks are disabled until the refresh finishes.
 - **Floating monitor.** Drag to move it, double-click to open the main window, and right-click for **Size** (75 to 200%) and **Opacity** (35 to 100%). Its size, opacity, and position are remembered.
 - **Close** or **Esc** hides the main window to the tray. **Quit** exits and stops the quota reader it started.
 

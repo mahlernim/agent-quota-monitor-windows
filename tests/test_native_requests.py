@@ -2,6 +2,7 @@
 import json
 import threading
 import unittest
+from unittest.mock import patch
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -53,6 +54,36 @@ class NativeRequestTests(unittest.TestCase):
     def test_native_provider_settings_accept_charset(self):
         with self.post('/api/providers', {'enabled': []}) as response:
             self.assertEqual(response.status, 200)
+
+    def test_refresh_reports_pending_before_worker_starts_and_coalesces_clicks(self):
+        workers = []
+        def queue_worker(*, target, daemon):
+            class Worker:
+                def start(self):
+                    workers.append(target)
+            return Worker()
+        # Patch only the worker constructor, keeping the HTTP server threads real.
+        from types import SimpleNamespace
+        with patch('quota.server.threading', SimpleNamespace(Thread=queue_worker)):
+            with self.post('/api/refresh', {}) as response:
+                request_id = json.load(response)['requestId']
+            with self.post('/api/refresh', {}) as response:
+                self.assertEqual(json.load(response)['requestId'], request_id)
+            with urllib.request.urlopen(self.url + '/api/status') as response:
+                self.assertEqual(json.load(response)['manualRefresh'], dict(id=request_id, state='running'))
+        self.assertEqual(len(workers), 1)
+        workers.pop()()
+        with urllib.request.urlopen(self.url + '/api/status') as response:
+            self.assertEqual(json.load(response)['manualRefresh'], dict(id=request_id, state='complete'))
+        # A failed read is observable, never reported as a successful refresh.
+        with patch.object(self.monitor, 'refresh', side_effect=RuntimeError('synthetic')), \
+                patch('quota.server.threading', SimpleNamespace(Thread=queue_worker)):
+            with self.post('/api/refresh', {}) as response:
+                second_id = json.load(response)['requestId']
+            workers.pop()()
+        self.assertGreater(second_id, request_id)
+        with urllib.request.urlopen(self.url + '/api/status') as response:
+            self.assertEqual(json.load(response)['manualRefresh'], dict(id=second_id, state='failed'))
 
     def test_plain_json_still_works(self):
         with self.post('/api/desktop', {'desktopOpacity': 75}, 'application/json') as response:

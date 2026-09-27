@@ -23,7 +23,7 @@ internal static class Program
 {
     private static int checks;
     private static readonly string[] Cases = { "late-status", "late-preferences", "late-startup", "snapshots", "owned-quit", "external-quit", "cleanup-failure", "instances",
-        "retry-success", "retry-parallel", "retry-quit", "retry-poll", "escape" };
+        "retry-success", "retry-parallel", "retry-quit", "retry-poll", "escape", "refresh-feedback" };
     [STAThread]
     private static int Main(string[] args)
     {
@@ -100,6 +100,81 @@ internal static class Program
             {
                 switch (args[0])
                 {
+                    case "refresh-feedback":
+                    {
+                        await Call(app, "Poll");
+                        Button refresh = Field<Button>(main, "_refresh");
+                        TextBlock label = Field<TextBlock>(main, "_refreshLabel");
+                        TextBlock notice = Field<TextBlock>(main, "_notice");
+                        var status = JsonNode.Parse(handler.Status)!;
+                        status["manualRefresh"] = new JsonObject { ["id"] = 1, ["state"] = "running" };
+                        handler.Status = status.ToJsonString();
+                        var accepted = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        handler.DelayPath = "/api/refresh";
+                        handler.Delayed = accepted.Task;
+                        Task pendingRefresh = Call(app, "RefreshAsync");
+                        Check(!refresh.IsEnabled && label.Visibility == Visibility.Visible, "Refresh feedback appears before the reader acknowledges the request");
+                        await Call(app, "Poll");
+                        await Call(app, "RefreshAsync");
+                        handler.DelayPath = null;
+                        accepted.SetResult(BackendFixture.Json("{\"accepted\":true,\"requestId\":1}"));
+                        await pendingRefresh;
+                        Check(!refresh.IsEnabled && label.Visibility == Visibility.Visible && label.Text == "Refreshing…" &&
+                            handler.Posts.Count(path => path == "/api/refresh") == 1,
+                            "An accepted refresh stays visibly busy across polls and blocks duplicate clicks");
+                        var rotation = (System.Windows.Media.RotateTransform)((FrameworkElement)refresh.Content).RenderTransform;
+                        Check(!SystemParameters.ClientAreaAnimation || rotation.HasAnimatedProperties, "Refresh animates when Windows enables animations");
+                        status["manualRefresh"]!["state"] = "complete";
+                        status["accounts"]![0]!["lastSuccess"] = 100;
+                        status["refreshing"] = true;
+                        handler.Status = status.ToJsonString();
+                        await Call(app, "Poll");
+                        Check(!refresh.IsEnabled, "A refresh joining an automatic read waits for that read to finish");
+                        status["refreshing"] = false;
+                        handler.Status = status.ToJsonString();
+                        await Call(app, "Poll");
+                        Check(refresh.IsEnabled && label.Visibility == Visibility.Collapsed && !rotation.HasAnimatedProperties && notice.Text.Contains("1 account updated"),
+                            "Completion stops the animation and reports newly read accounts even if quota is unchanged");
+                        await Call(app, "RefreshAsync");
+                        Check(refresh.IsEnabled && notice.Text.Contains("No new readings") && notice.Text.Contains("Cooldowns"),
+                            "A fast cooldown response reports no new readings instead of claiming an update");
+                        status["accounts"]![0]!["status"] = "stale";
+                        status["accounts"]![0]!["error"] = "network_unavailable";
+                        handler.Status = status.ToJsonString();
+                        await Call(app, "RefreshAsync");
+                        Check(notice.Text.Contains("1 account needs attention"), "Provider failures remain visible in the result summary");
+                        status["manualRefresh"]!["state"] = "failed";
+                        handler.Status = status.ToJsonString();
+                        await Call(app, "RefreshAsync");
+                        Check(refresh.IsEnabled && notice.Text.StartsWith("Refresh failed"), "Backend refresh failures reset the control and report failure");
+                        handler.RefreshFails = true;
+                        await Call(app, "RefreshAsync");
+                        Check(refresh.IsEnabled && notice.Text.StartsWith("Could not refresh"), "Rejected refresh requests reset the control and report failure");
+                        handler.RefreshFails = false;
+                        status["manualRefresh"]!["state"] = "running";
+                        handler.Status = status.ToJsonString();
+                        await Call(app, "RefreshAsync");
+                        Set(app, "refreshDeadline", DateTime.UtcNow.AddSeconds(-1));
+                        await Call(app, "Poll");
+                        Check(refresh.IsEnabled && notice.Text.Contains("longer than expected"), "Slow refreshes do not leave the button permanently disabled");
+                        await Call(app, "RefreshAsync");
+                        handler.Status = "{}";
+                        await Call(app, "Poll");
+                        Check(refresh.IsEnabled && notice.Text.StartsWith("Refresh interrupted"), "A lost reader clears busy feedback and enables reconnection");
+                        handler.Status = status.ToJsonString();
+                        await Call(app, "Poll");
+                        var late = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        handler.DelayPath = "/api/refresh";
+                        handler.Delayed = late.Task;
+                        Task closingRefresh = Call(app, "RefreshAsync");
+                        string previousNotice = notice.Text;
+                        await Call(app, "Quit");
+                        Check(handler.DelayedToken.IsCancellationRequested, "Quit cancels a pending refresh request");
+                        late.SetResult(BackendFixture.Json("{\"accepted\":true,\"requestId\":1}"));
+                        await closingRefresh;
+                        Check(notice.Text == previousNotice, "A late refresh response cannot publish feedback after Quit");
+                        break;
+                    }
                     case "retry-success":
                     {
                         await Call(app, "StartServices");
@@ -367,7 +442,7 @@ internal sealed class BackendFixture : HttpMessageHandler
     internal string Status = "{\"backend\":{\"name\":\"agent-quota-monitor\",\"protocolVersion\":1,\"processId\":876},\"now\":1,\"accounts\":[{\"id\":\"account\",\"provider\":\"claude\",\"label\":\"Synthetic\",\"status\":\"live\",\"groups\":[{\"id\":\"group\",\"label\":\"Synthetic\",\"buckets\":[{\"id\":\"bucket\",\"label\":\"Synthetic\",\"remaining\":55}]}]}]}";
     internal string? DelayPath;
     internal Task<HttpResponseMessage>? Delayed;
-    internal bool DelayStarted, RefuseFirst;
+    internal bool DelayStarted, RefuseFirst, RefreshFails;
     internal CancellationToken DelayedToken;
     internal int Requests;
     internal List<string> Posts = new();
@@ -379,7 +454,10 @@ internal sealed class BackendFixture : HttpMessageHandler
         string path = request.RequestUri!.AbsolutePath;
         if (request.Method == HttpMethod.Post)
         {
-            Posts.Add(path); if (path == "/api/shutdown") OnShutdown?.Invoke(); return Json("{}");
+            Posts.Add(path);
+            if (path == DelayPath) { DelayStarted = true; DelayedToken = token; return await Delayed!; }
+            if (path == "/api/refresh") return RefreshFails ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) : Json("{\"accepted\":true,\"requestId\":1}");
+            if (path == "/api/shutdown") OnShutdown?.Invoke(); return Json("{}");
         }
         if (RefuseFirst) { RefuseFirst = false; throw new HttpRequestException("Synthetic connection refusal", new SocketException((int)SocketError.ConnectionRefused)); }
         if (path == DelayPath) { DelayStarted = true; DelayedToken = token; return await Delayed!; }

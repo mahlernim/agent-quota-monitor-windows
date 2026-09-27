@@ -21,6 +21,10 @@ public sealed class App : Application
     private List<QuotaItem> items = new(); private string? selected; private readonly HashSet<string> pins = new();
     private bool stopping; private bool polling; private bool preferencesLoaded; private bool backendReady; private bool connecting;
     private bool reorderBusy;
+    private bool refreshing;
+    private long? refreshRequestId;
+    private DateTime refreshDeadline;
+    private Dictionary<string, double?> refreshBaseline = new(StringComparer.Ordinal);
     private List<string> accountIds = new();
     private List<AccountStatus> accountStates = new();
     private SingleInstance? instance; private DispatcherTimer? timer;
@@ -155,13 +159,72 @@ public sealed class App : Application
     }
     private async Task RefreshAsync()
     {
-        if (stopping) return;
+        if (stopping || refreshing) return;
         if (!backendReady || connecting)
         {
             await StartServices();
             return;
         }
-        await Post("/api/refresh", new {});
+        refreshing = true;
+        refreshRequestId = null;
+        refreshDeadline = DateTime.UtcNow.AddMinutes(2);
+        refreshBaseline = accountStates.ToDictionary(account => account.Id, account => account.LastSuccess, StringComparer.Ordinal);
+        main?.SetRefreshBusy(true);
+        try
+        {
+            using var response = await BackendRequests.PostAsync(http, "/api/refresh", new {}, lifetime.Token);
+            response.EnsureSuccessStatusCode();
+            using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync(lifetime.Token));
+            if (stopping) return;
+            if (!result.RootElement.TryGetProperty("requestId", out var id) || !id.TryGetInt64(out long requestId))
+            {
+                FinishRefresh("Refresh requested. Results will appear as readings arrive.");
+                return;
+            }
+            // Drain any older status response before accepting completion for this request.
+            await pollTask;
+            if (stopping) return;
+            if (!backendReady)
+            {
+                FinishRefresh("Refresh interrupted. Cached readings are shown. Retry the connection.");
+                return;
+            }
+            refreshRequestId = requestId;
+            await Poll();
+        }
+        catch (OperationCanceledException) when (stopping) { }
+        catch { if (!stopping) FinishRefresh("Could not refresh. Try again or reconnect to the quota reader."); }
+    }
+    private void FinishRefresh(string message)
+    {
+        refreshing = false;
+        refreshRequestId = null;
+        main?.SetRefreshBusy(false);
+        main?.ShowNotice(message);
+    }
+    private void CheckRefresh(JsonElement root)
+    {
+        if (!refreshing || refreshRequestId is null) return;
+        if (root.TryGetProperty("manualRefresh", out var result) &&
+            result.TryGetProperty("id", out var id) && id.TryGetInt64(out long requestId) && requestId == refreshRequestId)
+        {
+            string state = QuotaItem.Text(result, "state");
+            if (state == "failed") { FinishRefresh("Refresh failed. Previous readings are kept. Try again."); return; }
+            if (state == "complete" && !(root.TryGetProperty("refreshing", out var busy) && busy.ValueKind == JsonValueKind.True))
+            {
+                int updated = accountStates.Count(account => account.LastSuccess is double last &&
+                    (!refreshBaseline.TryGetValue(account.Id, out var before) || before is null || last > before));
+                int attention = accountStates.Count(account => account.Status != "live" || !string.IsNullOrEmpty(account.Error));
+                string message = updated > 0 ? $"Refresh complete · {updated} account{(updated == 1 ? "" : "s")} updated."
+                    : accountStates.Count == 0 ? "Refresh complete. No connected accounts found. Open Settings to connect."
+                    : "Refresh complete. No new readings. Cooldowns may apply.";
+                if (attention > 0) message += $" {attention} account{(attention == 1 ? " needs" : "s need")} attention. See account details.";
+                FinishRefresh(message);
+                return;
+            }
+        }
+        if (DateTime.UtcNow >= refreshDeadline)
+            FinishRefresh("Refresh is taking longer than expected. Readings will update when available.");
     }
     private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
     { if (e.Mode == Microsoft.Win32.PowerModes.Resume) ScheduleWake(); }
@@ -309,6 +372,7 @@ public sealed class App : Application
             main?.ShowBackendError("");
             selected ??= items.FirstOrDefault()?.Key;
             if (Render() && main is not null) main.Title = "Agent Quota Monitor Windows";
+            CheckRefresh(data.RootElement);
         }
         catch (OperationCanceledException) when (stopping || (connecting && !duringConnection)) { }
         catch (BackendConnectionException error)
@@ -332,6 +396,8 @@ public sealed class App : Application
         finally
         {
             polling = false;
+            if (!stopping && !backendReady && refreshing && refreshRequestId is not null)
+                FinishRefresh("Refresh interrupted. Cached readings are shown. Retry the connection.");
             if (ReferenceEquals(pollCancellation, cancellation)) pollCancellation = null;
             if (!stopping && !connecting) main?.SetConnectionState(backendReady, false);
         }
