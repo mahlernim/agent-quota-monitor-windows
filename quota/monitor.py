@@ -84,6 +84,20 @@ def repair_retry_state(row, now):
         row['providerCooldown'] = row['providerCooldown'] is True
 
 
+def allow_startup_retry(row):
+    """Give a saved parse failure one read by the current reader, on load only.
+
+    A parse failure belongs to the reader that recorded it, so an upgraded reader
+    should not inherit its backoff. Provider cooldowns and suspended retries stay.
+    The next read replaces the row, so a repeated failure resumes normal backoff.
+    """
+    if row.get('error') != 'schema_changed' or row.get('providerCooldown') or row.get('retryState') == 'suspended':
+        return
+    # Remove the key. A None deadline is repaired into a five-minute delay.
+    row.pop('nextAttempt', None)
+    row['retryState'] = 'startup_retry'
+
+
 class Monitor:
     def __init__(self, vault, clock=time.time, desired_google=(), settings_vault=None):
         self.vault, self.clock = vault, clock
@@ -114,6 +128,8 @@ class Monitor:
             # Early preview snapshots included product attribution as a quota.
             for row in self.rows.values():
                 repair_retry_state(row, self.clock())
+                # After repair, so an oversized saved deadline is already suspended.
+                allow_startup_retry(row)
                 if row.get('provider') == 'claude':
                     for group in row.get('groups', []):
                         group['buckets'] = [b for b in group.get('buckets', []) if not b.get('id', '').endswith('_breakdown')]
@@ -302,6 +318,8 @@ class Monitor:
                         recent = row.get('status') == 'live' and finite_number(success) and now - success <= INTERVAL*2
                         row.update(status='live' if recent else 'stale' if success else 'pending',
                                    error=discovery_errors.get(row['provider'], 'local_session_unavailable'))
+                        if row.get('retryState') == 'startup_retry':
+                            row.pop('retryState')
                         if not row.get('providerCooldown') and row.get('retryState') != 'suspended':
                             # An old read timer must not delay a source that returns.
                             row.pop('nextAttempt', None)

@@ -36,8 +36,16 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         catch (ArgumentOutOfRangeException) { return fallback; }
     }
 
+    /// <summary>A saved parse failure from an earlier run that the current reader has not retried yet.</summary>
+    internal bool AwaitingStartupRetry => RetryState == "startup_retry" && Error == "schema_changed";
+
+    /// <summary>The current reader could not interpret the provider response, so a newer monitor may help.</summary>
+    internal bool ReportsFormatChange => Error == "schema_changed" && !AwaitingStartupRetry;
+
     internal string Guidance => RetryState == "suspended"
         ? "Automatic reads are paused because the provider reported an unusable retry time. Check the official client for status."
+        : AwaitingStartupRetry
+        ? "The last read before the monitor restarted could not interpret the provider response. The monitor is reading again now and keeps the last values until then."
         : Error switch
     {
         "" => "",
@@ -93,6 +101,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         get
         {
             if (RetryState == "suspended") return new("Automatic reads are paused by the provider's retry time.");
+            if (AwaitingStartupRetry) return new("Reading again after the monitor restarted.");
             bool official = Provider is "codex" or "claude" or "copilot";
             return Error switch
             {
