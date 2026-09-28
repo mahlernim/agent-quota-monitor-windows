@@ -541,6 +541,14 @@ internal static class Program
             Problem("codex", "schema_changed")?.Action == "check-updates" && Problem("codex", "rate_limited")?.Action is null,
             "Network, format, and cooldown problems choose matching actions");
         Check(Problem("codex", "") is null, "A healthy account has no banner");
+        AccountStatus saved = Account("antigravity", "schema_changed", cli);
+        AccountStatus retrying = saved with { RetryState = "startup_retry" };
+        Check(saved.ReportsFormatChange && !saved.AwaitingStartupRetry, "A parse failure by the current reader suggests an update");
+        Check(retrying.AwaitingStartupRetry && !retrying.ReportsFormatChange && retrying.Problem?.Action is null &&
+            !retrying.Guidance.Contains("update", StringComparison.OrdinalIgnoreCase) && !retrying.Problem!.Summary.Contains("update", StringComparison.OrdinalIgnoreCase),
+            "A saved parse failure awaiting its startup retry neither offers nor triggers an update check");
+        Check(!(Account("codex", "rate_limited") with { RetryState = "startup_retry" }).AwaitingStartupRetry,
+            "The startup retry marker applies only to saved parse failures");
         Check(QuotaNames.Defaults["antigravity-gemini"] == new QuotaName("AG", "Gemini") && QuotaNames.Defaults["antigravity-claude-gpt"] == new QuotaName("AC", "Claude and GPT") &&
             QuotaNames.Defaults.Values.All(name => QuotaNames.ValidInitials(name.Initials) && QuotaNames.ValidName(name.Name)),
             "Defaults use AG and AC and fit the name limits");
