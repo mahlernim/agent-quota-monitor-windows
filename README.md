@@ -107,7 +107,7 @@ The percentage turns **amber** when quota remaining falls below half of time rem
 
 Hover any ring for exact values, the reset time, pace, and, when something is wrong, what to do about it.
 
-An Antigravity window explicitly reported as **Disabled** keeps its ring and saved pin. It shows no percentage or countdown and returns to its normal display when the provider reports an active window. Disabled does not mean zero or unlimited.
+An Antigravity window explicitly reported as **Disabled** keeps its ring and saved pin. If a fresh weekly reading in the same account and model group confirms 0% remaining, its disabled five-hour ring shows **0%** and its tooltip explains **0% available · Weekly limit reached**. Any countdown is labeled **Weekly reset**, with no five-hour pace ring. This describes baseline quota only. AI Credit overages may still allow use. Otherwise, Disabled shows no percentage or countdown. It returns to its normal display when the provider reports an active window.
 
 ## Everyday use
 

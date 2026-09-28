@@ -36,12 +36,15 @@ public sealed class QuotaItem
     public string Group { get; init; } = "";
     public string Window { get; init; } = "";
     public string Status { get; set; } = "pending";
-    public string ResetText { get; init; } = "Reset unknown";
-    public string Tooltip { get; set; } = "";
+    private string resetText = "Reset unknown", tooltip = "", weeklyResetText = "", weeklyTooltip = "";
+    public string ResetText { get => WeeklyLimitReached ? weeklyResetText : resetText; init => resetText = value; }
+    public string Tooltip { get => WeeklyLimitReached ? weeklyTooltip : tooltip; set => tooltip = value; }
     public double? Remaining { get; init; }
     public double? TimeRemaining { get; set; }
     public bool Unlimited { get; init; }
     public bool Disabled { get; init; }
+    // Effective baseline availability is separate from the provider's disabled/null reading.
+    public bool WeeklyLimitReached => !Stale && weeklyResetText.Length > 0;
     public bool Stale => Status != "live";
     public void MarkDisconnected() { Status = "stale"; TimeRemaining = null; Tooltip = "Disconnected · cached quota\n" + Tooltip.Replace("Disconnected · cached quota\n", ""); }
     public string IdentityColor => Code switch { "CX" => "#168f87", "CL" => "#c46843", "GM" => "#287bc1", "CG" => "#99734b", "CP" => "#488b74", _ => "#287bc1" };
@@ -56,8 +59,35 @@ public sealed class QuotaItem
         value.TryGetProperty(key, out var item) && item.ValueKind == JsonValueKind.String ? item.GetString() ?? fallback : fallback;
     public static double? Number(JsonElement value, string key) =>
         value.TryGetProperty(key, out var item) && item.TryGetDoubleSafe(out var number) && double.IsFinite(number) ? number : null;
+    internal static DateTimeOffset? ExhaustedWeeklyReset(JsonElement account, JsonElement group, JsonElement bucket, DateTimeOffset now)
+    {
+        static bool Flag(JsonElement value, string key) => value.TryGetProperty(key, out var flag) && flag.ValueKind == JsonValueKind.True;
+        if (Text(account, "provider") != "antigravity" || Text(account, "status") != "live" || Text(account, "error").Length > 0 ||
+            !Flag(bucket, "disabled") || Number(bucket, "windowSeconds") != 18000) return null;
+        // Match the backend's ten-minute freshness limit, including snapshots with an old live flag.
+        var success = Number(account, "lastSuccess");
+        var age = (now - DateTimeOffset.UnixEpoch).TotalSeconds - success;
+        if (age is null or < 0 or > 600) return null;
+        JsonElement weekly = default;
+        foreach (var candidate in group.GetProperty("buckets").EnumerateArray())
+        {
+            if (Number(candidate, "windowSeconds") != 604800) continue;
+            if (weekly.ValueKind != JsonValueKind.Undefined) return null;
+            weekly = candidate;
+        }
+        if (weekly.ValueKind == JsonValueKind.Undefined || Flag(weekly, "disabled") || Flag(weekly, "unlimited") ||
+            Number(weekly, "remaining") != 0 || !DateTimeOffset.TryParse(Text(weekly, "resetsAt"), out var reset) ||
+            reset <= now || (reset - now).TotalSeconds > 604800) return null;
+        return reset;
+    }
+    internal static string DescribeWeeklyReset(DateTimeOffset reset, DateTimeOffset now)
+    {
+        var left = reset - now;
+        return $"Weekly reset in {(int)left.TotalHours}h {left.Minutes}m · {reset.LocalDateTime:g}";
+    }
     public static List<QuotaItem> Parse(JsonElement root, DateTimeOffset? now = null)
     {
+        var observedAt = now ?? DateTimeOffset.UtcNow;
         var result = new List<QuotaItem>();
         if (!root.TryGetProperty("accounts", out var accounts)) return result;
         foreach (var a in accounts.EnumerateArray())
@@ -76,7 +106,7 @@ public sealed class QuotaItem
             double? time = null; var resetText = disabled ? "Window disabled by provider" : "Reset unknown";
             if (!disabled && DateTimeOffset.TryParse(Text(b, "resetsAt"), out var reset))
             {
-                var left = reset - (now ?? DateTimeOffset.UtcNow);
+                var left = reset - observedAt;
                 resetText = left.TotalSeconds > 0 ? $"Resets in {(int)left.TotalHours}h {left.Minutes}m · {reset.LocalDateTime:g}" : "Reset due · awaiting provider";
                 if (status != "live" && left.TotalSeconds <= 0 && !unlimited)
                 {
@@ -90,9 +120,13 @@ public sealed class QuotaItem
             var aid = Text(a, "id"); var gid = Text(g, "id"); var bid = Text(b, "id");
             var quotaText = disabled ? "Disabled" : unlimited ? "Unlimited" : remaining.HasValue ? Percent(remaining.Value) + " remaining" : "Unknown";
             var pace = time.HasValue ? $"\n{Percent(time.Value)} time left · {(remaining >= time ? "Within pace" : "Faster usage")}" : "";
+            var weeklyReset = ExhaustedWeeklyReset(a, g, b, observedAt);
+            var weeklyText = weeklyReset.HasValue ? DescribeWeeklyReset(weeklyReset.Value, observedAt) : "";
             result.Add(new QuotaItem { Key = MakeKey(aid, gid, bid), AccountId = aid, GroupId = gid, BucketId = bid,
                 Provider = provider, Code = code, Type = QuotaNames.TypeFor(provider, group), Account = Text(a, "label"), Group = group, Window = window,
                 Status = status, Remaining = remaining, Unlimited = unlimited, Disabled = disabled, TimeRemaining = time, ResetText = resetText,
+                weeklyResetText = weeklyText,
+                weeklyTooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · 0% available · Weekly limit reached\n{status.ToUpperInvariant()} · {weeklyText}\nBaseline quota only · AI Credit overages may allow continued use{note}",
                 Tooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · {quotaText}\n{status.ToUpperInvariant()} · {resetText}{pace}{note}" });
         }
         return result;

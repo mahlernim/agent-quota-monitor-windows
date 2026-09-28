@@ -162,6 +162,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
 
     private static string DescribeQuotas(JsonElement account)
     {
+        var now = DateTimeOffset.UtcNow;
         if (!account.TryGetProperty("groups", out JsonElement groups) || groups.ValueKind != JsonValueKind.Array) return "";
         var lines = new List<string>();
         foreach (JsonElement group in groups.EnumerateArray())
@@ -180,7 +181,12 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 var parts = new List<string>();
                 if (bucket.TryGetProperty("disabled", out JsonElement disabled) && disabled.ValueKind == JsonValueKind.True)
                 {
-                    lines.Add($"{groupLabel} · {Text(bucket, "label")} · Disabled by provider");
+                    var weeklyReset = QuotaItem.ExhaustedWeeklyReset(account, group, bucket, now);
+                    string state = weeklyReset.HasValue
+                        ? "0% available · Weekly limit reached · " + QuotaItem.DescribeWeeklyReset(weeklyReset.Value, now) +
+                            " · Baseline quota only · AI Credit overages may allow continued use · Disabled by provider"
+                        : "Disabled by provider";
+                    lines.Add($"{groupLabel} · {Text(bucket, "label")} · {state}");
                     continue;
                 }
                 double? amount = Number(bucket, "amountRemaining"), entitlement = Number(bucket, "entitlement"), used = Number(bucket, "used");

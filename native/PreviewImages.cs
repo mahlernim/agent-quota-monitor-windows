@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -54,6 +55,23 @@ internal static class PreviewImages
         Save((FrameworkElement)main.Content, 820, 430, Path.Combine(directory, "disabled-window.png"));
         floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
         Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "disabled-floating.png"));
+        var now = DateTimeOffset.UtcNow;
+        using var weeklySample = JsonDocument.Parse(JsonSerializer.Serialize(new { accounts = new[] {
+            new { id = "antigravity", provider = "antigravity", label = "sample@example.test", status = "live",
+                lastSuccess = now.ToUnixTimeSeconds(), groups = new[] {
+                    new { id = "claude-gpt", label = "Claude and GPT models", buckets = new object[] {
+                        new { id = "5h", label = "5h", windowSeconds = 18000, disabled = true },
+                        new { id = "weekly", label = "Weekly", windowSeconds = 604800, remaining = 0, resetsAt = now.AddDays(3).ToString("O") }
+                    } }
+                } }
+        } }));
+        var weeklyRows = QuotaItem.Parse(weeklySample.RootElement, now);
+        rows[6] = weeklyRows[0]; rows[7] = weeklyRows[1];
+        pins.Remove("CG5h"); pins.Add(rows[6].Key);
+        main.SetData(rows, rows[6].Key, pins, accounts);
+        Save((FrameworkElement)main.Content, 820, 430, Path.Combine(directory, "weekly-limit-window.png"));
+        floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
+        Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "weekly-limit-floating.png"));
     }
     private static AccountStatus Sample(string provider, string status, string error, string source = "Synthetic preview data") =>
         new(provider, provider, "sample@example.test", status, source, "Verified stable identity", error, 1790000000, 1790000300);
