@@ -208,5 +208,93 @@ class HttpRetryTests(unittest.TestCase):
                 self.assertLessEqual(raised.exception.retry_after, maximum)
 
 
+class StartupRetryTests(unittest.TestCase):
+    """A saved parse failure gets one read by the reader that just started."""
+
+    def setUp(self):
+        self.now = 1000
+        self.cache = Store()
+        self.settings = Store({'enabledProviders': ['claude']})
+        self.monitor = Monitor(self.cache, clock=lambda: self.now, settings_vault=self.settings)
+        self.reader = Mock(return_value=(model.claude({'five_hour': {'utilization': 20}}), 'same@example.com'))
+        self.account = providers.account('claude', 'first', 'same@example.com', 'fixture', self.reader)
+        self.monitor.refresh_one(self.account)
+        self.now = 5000
+        self.reader.reset_mock()
+
+    def restart(self, **fields):
+        row = self.monitor.rows[self.account['id']]
+        row.update(dict(status='stale', error='schema_changed', failures=26, nextAttempt=self.now + 3600), **fields)
+        self.cache.save(self.monitor.rows)
+        return Monitor(self.cache, clock=lambda: self.now, settings_vault=self.settings)
+
+    def remaining(self, monitor):
+        return monitor.rows[self.account['id']]['groups'][0]['buckets'][0]['remaining']
+
+    def test_saved_parse_failure_is_read_once_after_restart(self):
+        restarted = self.restart()
+        row = restarted.rows[self.account['id']]
+        self.assertNotIn('nextAttempt', row)
+        self.assertEqual((row['error'], row['failures'], row['retryState']), ('schema_changed', 26, 'startup_retry'))
+        self.assertEqual(self.remaining(restarted), 80.0)
+        self.assertEqual(next(r for r in restarted.snapshot()['accounts'] if r['id'] == self.account['id'])['retryState'], 'startup_retry')
+        self.reader.side_effect = providers.ReadError('schema_changed')
+        restarted.refresh_one(self.account)
+        self.assertEqual(self.reader.call_count, 1)
+        row = restarted.rows[self.account['id']]
+        # A repeated failure resumes the capped backoff and drops the marker.
+        self.assertEqual((row['failures'], row['nextAttempt']), (27, self.now + 3600))
+        self.assertNotIn('retryState', row)
+        self.assertEqual(self.remaining(restarted), 80.0)
+        self.now += 1800
+        restarted.refresh_one(self.account)
+        self.assertEqual(self.reader.call_count, 1)
+
+    def test_successful_startup_retry_clears_the_saved_failure(self):
+        restarted = self.restart()
+        restarted.refresh_one(self.account)
+        row = restarted.rows[self.account['id']]
+        self.assertEqual((row['status'], row['error'], row['failures'], row['nextAttempt']), ('live', None, 0, self.now + 300))
+        self.assertNotIn('retryState', row)
+
+    def test_other_saved_schedules_are_kept(self):
+        for fields in (dict(error='rate_limited'), dict(error='connection_or_response_error'), dict(providerCooldown=True)):
+            with self.subTest(fields=fields):
+                self.setUp()
+                restarted = self.restart(**fields)
+                row = restarted.rows[self.account['id']]
+                self.assertEqual(row['nextAttempt'], self.now + 3600)
+                self.assertNotIn('retryState', row)
+                restarted.refresh_one(self.account)
+                self.reader.assert_not_called()
+
+    def test_suspended_and_unrepresentable_saved_waits_stay_paused(self):
+        # Repair runs first, so an oversized deadline is suspended before the exception.
+        for fields in (dict(retryState='suspended', nextAttempt=None), dict(nextAttempt=MAX_TIMESTAMP + 1)):
+            with self.subTest(fields=sorted(fields)):
+                self.setUp()
+                restarted = self.restart(**fields)
+                row = restarted.rows[self.account['id']]
+                self.assertEqual((row['retryState'], row['nextAttempt']), ('suspended', None))
+                restarted.refresh_one(self.account)
+                self.reader.assert_not_called()
+
+    def test_parse_failures_in_a_running_monitor_keep_their_backoff(self):
+        self.reader.side_effect = providers.ReadError('schema_changed')
+        self.monitor.refresh_one(self.account)
+        self.now += 60
+        self.monitor.refresh_one(self.account)
+        self.assertEqual(self.reader.call_count, 1)
+        self.assertNotIn('retryState', self.monitor.rows[self.account['id']])
+
+    def test_undiscovered_account_drops_the_retry_marker(self):
+        restarted = self.restart()
+        with patch.object(providers, 'claude_account', side_effect=providers.ReadError('local_session_unavailable')):
+            restarted.refresh()
+        row = restarted.rows[self.account['id']]
+        self.assertEqual(row['error'], 'local_session_unavailable')
+        self.assertNotIn('retryState', row)
+
+
 if __name__ == '__main__':
     unittest.main()

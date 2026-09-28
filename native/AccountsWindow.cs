@@ -544,7 +544,8 @@ public sealed class AccountsWindow : Window
 
     private static string DetailText(AccountStatus account)
     {
-        string retry = account.RetryState == "suspended" ? "Paused until the provider reports a usable retry time" : AccountStatus.Timestamp(account.NextAttempt, "Not reported");
+        string retry = account.RetryState == "suspended" ? "Paused until the provider reports a usable retry time"
+            : account.AwaitingStartupRetry ? "Now, after the monitor restarted" : AccountStatus.Timestamp(account.NextAttempt, "Not reported");
         var lines = new List<string>
         {
             "Last read · " + AccountStatus.Timestamp(account.LastSuccess, "Never"),

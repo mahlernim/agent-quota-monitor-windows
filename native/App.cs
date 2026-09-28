@@ -246,7 +246,8 @@ public sealed class App : Application
     {
         // One early check per session when a provider format changed. Automatic checks must be on.
         if (formatUpdateChecked || updates is null) return;
-        if (!root.GetProperty("accounts").EnumerateArray().Any(account => QuotaItem.Text(account, "error") == "schema_changed")) return;
+        // A saved failure awaiting its first read by this reader does not use up the check.
+        if (!root.GetProperty("accounts").EnumerateArray().Any(account => AccountStatus.From(account).ReportsFormatChange)) return;
         formatUpdateChecked = true;
         _ = updates.Check(urgent: true);
     }
