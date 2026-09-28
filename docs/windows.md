@@ -6,9 +6,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 Requires Windows 10 or 11 on x64 and an eligible account with each provider you enable.
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.5/agent-quota-monitor-windows-0.3.5-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.5/agent-quota-monitor-windows-0.3.5-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -68,10 +68,11 @@ A gray ring with a **stale** badge preserves the last value that could be read. 
 - **Copilot isn't set up or linked.** Use **Set up Copilot**, then **Connect**.
 - **No network connection.** Use **Retry**, or wait. The monitor retries every five minutes and again when Windows reconnects or wakes from sleep.
 - **The monitor could not interpret the provider response.** Use **Check for updates**. With automatic checks on, the monitor checks once by itself.
+- **Reading again after the monitor restarted.** An unreadable response saved before a restart or update is being read again. Wait for the next reading. If it fails again, the unreadable-response banner returns.
 
 If a source becomes unavailable, its cached reading becomes stale. When discovery no longer finds an account, a recent reading can remain live for up to ten minutes. Closing a desktop app does not stop monitoring when its CLI or saved session can still supply quota.
 
-**Refresh** respects provider cooldowns. An unchanged percentage can still be a successful refresh. For **No new readings**, check the next eligible read and any error in **Settings → Details**. Retry schedules are kept across app updates.
+**Refresh** respects provider cooldowns. An unchanged percentage can still be a successful refresh. For **No new readings**, check the next eligible read and any error in **Settings → Details**. Retry schedules are kept across restarts and updates, except that an unreadable-response error is read again as soon as the monitor starts.
 
 ## Start with Windows
 
@@ -107,6 +108,6 @@ Authentication stays with the official clients. Depending on the source, the mon
 
 Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.5) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.6) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.
