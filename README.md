@@ -4,6 +4,8 @@ Keep your AI coding quotas in view without opening each provider. Agent Quota Mo
 
 It uses your official clients' existing sign-ins and sends no model prompts to check quota.
 
+[Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
+
 **[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.6)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
