@@ -23,7 +23,7 @@ internal static class Program
 {
     private static int checks;
     private static readonly string[] Cases = { "late-status", "late-preferences", "late-startup", "snapshots", "owned-quit", "external-quit", "cleanup-failure", "instances",
-        "retry-success", "retry-parallel", "retry-quit", "retry-poll", "escape", "refresh-feedback" };
+        "retry-success", "retry-parallel", "retry-quit", "retry-poll", "escape", "refresh-feedback", "activation-suggestion" };
     [STAThread]
     private static int Main(string[] args)
     {
@@ -100,6 +100,43 @@ internal static class Program
             {
                 switch (args[0])
                 {
+                    case "activation-suggestion":
+                    {
+                        var sample = JsonNode.Parse("""
+                            {"activation":{"preferences":{"enabled":false,"suggestions":true},"storageError":false,
+                            "accounts":[{"accountId":"synthetic","suggestionEligible":true}],
+                            "suggestion":{"accountId":"synthetic","label":"Sample Claude","message":"Synthetic suggestion"}}}
+                            """)!;
+                        int opened = 0;
+                        var actions = new List<string>();
+                        void Render()
+                        {
+                            using var doc = JsonDocument.Parse(sample.ToJsonString());
+                            main.ShowActivationSuggestion(doc.RootElement, () => ++opened, action => { actions.Add(action); return Task.FromResult(true); });
+                        }
+                        Render();
+                        Check(actions.Count == 0, "Hidden windows never acknowledge or display activation suggestions");
+                        main.Show(); Render(); Render();
+                        var banner = Field<StackPanel>(main,"_activationNotice");
+                        Check(banner.Visibility == Visibility.Visible && actions.SequenceEqual(new[]{"shown"}), "A visible suggestion is acknowledged once across refreshes");
+                        var buttons = ((WrapPanel)banner.Children[1]).Children.OfType<Button>().ToArray();
+                        buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Check(opened == 1 && banner.Visibility == Visibility.Collapsed && actions.Count == 1,
+                            "Configure opens Settings without enabling activation or sending a prompt");
+                        sample["activation"]!["accounts"]![0]!["suggestionEligible"] = false;
+                        sample["activation"]!["suggestion"] = null; Render();
+                        Check(banner.Visibility == Visibility.Collapsed, "A running or stale account cannot retain its suggestion");
+                        sample["activation"]!["accounts"]![0]!["suggestionEligible"] = true;
+                        sample["activation"]!["suggestion"] = new JsonObject { ["accountId"]="synthetic",["label"]="Sample",["message"]="Synthetic" };
+                        Render();
+                        buttons = ((WrapPanel)banner.Children[1]).Children.OfType<Button>().ToArray();
+                        buttons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Check(actions.Last() == "later" && banner.Visibility == Visibility.Collapsed, "Later persists its snooze before hiding");
+                        Render();
+                        sample["activation"]!["storageError"] = true; Render();
+                        Check(banner.Visibility == Visibility.Collapsed, "Storage failures suppress an already visible suggestion");
+                        break;
+                    }
                     case "refresh-feedback":
                     {
                         await Call(app, "Poll");

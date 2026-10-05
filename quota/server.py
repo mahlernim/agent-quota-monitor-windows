@@ -8,6 +8,7 @@ import threading
 from .monitor import Monitor, poll_monitor
 from .vault import Vault
 from .connections import Connections
+from .activation import Activation, Journal
 
 QUOTA_TYPES = ('codex', 'claude', 'antigravity-gemini', 'antigravity-claude-gpt', 'copilot')
 
@@ -32,7 +33,7 @@ def app_version(value):
     return value if isinstance(value, str) and re.fullmatch(r'[0-9A-Za-z.+-]{1,64}', value) else 'development'
 
 
-def handler(monitor, port, connections=None, version='development'):
+def handler(monitor, port, connections=None, version='development', activation=None):
     expected = f'127.0.0.1:{port}'
     refresh_state = dict(id=0, state='idle')
     refresh_guard = threading.Lock()
@@ -83,6 +84,8 @@ def handler(monitor, port, connections=None, version='development'):
                 data['backend'] = dict(name='agent-quota-monitor', protocolVersion=1, processId=os.getpid(), appVersion=version)
                 if connections:
                     data['connections'] = connections.snapshot()
+                if activation:
+                    data['activation'] = activation.snapshot()
                 return self.send(200, json.dumps(data, allow_nan=False).encode())
             if self.path == '/api/desktop':
                 with monitor.lock:
@@ -94,6 +97,20 @@ def handler(monitor, port, connections=None, version='development'):
         def do_POST(self):
             if not self.safe(True):
                 return self.send(403, b'{}')
+            if self.path == '/api/activation':
+                if not activation:
+                    return self.send(503, b'{}')
+                try:
+                    size = int(self.headers.get('Content-Length', '0'))
+                    if not 0 < size <= 32768 or self.headers.get_content_type() != 'application/json':
+                        raise ValueError()
+                    self.connection.settimeout(5)
+                    activation.configure(json.loads(self.rfile.read(size)))
+                    return self.send(200, b'{"saved":true}')
+                except (ValueError, TypeError, TimeoutError):
+                    return self.send(400, b'{"error":"Invalid activation preferences"}')
+                except Exception:
+                    return self.send(503, b'{"error":"Could not save activation preferences"}')
             if self.path == '/api/shutdown':
                 if self.headers.get('X-Quota-Process-Id') != str(os.getpid()):
                     return self.send(409, b'{"error":"Quota reader process changed"}')
@@ -203,9 +220,11 @@ def main():
         desired = []
     monitor = Monitor(Vault(), desired_google=desired, settings_vault=settings)
     connections = Connections(monitor)
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections, app_version(args.app_version)))
+    activation = Activation(monitor, Journal(Path(os.environ['LOCALAPPDATA']) / 'QuotaDashboard' / 'activation.dpapi'))
+    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections, app_version(args.app_version), activation))
     stop = threading.Event()
     threading.Thread(target=poll_monitor, args=(monitor, stop), daemon=True).start()
+    threading.Thread(target=activation.run, daemon=True).start()
     print(f'Quota backend listening on 127.0.0.1:{args.port}', flush=True)
     try:
         server.serve_forever()
@@ -213,6 +232,7 @@ def main():
         pass
     finally:
         stop.set()
+        activation.close()
         connections.close()
         server.server_close()
 

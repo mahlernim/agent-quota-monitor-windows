@@ -6,7 +6,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 [Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.6)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.0)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -23,7 +23,8 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 - **Uses your existing sign-ins.** Connect through each provider's official client. Authentication and session renewal stay with that client.
 - **Honest when data is old.** Values that could not be refreshed stay visible in gray with the reason, and values from before a reset are shown as unknown.
 - **Fixes where you look.** When an account has a problem, a short banner under it explains why and offers the one action that helps.
-- **Local and private.** No telemetry or model prompts. Monitor settings and cached quota are encrypted for your Windows account.
+- **Local and private.** No telemetry or prompts for quota checks. Monitor settings and cached quota are encrypted for your Windows account.
+- **Optional idle-window activation.** Start a supported Claude countdown with one short subscription prompt after an observed idle period. Off until you enable it.
 
 ## Contents
 
@@ -31,6 +32,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 - [Connect your providers](#connect-your-providers)
 - [Read a quota ring](#read-a-quota-ring)
 - [Everyday use](#everyday-use)
+- [Optional quota window activation](#optional-quota-window-activation)
 - [Stale readings and what they mean](#stale-readings-and-what-they-mean)
 - [Start with Windows](#start-with-windows)
 - [Updates](#updates)
@@ -41,7 +43,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
@@ -183,12 +185,25 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 - **An update could not be verified.** Nothing was installed. Try again later or use **Download update**.
 - **Something else is wrong, or you have an idea.** Choose **Report it on GitHub** in Settings, or open the [issue page](https://github.com/mahlernim/agent-quota-monitor-windows/issues). Include the copied account details rather than screenshots of your quota.
 
+## Optional quota window activation
+
+Some quota countdowns begin only after a model request. In **Settings → Quota window activation**, you can let AQM send a short prompt after a supported window has remained inactive for 30 minutes. Choose each account, enable the feature, then select **Save activation settings**. You can instead wait 60 or 120 minutes.
+
+Activation is off on a fresh install and when first introduced by an update. Later updates retain your choice, account selections, dismissals, and attempt records. New accounts remain unselected. Quota checks stay prompt-free.
+
+This release supports **direct Claude five-hour windows** with the verified Claude Code **2.1.280** runner, a Pro or Max subscription, and provider-confirmed extra usage off. It sends a fixed short Haiku prompt with tools and hooks disabled. This uses subscription allowance and may also start the weekly countdown. Weekly activation on its own, Codex, and Antigravity activation remain unavailable until their unattended runners and eligibility checks are verified. Keep your official client current for monitoring. Do not downgrade it for activation.
+
+AQM requires consecutive fresh successful readings throughout the chosen delay. Full quota with a running countdown, stale readings, unknown reset information, and exhausted weekly quota never trigger activation. After a prompt, two fresh countdown readings must confirm the change. An uncertain delivery is not automatically retried. Settings shows the current activation status. At most five prompts can be sent per account in 24 hours.
+
+With activation off, a quiet suggestion can appear in the main window after three hours of confirmed inactivity for a supported account. **Configure activation** opens Settings, **Later** snoozes for a week, and **Don't show again** persists across restarts and updates. Suggestions never send a prompt or enable the feature. You can turn suggestions off in Settings. The app must be running to observe inactivity and act. Sleep or gaps in fresh readings restart the observation period.
+
 ## Privacy
 
 - Authentication stays with the official clients. Depending on the source, the monitor invokes a quota-only client command or reads an existing session for a quota request. It does not maintain a separate login, refresh tokens itself, or store raw credentials in its own data.
 - Official clients may renew their sessions when invoked. Tokens, cookies, and authorization headers are excluded from monitor logs and copied support details.
-- It never sends prompts to a model, starts usage windows, or routes traffic through a proxy.
+- Quota monitoring sends no model prompts. Optional window activation sends one short subscription prompt only for accounts you explicitly select and enable. There is no proxy routing or paid/API fallback.
 - Settings and cached quota are encrypted for your Windows account under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry.
+- Activation preferences and attempt receipts are encrypted separately in `activation.dpapi` in that same folder. Receipts retain stable account IDs, timestamps, outcomes, and numeric token counts, never prompt responses or credentials.
 - The quota reader talks to the app over loopback only. It is meant for a trusted personal computer and does not isolate access from other local programs.
 - There is no telemetry. Update checks use GitHub's public releases API without credentials.
 
