@@ -30,39 +30,7 @@ def timestamp(value):
         return None
 
 
-def classify(row, now):
-    """Only the directly tested Claude five-hour representation is dispatchable."""
-    if row.get('provider') != 'claude':
-        return 'unsupported', None
-    source = row.get('source', '')
-    if source not in ('Official Claude Code session / OAuth usage endpoint', claude_cli.SOURCE):
-        return 'unsupported', None
-    read = row.get('lastSuccess')
-    if row.get('status') != 'live' or row.get('error') or not number(read) or not 0 <= now-read <= MAX_GAP:
-        return 'stale', None
-    groups = [g for g in row.get('groups', []) if g.get('id') == 'direct']
-    if len(groups) != 1:
-        return 'unknown', None
-    group = groups[0]
-    buckets = group.get('buckets', [])
-    if len({b.get('id') for b in buckets}) != len(buckets):
-        return 'unknown', None
-    five = next((b for b in buckets if b.get('id') == 'five_hour'), {})
-    weekly = next((b for b in buckets if b.get('id') == 'seven_day'), {})
-    if (five.get('disabled') is True or five.get('available') is False or
-            weekly.get('disabled') is True or weekly.get('available') is False or
-            not number(weekly.get('remaining')) or not 0 < weekly['remaining'] <= 100 or
-            not number(five.get('remaining')) or not 0 <= five['remaining'] <= 100 or
-            five.get('windowSeconds') != 18000 or weekly.get('windowSeconds') != 604800):
-        return 'unavailable', None
-    reset = timestamp(five.get('resetsAt'))
-    if reset is not None and reset > now:
-        return 'running', reset
-    if five.get('resetsAt') is None and five.get('remaining') == 100 and five.get('inactiveReported') is True:
-        if group.get('extraUsageEnabled') is not False:
-            return 'billing_unknown', None
-        return 'inactive', None
-    return 'unknown', None
+from .activation_windows import classify, target, targets
 
 
 class Journal:
@@ -108,7 +76,7 @@ class Journal:
         for attempt in value['attempts'].values():
             if (not isinstance(attempt, dict) or not isinstance(attempt.get('id'), str) or
                     attempt.get('state') not in ('reserved', 'sent', 'uncertain', 'confirmed') or
-                    not number(attempt.get('at')) or attempt.get('window') != 'five_hour' or
+                    not number(attempt.get('at')) or attempt.get('window') not in ('five_hour', 'seven_day', '5h', 'weekly') or
                     (attempt['state'] == 'confirmed' and not number(attempt.get('reset')))):
                 raise ValueError('Invalid activation receipt')
         if any(not isinstance(h, dict) or not isinstance(h.get('accountId'), str) or not number(h.get('at')) for h in value['history']):
@@ -133,10 +101,11 @@ class ClaudeRunner:
             return False, 'Install Claude Code to use activation.'
         executable = command[0]
         code, version = claude_cli.run(executable, ['--version'], timeout=5)
-        # Version-pinned until restrictions are verified on another version.
-        if code or version.strip() != '2.1.280 (Claude Code)':
-            return False, 'This Claude Code version has not been verified for unattended activation.'
-        return True, 'Claude five-hour activation with Haiku. Weekly activation is not available yet.'
+        import re
+        match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)\s*', version)
+        if code or not match or not (2, 1, 280) <= tuple(map(int, match.groups())) < (3, 0, 0):
+            return False, 'Update Claude Code to use activation.'
+        return True, 'A short Haiku subscription prompt. Extra usage must be off.'
 
     def prepare(self, row):
         ready, _ = self.capability()
@@ -171,13 +140,15 @@ class ClaudeRunner:
 class Activation:
     def __init__(self, monitor, journal, runner=None, clock=time.time, monotonic=time.monotonic):
         self.monitor, self.journal = monitor, journal
-        self.runner = runner or ClaudeRunner()
+        from .activation_runners import CodexRunner, AntigravityRunner
+        self.runners = {p: runner or r for p, r in [('claude', ClaudeRunner()), ('codex', CodexRunner()), ('antigravity', AntigravityRunner())]}
+        self.runner = self.runners['claude']
         self.clock, self.monotonic = clock, monotonic
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.observations = {}
         self.previous_clock = None
-        self.capability = (False, 'Checking activation availability.')
+        self.capabilities = {}
         self.next_probe = 0
         self.error = False
         self.busy = False
@@ -201,9 +172,9 @@ class Activation:
             raise ValueError('Invalid inactivity delay')
         ids = payload.get('accounts')
         if ids is not None:
-            known = {a['id'] for a in self.monitor.snapshot()['accounts'] if a['provider'] == 'claude'}
+            known = {t['activationKey'] for a in self.monitor.snapshot()['accounts'] for t in targets(a)}
             if not isinstance(ids, list) or len(ids)>100 or any(not isinstance(i, str) or i not in known for i in ids) or len(ids)!=len(set(ids)):
-                raise ValueError('Select known Claude accounts')
+                raise ValueError('Select known account windows')
         if 'dismiss' in payload and payload['dismiss'] not in ('later', 'never', 'shown'):
             raise ValueError('Invalid dismissal')
         with self.journal.transaction() as data:
@@ -232,21 +203,30 @@ class Activation:
             self.view['preferences'] = copy.deepcopy(prefs)
 
     def _observe(self, row, now):
-        key = row['id']
+        row = target(row)
+        key = row['activationKey']
         state, reset = classify(row, now)
         old = self.observations.get(key, {})
         read = row.get('lastSuccess')
         source = row.get('source')
-        if state not in ('inactive', 'running'):
+        if state not in ('inactive', 'running', 'full_deadline'):
             self.observations[key] = dict(state=state, last=read, source=source, count=0)
             return self.observations[key]
         if old.get('last') == read and old.get('source') == source:
             return old
+        raw_state = state
+        if state == 'full_deadline':
+            elapsed = read-old.get('last', read) if number(old.get('last')) else 0
+            if (old.get('source') == source and old.get('raw') == 'full_deadline' and
+                    30 <= elapsed <= MAX_GAP and number(old.get('reset'))):
+                movement = reset-old['reset']
+                state = 'inactive' if abs(movement-elapsed) <= 15 else 'running' if abs(movement) <= 15 else 'unknown'
         continuous = (old.get('source') == source and number(old.get('last')) and
-                      0 < read-old['last'] <= MAX_GAP and old.get('state') == state)
+                      0 < read-old['last'] <= MAX_GAP and (old.get('state') == state or
+                      (old.get('state') == 'full_deadline' and state in ('inactive', 'running'))))
         if state == 'running':
             continuous = continuous and old.get('reset') is not None and abs(old['reset']-reset)<=15
-        obs = dict(state=state, source=source, last=read, reset=reset,
+        obs = dict(state=state, raw=raw_state, source=source, last=read, reset=reset,
                    count=old.get('count', 0)+1 if continuous else 1,
                    since=old['since'] if continuous else read,
                    episode=old.get('episode') if continuous else uuid.uuid4().hex)
@@ -261,14 +241,15 @@ class Activation:
                 self.observations.clear()
         self.previous_clock = now, mono
         snapshot = self.monitor.snapshot()
-        rows = snapshot['accounts']
-        if now >= self.next_probe and any(a['provider']=='claude' for a in rows):
+        rows = [t for a in snapshot['accounts'] for t in targets(a)]
+        if now >= self.next_probe:
             self.next_probe = now+300
-            try:
-                self.capability = self.runner.capability()
-            except Exception:
-                self.capability = False, 'Claude activation runner is unavailable.'
-        visible = {a['id'] for a in rows}
+            for provider in {a['provider'] for a in rows}:
+                try:
+                    self.capabilities[provider] = self.runners[provider].capability()
+                except Exception:
+                    self.capabilities[provider] = False, 'Activation runner is unavailable.'
+        visible = {a['activationKey'] for a in rows}
         self.observations = {k: v for k, v in self.observations.items() if k in visible}
         candidate = None
         with self.journal.transaction() as data:
@@ -279,22 +260,22 @@ class Activation:
             for row in rows:
                 if row['provider'] not in ('claude', 'codex', 'antigravity'):
                     continue
-                key = row['id']
+                key = row['activationKey']
                 obs = self._observe(row, now)
                 attempt = data['attempts'].get(key)
                 if attempt and attempt['state'] in ('reserved', 'sent', 'uncertain') and obs['state']=='running' and obs.get('count',0)>=2:
                     # Confirmation cannot use the reads from before dispatch.
-                    if obs['since']>attempt['at'] and abs(obs['reset']-attempt['at']-18000)<=600:
+                    if obs['since']>attempt['at'] and abs(obs['reset']-attempt['at']-row['activationSeconds'])<=600:
                         attempt.update(state='confirmed', reset=obs['reset'])
                         for receipt in data['history']:
-                            if receipt.get('id') == attempt['id']:
+                            if receipt.get('id') == attempt['id'] and receipt.get('window') == attempt['window']:
                                 receipt.update(attempt)
                         dirty = True
-                supported = row['provider']=='claude' and self.capability[0]
-                reason = self.capability[1] if row['provider']=='claude' else 'Automatic activation is not available for this provider. Monitoring is unchanged.'
+                supported, reason = self.capabilities[row['provider']]
+                supported = supported and obs['state'] != 'unsupported'
                 states = {'inactive':'Waiting for the inactivity delay.', 'running':'Window is already running.',
                           'stale':'Waiting for fresh provider readings.', 'billing_unknown':'Extra usage must be off and reported by the provider.',
-                          'unavailable':'Subscription allowance is unavailable.', 'unknown':'Window state is not established.', 'unsupported':'Activation is not supported for this source.'}
+                          'unavailable':'Subscription allowance is unavailable.', 'unknown':'Window state is not established.', 'unsupported':'Activation is not supported for this source.', 'full_deadline':'Waiting for a second fresh reading to distinguish an idle window.'}
                 status = states.get(obs['state'], reason)
                 eligible = supported and obs['state']=='inactive' and obs.get('count',0)>=2
                 waited = max(0, obs.get('last',now)-obs.get('since',now))
@@ -302,18 +283,18 @@ class Activation:
                     status = {'reserved':'A prompt may have been sent. No automatic retry.', 'sent':'Prompt sent. Waiting for two fresh countdown readings.',
                               'uncertain':'Delivery is uncertain. No automatic retry.', 'confirmed':'Last activation confirmed.'}.get(attempt['state'], status)
                     eligible = eligible and attempt['state']=='confirmed' and now>attempt.get('reset',float('inf')) and obs.get('since',0)>attempt.get('reset',float('inf'))
+                eligible = eligible and not self._group_pending(data, row, key)
                 if eligible and not prefs['enabled'] and prefs['suggestions'] and not prefs['dismissed'] and now>=prefs['snoozeUntil'] and waited>=10800 and key not in data['suggested']:
-                    suggestion = dict(accountId=key, label=row.get('label','Claude'), message='This quota window is waiting to start. AQM can send a short prompt so its reset countdown begins earlier. This uses subscription allowance.')
+                    suggestion = dict(accountId=key, label=row.get('label',row['provider'])+' · '+row['activationLabel'], message='This quota window is waiting to start. AQM can send a short prompt so its reset countdown begins earlier. This uses subscription allowance.')
                 if key in self.preflight_failures:
                     status = 'Subscription identity could not be verified. No prompt sent.'
                 if (eligible and prefs['enabled'] and key in prefs['accounts'] and waited>=prefs['idleMinutes']*60 and candidate is None and now>=self.preflight_failures.get(key,0)):
-                    recent = [h for h in data['history'] if h['accountId']==key and now-h['at']<86400]
-                    if len(recent)<5:
+                    if self._recent(data, row, now)<5:
                         candidate = row
                     else:
                         status = 'Daily activation limit reached.'
-                summaries.append(dict(accountId=key,label=row.get('label',key),provider=row['provider'],supported=supported,
-                                      reason=reason,status=status,window='five_hour' if row['provider']=='claude' else None,
+                summaries.append(dict(accountId=key,stableAccountId=row['id'],label=row.get('label',row['id']),displayLabel=row['activationLabel'],provider=row['provider'],supported=supported,
+                                      reason=reason,status=status,window=row['activationWindow'],group=row['activationGroup'],
                                       suggestionEligible=eligible and waited>=10800,
                                       selected=key in prefs['accounts'],lastAttempt=copy.deepcopy(attempt)))
             if dirty:
@@ -324,23 +305,45 @@ class Activation:
         if candidate and not self.stop.is_set():
             self._dispatch(candidate)
 
+    @staticmethod
+    def _group_pending(data, row, exclude=None):
+        for key, receipt in data['attempts'].items():
+            if key == exclude:
+                continue
+            account = receipt.get('accountId', key)
+            group = receipt.get('group', 'direct')
+            if account == row['id'] and group == row['activationGroup'] and receipt['state'] != 'confirmed':
+                return True
+        return False
+
+    @staticmethod
+    def _recent(data, row, now):
+        return len({h.get('id', str(i)) for i, h in enumerate(data['history'])
+                    if h['accountId'] == row['id'] and h.get('group', 'direct') == row['activationGroup'] and now-h['at'] < 86400})
+
     def _dispatch(self, row):
+        row = target(row)
+        key = row['activationKey']
+        runner = self.runners[row['provider']]
         # Identity checks may take time. Revalidate snapshot and settings afterward.
         try:
-            executable = self.runner.prepare(row)
-            self.preflight_failures.pop(row['id'], None)
+            executable = runner.prepare(row)
+            self.preflight_failures.pop(key, None)
         except Exception:
-            self.preflight_failures[row['id']] = self.clock()+300
+            self.preflight_failures[key] = self.clock()+300
             return
         if self.stop.is_set():
             return
         now = self.clock()
-        latest = next((a for a in self.monitor.snapshot()['accounts'] if a['id']==row['id']), None)
-        if latest is None or latest['source']!=row['source'] or classify(latest,now)[0]!='inactive':
+        latest = next((t for a in self.monitor.snapshot()['accounts'] for t in targets(a) if t['activationKey']==key), None)
+        if latest is None or latest['source']!=row['source']:
             return
         if not 0 <= latest['lastSuccess']-row['lastSuccess'] <= MAX_GAP:
             return
-        key = row['id']
+        for sibling in targets(latest):
+            self._observe(sibling, now)
+        if self.observations[key]['state'] != 'inactive':
+            return
         with self.journal.transaction() as data:
             prefs = data['preferences']
             obs = self.observations[key]
@@ -349,11 +352,29 @@ class Activation:
             old = data['attempts'].get(key)
             if old and not (old['state']=='confirmed' and obs['since']>old.get('reset',float('inf'))):
                 return
-            if sum(h['accountId']==key and now-h['at']<86400 for h in data['history'])>=5:
+            if self._recent(data, row, now)>=5 or self._group_pending(data, row, key):
                 return
-            attempt = dict(id=uuid.uuid4().hex, state='reserved',at=now,episode=obs['episode'],window='five_hour')
-            data['attempts'][key]=attempt
-            data['history'].append(dict(attempt, accountId=key))
+            batch = uuid.uuid4().hex
+            reserved = []
+            # One prompt can start both windows in this group. Reserve both observed
+            # inactive windows, even if only one is selected, without opting the other in.
+            for sibling in targets(latest):
+                sibling_key = sibling['activationKey']
+                sibling_obs = self.observations.get(sibling_key, {})
+                if (sibling['activationGroup'] != row['activationGroup'] or
+                        sibling_obs.get('state') != 'inactive' or sibling_obs.get('count', 0) < 2):
+                    continue
+                prior = data['attempts'].get(sibling_key)
+                if prior and not (prior['state'] == 'confirmed' and sibling_obs['since'] > prior.get('reset', float('inf'))):
+                    return
+                receipt = dict(id=batch, state='reserved', at=now, episode=sibling_obs['episode'],
+                               window=sibling['activationWindow'], group=row['activationGroup'], accountId=row['id'])
+                data['attempts'][sibling_key] = receipt
+                data['history'].append(copy.deepcopy(receipt))
+                reserved.append(sibling_key)
+            if key not in reserved:
+                return
+            attempt = data['attempts'][key]
             self.journal.save(data)
         if self.stop.is_set():
             return
@@ -362,7 +383,7 @@ class Activation:
         state, usage = 'uncertain', {}
         try:
             # No inference fallback and no resend, including after a timeout.
-            usage = self.runner.send(executable)
+            usage = runner.send(executable)
             state = 'sent'
         except Exception:
             pass
@@ -371,7 +392,8 @@ class Activation:
                 self.busy=False
         with self.journal.transaction() as data:
             if data['attempts'][key]['id']==attempt['id']:
-                data['attempts'][key].update(state=state,usage=usage)
+                for reserved_key in reserved:
+                    data['attempts'][reserved_key].update(state=state,usage=usage)
                 for receipt in data['history']:
                     if receipt.get('id') == attempt['id']:
                         receipt.update(state=state,usage=usage)

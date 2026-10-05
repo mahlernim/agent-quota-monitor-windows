@@ -48,7 +48,7 @@ def _stop(process):
         process.wait(timeout=5)
 
 
-def run(executable, args, timeout=30):
+def run(executable, args, timeout=30, *, env=None, cwd=None):
     """Bound memory and runtime. Never retain CLI output in files or diagnostics."""
     process = None
     reader = None
@@ -57,7 +57,7 @@ def run(executable, args, timeout=30):
     try:
         process = subprocess.Popen([executable, *args], stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                   cwd=tempfile.gettempdir(), env=environment(),
+                                   cwd=cwd or tempfile.gettempdir(), env=environment() if env is None else env,
                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
 
         def capture():

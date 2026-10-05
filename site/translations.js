@@ -1,7 +1,7 @@
 // Static website translations. Product names and screenshot pixels retain their original form.
 export const translations = {
   "ko": {
-    "Optional Claude window activation sends a short subscription prompt. Off by default.": "선택 기능인 Claude 한도 창 활성화는 짧은 구독 프롬프트를 보냅니다. 기본값은 꺼짐입니다.",
+    "Optional quota window activation sends a short subscription prompt. Off by default.": "선택 기능인 한도 창 활성화는 짧은 구독 프롬프트를 보냅니다. 기본값은 꺼짐입니다.",
     "Agent Quota Monitor for Windows | Keep your AI coding quotas in view": "Windows용 Agent Quota Monitor | AI 코딩 사용 한도를 한눈에",
     "Skip to content": "본문으로 이동",
     "for Windows": "Windows용",
@@ -110,7 +110,7 @@ export const translations = {
     "Language": "언어"
   },
   "ja": {
-    "Optional Claude window activation sends a short subscription prompt. Off by default.": "任意のClaude利用枠の開始機能は、短いサブスクリプションプロンプトを送信します。初期設定はオフです。",
+    "Optional quota window activation sends a short subscription prompt. Off by default.": "任意の利用枠の開始機能は、短いサブスクリプションプロンプトを送信します。初期設定はオフです。",
     "Agent Quota Monitor for Windows | Keep your AI coding quotas in view": "Windows向け Agent Quota Monitor | AIコーディングの残り利用枠をひと目で",
     "Skip to content": "本文へ移動",
     "for Windows": "Windows向け",
@@ -219,7 +219,7 @@ export const translations = {
     "Language": "言語"
   },
   "es": {
-    "Optional Claude window activation sends a short subscription prompt. Off by default.": "La activación opcional del período de Claude envía un breve prompt con la suscripción. Está desactivada por defecto.",
+    "Optional quota window activation sends a short subscription prompt. Off by default.": "La activación opcional del período de cuota envía un breve prompt con la suscripción. Está desactivada por defecto.",
     "Agent Quota Monitor for Windows | Keep your AI coding quotas in view": "Agent Quota Monitor para Windows | Tus cuotas de IA a la vista",
     "Skip to content": "Saltar al contenido",
     "for Windows": "para Windows",

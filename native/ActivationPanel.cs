@@ -28,13 +28,13 @@ internal sealed class ActivationPanel : StackPanel
     {
         this.http = http;
         Margin = new Thickness(0, 8, 0, 8);
-        Children.Add(Text("Off until you enable it. Updates preserve your choices. Enabling this sends a short subscription prompt and uses allowance. Choose each account explicitly."));
+        Children.Add(Text("Off until you enable it. Updates preserve your choices. Enabling this sends a short subscription prompt and uses allowance. Choose each account and window explicitly."));
         Children.Add(enabled);
         Children.Add(Text("Wait for observed inactivity, in minutes"));
         Children.Add(delay);
         Children.Add(accounts);
         Children.Add(suggestions);
-        Children.Add(Text("This release supports direct Claude five-hour windows with verified Claude Code 2.1.280 and extra usage off. Weekly, Codex, and Antigravity activation are unavailable pending runner validation. New accounts stay off."));
+        Children.Add(Text("Supports Codex weekly, Claude five-hour and weekly, and separate Antigravity Gemini and Claude/GPT windows. A single prompt may start both windows in its group. New accounts and windows stay off. Antigravity CLI context also uses allowance."));
         save = Ui.Button("Save activation settings", () => _ = Save());
         save.HorizontalAlignment = HorizontalAlignment.Left;
         save.IsEnabled = false;
@@ -65,7 +65,9 @@ internal sealed class ActivationPanel : StackPanel
             {
                 string id = QuotaItem.Text(row, "accountId");
                 bool supported = row.GetProperty("supported").ValueKind == JsonValueKind.True;
-                var check = new CheckBox { Content = QuotaItem.Text(row, "label") + (supported ? " · Claude five-hour" : " · unavailable"), IsEnabled = supported, IsChecked = selected.Contains(id), Tag = id, Margin = new Thickness(0, 5, 0, 0) };
+                string window = QuotaItem.Text(row, "displayLabel");
+                if (string.IsNullOrEmpty(window)) window = QuotaItem.Text(row, "provider") + " · " + QuotaItem.Text(row, "window");
+                var check = new CheckBox { Content = QuotaItem.Text(row, "label") + " · " + window + (supported ? "" : " · unavailable"), IsEnabled = supported, IsChecked = selected.Contains(id), Tag = id, Margin = new Thickness(0, 5, 0, 0) };
                 check.Click += (_, _) => Edit();
                 accounts.Children.Add(check); selections[id] = check;
                 var message = Text(QuotaItem.Text(row, "reason"));

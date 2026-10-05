@@ -265,7 +265,7 @@ class RunnerTests(unittest.TestCase):
     def test_only_verified_version_and_subscription_identity_allowed(self):
         runner = ClaudeRunner()
         with patch('quota.activation.connections.client_command', return_value=['synthetic.exe']), patch('quota.activation.claude_cli.run', return_value=(0,'2.1.281 (Claude Code)')):
-            self.assertFalse(runner.capability()[0])
+            self.assertTrue(runner.capability()[0])
         metadata = dict(accountUuid='account-a', organizationUuid='org-a', emailAddress='same@example.test')
         with patch.object(runner,'capability',return_value=(True,'')), patch('quota.activation.connections.client_command',return_value=['synthetic.exe']), patch('quota.activation.providers.load',return_value={'oauthAccount':metadata}), patch('quota.activation.claude_cli.auth_status', return_value=dict(orgId='org-b',email='same@example.test',subscriptionType='pro')):
             with self.assertRaises(ValueError): runner.prepare(row())

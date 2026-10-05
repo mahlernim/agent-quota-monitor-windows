@@ -6,7 +6,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 [Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.0)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.1/agent-quota-monitor-windows-0.4.1-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.1/agent-quota-monitor-windows-0.4.1-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.1)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -24,7 +24,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 - **Honest when data is old.** Values that could not be refreshed stay visible in gray with the reason, and values from before a reset are shown as unknown.
 - **Fixes where you look.** When an account has a problem, a short banner under it explains why and offers the one action that helps.
 - **Local and private.** No telemetry or prompts for quota checks. Monitor settings and cached quota are encrypted for your Windows account.
-- **Optional idle-window activation.** Start a supported Claude countdown with one short subscription prompt after an observed idle period. Off until you enable it.
+- **Optional idle-window activation.** Start an idle subscription countdown with one short subscription prompt after an observed idle period. Off until you enable it.
 
 ## Contents
 
@@ -43,7 +43,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.1/agent-quota-monitor-windows-0.4.1-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
@@ -187,13 +187,15 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 
 ## Optional quota window activation
 
-Some quota countdowns begin only after a model request. In **Settings → Quota window activation**, you can let AQM send a short prompt after a supported window has remained inactive for 30 minutes. Choose each account, enable the feature, then select **Save activation settings**. You can instead wait 60 or 120 minutes.
+Some quota countdowns begin only after a model request. In **Settings → Quota window activation**, you can let AQM send a short prompt after a supported window has remained inactive for 30 minutes. Choose each account and window, enable the feature, then select **Save activation settings**. You can instead wait 60 or 120 minutes.
 
-Activation is off on a fresh install and when first introduced by an update. Later updates retain your choice, account selections, dismissals, and attempt records. New accounts remain unselected. Quota checks stay prompt-free.
+Activation is off on a fresh install and when first introduced by an update. Later updates retain your choice, account selections, dismissals, and attempt records. New accounts and newly supported windows remain unselected. Quota checks stay prompt-free.
 
-This release supports **direct Claude five-hour windows** with the verified Claude Code **2.1.280** runner, a Pro or Max subscription, and provider-confirmed extra usage off. It sends a fixed short Haiku prompt with tools and hooks disabled. This uses subscription allowance and may also start the weekly countdown. Weekly activation on its own, Codex, and Antigravity activation remain unavailable until their unattended runners and eligibility checks are verified. Keep your official client current for monitoring. Do not downgrade it for activation.
+Supports **Codex weekly**, **direct Claude five-hour and weekly**, and **Antigravity Gemini and Claude/GPT five-hour and weekly** windows. Antigravity groups have separate controls. One prompt can start both windows in its group, so AQM records both and avoids a second prompt. Codex plans without a five-hour window do not get an invented one.
 
-AQM requires consecutive fresh successful readings throughout the chosen delay. Full quota with a running countdown, stale readings, unknown reset information, and exhausted weekly quota never trigger activation. After a prompt, two fresh countdown readings must confirm the change. An uncertain delivery is not automatically retried. Settings shows the current activation status. At most five prompts can be sent per account in 24 hours.
+AQM uses the signed-in official CLI with a fixed economical model. Codex uses GPT-6 Luna with low reasoning, Claude uses Haiku, Antigravity Gemini uses Flash, and Antigravity Claude/GPT uses GPT-OSS. Claude requires a Pro or Max subscription with extra usage off. Codex requires a recent client with isolated ephemeral execution. Antigravity uses plan mode and requires a CLI without configured plugins or MCP servers. Keep official clients current. Prompts consume subscription allowance, including CLI context that can be much larger than the short reply. There is no paid/API fallback.
+
+AQM requires consecutive fresh successful readings throughout the chosen delay. Full quota with a fixed running countdown, stale readings, unknown reset information, and exhausted weekly quota never trigger activation. After a prompt, two fresh countdown readings must confirm the change. An uncertain delivery is not automatically retried. Settings shows the current activation status. At most five prompts can be sent per account and quota group in 24 hours. For Codex and Antigravity, consecutive full-quota readings must show a deadline moving with time before AQM treats a window as idle.
 
 With activation off, a quiet suggestion can appear in the main window after three hours of confirmed inactivity for a supported account. **Configure activation** opens Settings, **Later** snoozes for a week, and **Don't show again** persists across restarts and updates. Suggestions never send a prompt or enable the feature. You can turn suggestions off in Settings. The app must be running to observe inactivity and act. Sleep or gaps in fresh readings restart the observation period.
 

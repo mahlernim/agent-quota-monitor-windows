@@ -1,25 +1,46 @@
 # Optional quota window activation
 
-Monitoring remains read-only. Activation is a separate opt-in action that consumes subscription allowance. Fresh installs and the first introducing upgrade leave it off. Later upgrades preserve choices and attempt history. Each new stable account identity starts unselected. The initial supported window is direct Claude five-hour; other windows and providers remain unavailable.
+Monitoring remains read-only. Activation is a separate opt-in action that consumes subscription allowance. Fresh installs and the first introducing upgrade leave it off. Later upgrades preserve choices and attempt history. Each new stable account, group, and window starts unselected. Existing Claude five-hour selections retain their original selection key and receipts.
+
+## Supported windows
+
+| Provider | Windows | Fixed model |
+| --- | --- | --- |
+| Codex | Weekly | GPT-6 Luna, low reasoning |
+| Direct Claude | Five-hour and all-model weekly | Haiku 4.5 |
+| Antigravity Gemini | Five-hour and weekly | Gemini 3.8 Flash Low |
+| Antigravity Claude/GPT | Five-hour and weekly | GPT-OSS 120B Medium |
+
+Account identity, quota group, and window remain separate. Codex plans without a five-hour limit do not receive an invented one. A single prompt may start both windows in its group. AQM reserves both observed inactive windows before that prompt, even when only one was selected, without enabling the other window. The two Antigravity groups require separate prompts and receipts.
 
 ## Evidence and dispatch
 
-The activation worker samples the existing monitor snapshot every ten seconds. It does not cause additional provider reads. Distinct successful provider read timestamps advance evidence. Repeated cache snapshots do not. The same source and account must continuously report validated inactivity for the selected 30, 60, or 120 minutes, with at least two reads. Gaps longer than eleven minutes, failure, source changes, sleep gaps, or clock discontinuities break the streak. Restarting conservatively rebuilds evidence.
+The worker samples the existing monitor snapshot every ten seconds without causing extra quota reads. Distinct successful provider read timestamps advance evidence. Repeated cache snapshots do not. The same source and account must continuously report inactivity for the selected 30, 60, or 120 minutes, with at least two reads. Gaps longer than eleven minutes, failures, source changes, sleep gaps, or clock discontinuities break the streak. Restarting rebuilds evidence.
 
-A Claude window is inactive only when the raw response explicitly supplies zero usage and a null five-hour reset. The all-model weekly allowance must be positive and extra usage explicitly disabled. Both window durations must match their known identities. Running deadlines, disabled windows, missing or malformed data, unknown billing state, and stale snapshots block sending. Numeric precision is retained rather than rounding to 100 percent.
+Direct Claude inactivity requires exact zero usage and an explicitly reported null reset, with extra usage explicitly off. Codex and Antigravity require exact full quota and a deadline approximately one full window ahead of the provider read. Across distinct reads at least 30 seconds apart, that deadline must move with elapsed time within a 15-second tolerance. A fixed future deadline means running, even at full quota. The full-duration comparison allows 60 seconds for read latency. Numeric percentages are never rounded into eligibility.
 
-Before dispatch, the runner rechecks its verified version and subscription identity. The latest snapshot and saved opt-in settings are checked again afterward. A per-account reservation is written before launching the single bounded request. The encrypted journal uses an exclusive Windows file lock and an atomic replace, including a flush before replace. Storage failure blocks dispatch and never resets a corrupt journal to defaults.
+Missing, duplicate, malformed, disabled, stale, or exhausted windows block sending. The all-model weekly allowance and any reported five-hour allowance must be positive. Identity and saved opt-in settings are rechecked before dispatch. Unknown reset representations never count as inactivity.
 
-Reservations, sent results, and uncertain delivery all suppress another prompt. Two distinct post-dispatch readings showing a fixed deadline near the expected five-hour end confirm the observed transition. A later cycle needs expiry of that confirmed deadline and a new full inactivity streak. At most five reservations are allowed per account per rolling 24 hours. An unresolved receipt stays blocked, including across updates. There is no manual retry button or paid/API fallback. Disabling activation stops future dispatches; a request already dispatched cannot be undone.
+An encrypted durable reservation precedes launch. The journal uses an exclusive Windows file lock and an atomic replacement after flushing. Storage failure blocks sending and never resets a corrupt journal to defaults. Reservations, sent results, and uncertain delivery suppress another prompt for that account and group, including across restarts and updates. There is no blind retry or paid/API fallback.
 
-Preferences and receipts live in Windows-user-encrypted `activation.dpapi` alongside the existing monitor data, without changing official client files. Receipts contain no response text or credentials. The first runner is Claude Code 2.1.280 with a fixed Haiku model, safe mode, disabled hooks and tools, empty strict MCP configuration, and no saved session. Unsupported client versions pause activation. Monitoring keeps its existing version policy.
+Two distinct post-dispatch readings with a fixed deadline near the expected end confirm each window separately. Later activation requires expiry of that window's confirmed deadline and a new inactivity streak. At most five prompts are allowed per account and quota group per rolling 24 hours. A prompt covering two windows counts once. Disabling activation stops future dispatches. An already-dispatched request cannot be undone.
 
-## Suggestions and controls
+## Official subscription runners
 
-After three hours of eligible inactivity, an off-by-default account can get one quiet suggestion in the visible main window. The app does not open a window or send an OS notification. Showing it is recorded, so an update cannot bring it back. Configure opens Settings without opting in, Later clears the acknowledgement and snoozes suggestions for a week, and Don't show again persists until suggestions are explicitly re-enabled in Settings. Settings edits require Save and show failures without claiming the previous choices changed.
+Claude supports 2.1.280 and newer 2.x clients, verifies the account UUID, organization, and Pro or Max subscription, and uses safe mode, empty strict MCP configuration, disabled hooks and tools, and no saved session. Usage sources that omit extra-usage status cannot authorize an inactive-window prompt.
 
-## Limits and future support
+Codex requires CLI support for ignoring user configuration and ephemeral execution. It verifies the signed-in account, forces ChatGPT authentication and the OpenAI provider, and uses an empty workspace, read-only sandbox, low reasoning, disabled shell, hooks, apps, delegation and web search. Official credentials remain in their original location and are not copied or renewed by AQM.
 
-All-model weekly-only activation is deferred. A supported five-hour prompt may also start a weekly window. Codex and each Antigravity group require their own validated eligibility representation, account identity checks, safe subscription runner, and per-cycle reservation before support can expand. A full percentage alone is never enough. Separate Antigravity Gemini and Claude/GPT allowance must never be merged. Codex plans without a five-hour window do not get an invented one.
+Antigravity requires the official CLI quota source with a verified Google subject. It checks the credential revision again before sending. Plan mode, an empty workspace, disabled slash-command expansion, and no automatic permission approval bound the request. Configured CLI plugins or MCP servers pause activation. The CLI has no verified invocation-wide tools-off switch. Its request timeout is 60 seconds, with a 75-second process bound. Codex and Claude processes are bounded to 90 seconds. Output is limited in memory and only numeric usage counters are retained.
 
-Tests use synthetic providers and isolated storage. They cover opt-in defaults, continuous fresh evidence, precise quota values, malformed resets, identity isolation, clock and source changes, durable reservation failures, uncertain delivery, restart protection, post-send confirmation, new cycles, suggestion persistence, loopback request guards, and native save feedback. The controlled provider experiment supplies evidence for the window semantics; it is not rerun as part of CI or packaging.
+Runners remove API-key and alternate-provider environment overrides from their child processes. They do not change official settings or use a fallback model. CLI context can use thousands of tokens despite a short reply. Activation uses allowance and does not promise negligible cost.
+
+## Settings and suggestions
+
+Preferences and receipts live in Windows-user-encrypted activation.dpapi alongside the monitor data. Receipts contain no response text or credentials. Choose individual account windows in Settings and save. Failed saves leave the previous preferences active.
+
+After three hours of eligible inactivity while activation is off, AQM can show one quiet suggestion in the visible main window. It does not open a window or send an OS notification. Configure opens Settings without opting in. Later snoozes for a week. Don't show again persists until suggestions are explicitly re-enabled. The app must be running to observe and act.
+
+## Verification
+
+Synthetic tests cover moving versus fixed deadlines, exact quota precision, group isolation, coalesced windows, legacy receipt preservation, source and clock changes, uncertain delivery, storage failures, post-send confirmation, daily limits, and native controls. Controlled provider observations establish the representations used here. A Codex request in an already-running weekly window verified the runner without claiming a controlled weekly activation. Natural-reset follow-ups remain supplementary evidence and are not a release prerequisite.
