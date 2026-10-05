@@ -8,6 +8,18 @@ Reads the official Codex session and its account-scoped `/wham/usage` response. 
 
 ## Direct Claude
 
+### Optional activation
+
+Controlled Windows observations confirmed that a short direct Claude subscription prompt changes a full five-hour window with an explicit null reset into a fixed countdown. Repeated cache snapshots alone do not establish that transition. This evidence applies to the observed account and interface, not every provider or subscription plan.
+
+The optional unattended runner is pinned to verified Claude Code 2.1.280 and `claude-haiku-4-5-20251001`. It checks the stable account UUID, organization, local subscription identity, and a Pro or Max plan. Safe mode, empty strict MCP configuration, disabled hooks and tools, and no session persistence bound the invocation. The environment excludes API-key and alternate-provider overrides. Activation requires the usage response to explicitly report extra usage off. Unknown billing state blocks it. CLI quota reports that omit that state are not sufficient for activation.
+
+The five-hour classifier requires exact zero utilization with a present, explicit null reset, plus positive weekly allowance. Missing or malformed reset strings must not normalize into permission to send. Future fixed deadlines mean running, including at full quota. A successful send is followed by two distinct fresh running-window observations. This confirms the observed countdown, without proving exclusive causation when the official client may also be active.
+
+Weekly-only activation and Codex or Antigravity dispatch are not enabled. Antigravity Gemini and Claude/GPT must remain separate groups in future support. A controlled experiment may establish that a prompt starts a window without establishing a safe unattended runner. Codex chat wakeups can themselves start allowance, and an externally imposed quota reset is not an AQM fault. See [activation design](window-activation.md) for the current gates.
+
+### Quota-only reads
+
 Claude Code 2.1.281 on Windows returned structured quota from `claude --safe-mode --strict-mcp-config --mcp-config '{"mcpServers":{}}' --settings '{"disableAllHooks":true,"remoteControlAtStartup":false}' --tools '' --no-session-persistence --output-format stream-json --verbose -p /usage`. The local command reported zero model turns, zero input/output/cache tokens, and zero cost. Its assistant event carried `usage_report.rate_limits.limits` with `session` and `weekly_all` windows. The monitor maps these to the existing `direct/five_hour` and `direct/seven_day` ring IDs. An inactive session can have zero usage and no reset. Unknown window kinds are ignored rather than assigned assumed durations. Additional model-specific windows are not currently mapped by this reader.
 
 The CLI path is preferred for version 2.1.281 and newer 2.x clients. Successful version discovery is cached until the executable changes. A failed or unrecognized version probe uses the legacy reader and retries the local probe after five minutes. An executable change permits an immediate new probe. Safe mode disables user customizations, tools are disabled, hooks and remote control are disabled for this invocation, and MCP configuration is empty. No model prompt is supplied. Output is memory-bounded, discarded after parsing, and never logged. Only an explicit unauthenticated CLI status produces a sign-in request. Failed quota reads do not fall back to another network reader. Normal monitor backoff and stale-value retention apply. The structured report does not expose provider Retry-After headers or a cached quota measurement timestamp, so those cannot be propagated independently from this CLI interface.

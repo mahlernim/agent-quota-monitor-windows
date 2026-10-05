@@ -6,9 +6,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 Requires Windows 10 or 11 on x64 and an eligible account with each provider you enable.
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.3.6/agent-quota-monitor-windows-0.3.6-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.0/agent-quota-monitor-windows-0.4.0-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -74,6 +74,16 @@ If a source becomes unavailable, its cached reading becomes stale. When discover
 
 **Refresh** respects provider cooldowns. An unchanged percentage can still be a successful refresh. For **No new readings**, check the next eligible read and any error in **Settings → Details**. Retry schedules are kept across restarts and updates, except that an unreadable-response error is read again as soon as the monitor starts.
 
+## Optional quota window activation
+
+Activation stays off on fresh installs and on the update that first adds it. In **Settings → Quota window activation**, explicitly choose each account, enable automatic activation, and click **Save activation settings**. Later updates preserve choices and attempt records. Newly discovered accounts remain off.
+
+The supported runner is direct Claude five-hour activation using Claude Code 2.1.280, a Pro or Max subscription, and provider-confirmed extra usage off. A short Haiku prompt starts the countdown after 30 minutes of consecutive fresh inactive readings. The delay can be 60 or 120 minutes. Tools, hooks, MCP servers, and session persistence are disabled for that invocation. Keep the official client updated for monitoring rather than downgrading it for this optional feature.
+
+Weekly activation on its own, Codex, and Antigravity are unavailable pending validation. A Claude prompt may also start its weekly window. Running countdowns never need activation, even at full quota. Unknown or stale data and exhausted weekly allowance prevent activation. The app waits for two new countdown readings after a prompt and never retries uncertain delivery. A durable reservation prevents duplicates across restarts and updates. The limit is five prompts per account per 24 hours.
+
+After three hours of observed inactivity, a supported account can receive a quiet suggestion in the main window. **Configure activation** opens Settings without enabling anything. **Later** snoozes for one week. **Don't show again** persists. Suggestions can also be disabled in Settings. Sleep or stale readings restart the observation delay. The app must remain running to observe and activate windows.
+
 ## Start with Windows
 
 Enable **Start with Windows (in the tray)** in Settings to launch at sign-in. It is off by default and needs no administrator rights. For a portable copy, disable this setting before moving or deleting the folder, then enable it again from the new location.
@@ -104,10 +114,12 @@ Uninstall the installed version through Windows Installed apps. This removes app
 
 ## Privacy and local data
 
-Authentication stays with the official clients. Depending on the source, the monitor invokes a quota-only client command or reads an existing session for a quota request. It does not maintain a separate login, refresh tokens itself, or store raw credentials in its own data. Official clients may renew their sessions when invoked. Tokens, cookies, and authorization headers are excluded from monitor logs and copied support details. The monitor sends no model prompts and has no telemetry.
+Authentication stays with the official clients. Depending on the source, the monitor invokes a quota-only client command or reads an existing session for a quota request. It does not maintain a separate login, refresh tokens itself, or store raw credentials in its own data. Official clients may renew their sessions when invoked. Tokens, cookies, and authorization headers are excluded from monitor logs and copied support details. Quota checks send no model prompts. Optional activation sends a short subscription prompt only after explicit opt-in. It has no paid/API fallback. There is no telemetry.
 
 Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.3.6) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Activation choices and attempt receipts are encrypted separately in `activation.dpapi` in that folder. Receipts contain stable account IDs, timestamps, outcomes, and numeric token counts. They do not contain response text or credentials. Updates preserve this file. Do not delete it to retry an uncertain prompt.
+
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.0) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

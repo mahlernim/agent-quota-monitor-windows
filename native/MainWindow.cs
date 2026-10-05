@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -18,6 +20,8 @@ public sealed class MainWindow : Window
     internal const double CardWidth = 84, CardHeight = 100;
     private const string RingFormat = "AgentQuotaMonitor.Ring", AccountFormat = "AgentQuotaMonitor.Account";
     private readonly WrapPanel _updateBanner = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(8, 0, 8, 4) };
+    private readonly StackPanel _activationNotice = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(10, 0, 10, 6) };
+    private string? _activationAccount;
     private readonly TextBlock _backendError = new() { Visibility = Visibility.Collapsed, TextWrapping = TextWrapping.Wrap,
         Foreground = Brushes.Firebrick, Margin = new Thickness(10, 0, 10, 6) };
     private readonly TextBlock _notice = new() { Visibility = Visibility.Collapsed, TextWrapping = TextWrapping.Wrap,
@@ -81,12 +85,46 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(_updateBanner, Dock.Top); root.Children.Add(_updateBanner);
         DockPanel.SetDock(_backendError, Dock.Top); root.Children.Add(_backendError);
         DockPanel.SetDock(_notice, Dock.Top); root.Children.Add(_notice);
+        DockPanel.SetDock(_activationNotice, Dock.Top); root.Children.Add(_activationNotice);
         _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); _notice.Visibility = Visibility.Collapsed; };
         Closed += (_, _) => { _noticeTimer.Stop(); _refreshRotation.BeginAnimation(RotateTransform.AngleProperty, null); };
         _scroll.Content = _groups;
         root.Children.Add(_scroll);
         // Closing hides the window to the tray, so Esc is a safe shortcut for it.
         KeyDown += (_, e) => { if (e.Key == Key.Escape && !e.Handled) { e.Handled = true; Close(); } };
+    }
+
+    internal void ShowActivationSuggestion(JsonElement root, Action configure, Func<string, Task<bool>> dismiss)
+    {
+        if (!IsVisible || !root.TryGetProperty("activation", out var activation)) return;
+        if (_activationAccount is not null && (!activation.TryGetProperty("accounts", out var rows) ||
+                !rows.EnumerateArray().Any(row => QuotaItem.Text(row, "accountId") == _activationAccount &&
+                    row.TryGetProperty("suggestionEligible", out var eligible) && eligible.ValueKind == JsonValueKind.True)))
+        {
+            _activationNotice.Visibility = Visibility.Collapsed; _activationAccount = null;
+        }
+        if ((activation.TryGetProperty("storageError", out var error) && error.ValueKind == JsonValueKind.True) ||
+            (activation.TryGetProperty("preferences", out var prefs) &&
+            (prefs.GetProperty("enabled").ValueKind == JsonValueKind.True || prefs.GetProperty("suggestions").ValueKind == JsonValueKind.False))
+            )
+        {
+            _activationNotice.Visibility = Visibility.Collapsed; _activationAccount = null; return;
+        }
+        if (_activationAccount is not null || !activation.TryGetProperty("suggestion", out var suggestion) || suggestion.ValueKind != JsonValueKind.Object) return;
+        _activationAccount = QuotaItem.Text(suggestion, "accountId");
+        _activationNotice.Children.Clear();
+        _activationNotice.Children.Add(new TextBlock { Text = QuotaItem.Text(suggestion, "label") + " · " + QuotaItem.Text(suggestion, "message"), TextWrapping = TextWrapping.Wrap, Foreground = Ui.Text });
+        var buttons = new WrapPanel();
+        buttons.Children.Add(Ui.Button("Configure activation", () => { configure(); _activationNotice.Visibility = Visibility.Collapsed; }));
+        async Task Hide(string choice)
+        {
+            if (await dismiss(choice)) { _activationNotice.Visibility = Visibility.Collapsed; _activationAccount = null; }
+        }
+        buttons.Children.Add(Ui.Button("Later", () => _ = Hide("later")));
+        buttons.Children.Add(Ui.Button("Don't show again", () => _ = Hide("never")));
+        _activationNotice.Children.Add(buttons);
+        _activationNotice.Visibility = Visibility.Visible;
+        _ = dismiss("shown");
     }
 
     internal void ShowBackendError(string message)

@@ -374,6 +374,7 @@ public sealed class App : Application
             selected ??= items.FirstOrDefault()?.Key;
             if (Render() && main is not null) main.Title = "Agent Quota Monitor Windows";
             CheckRefresh(data.RootElement);
+            main?.ShowActivationSuggestion(data.RootElement, () => { ShowAccounts(); accounts?.ShowActivation(); }, DismissActivationSuggestion);
         }
         catch (OperationCanceledException) when (stopping || (connecting && !duringConnection)) { }
         catch (BackendConnectionException error)
@@ -535,6 +536,16 @@ public sealed class App : Application
     }
     private void ShowMain() { if (stopping) return; main?.Show(); if (main != null) { main.WindowState = WindowState.Normal; main.Activate(); } }
     private AccountsWindow? accounts;
+    private async Task<bool> DismissActivationSuggestion(string choice)
+    {
+        try
+        {
+            using var response = await BackendRequests.PostAsync(http, "/api/activation", new { dismiss = choice });
+            response.EnsureSuccessStatusCode();
+            return true;
+        }
+        catch { main?.ShowNotice("Couldn't save the activation suggestion choice. Please try again."); return false; }
+    }
     private void ShowAccounts()
     {
         if (stopping) return;

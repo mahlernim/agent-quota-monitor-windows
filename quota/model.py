@@ -65,7 +65,12 @@ def claude(raw):
         used = percent(w.get('utilization'))
         buckets.append(bucket(name, name.replace('_', ' ').title(), None if used is None else 100-used,
                               18000 if name.startswith('five_hour') else 604800, w.get('resets_at')))
-    return [dict(id='direct', label='Direct Anthropic subscription', buckets=buckets)] if buckets else []
+        # A missing or malformed reset must not become evidence of inactivity.
+        buckets[-1]['inactiveReported'] = used == 0 and 'resets_at' in w and w['resets_at'] is None
+    extra = raw.get('extra_usage')
+    enabled = extra.get('is_enabled') if isinstance(extra, dict) else None
+    return [dict(id='direct', label='Direct Anthropic subscription', buckets=buckets,
+                 extraUsageEnabled=enabled if isinstance(enabled, bool) else None)] if buckets else []
 
 
 def antigravity(raw):

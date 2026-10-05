@@ -32,6 +32,8 @@ public sealed class AccountsWindow : Window
 
     private readonly UpdateService? _updates;
     private readonly HttpClient _http;
+    private readonly ActivationPanel _activation;
+    private readonly Expander _activationSection = new() { Header = "Quota window activation", Margin = new Thickness(0, 8, 0, 8) };
     private readonly Action _changed;
     private readonly Func<bool> _backendReady;
     private readonly Dictionary<string, CheckBox> _providerChecks = [];
@@ -93,6 +95,7 @@ public sealed class AccountsWindow : Window
         _updates = updates;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
+        _activation = new ActivationPanel(_http);
         _changed = changed ?? throw new ArgumentNullException(nameof(changed));
         _backendReady = backendReady ?? (() => true);
         Title = "Settings and accounts";
@@ -190,6 +193,8 @@ public sealed class AccountsWindow : Window
             UpdateStatus();
         }
         body.Children.Add(Hint("Found a bug or have an idea?", UpdateService.Repository + "/issues", "Report it on GitHub"));
+        _activationSection.Content = _activation;
+        body.Children.Add(_activationSection);
         body.Children.Add(new Separator { Margin = new Thickness(0, 4, 0, 6) });
         body.Children.Add(Heading("Monitored providers"));
         body.Children.Add(Hint("Changes save right away. Sign-in uses each provider's official client, and the monitor never switches accounts."));
@@ -347,8 +352,15 @@ public sealed class AccountsWindow : Window
         }
     }
 
+    internal void ShowActivation()
+    {
+        _activationSection.IsExpanded = true;
+        _activationSection.BringIntoView();
+    }
+
     private void RenderStatus(JsonElement status)
     {
+        _activation.Render(status);
         AccountStatus[] accountRows = AccountStatus.Parse(status);
         if (!_providersLoaded && status.TryGetProperty("enabledProviders", out JsonElement enabled))
         {

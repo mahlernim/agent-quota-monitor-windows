@@ -32,6 +32,7 @@ internal static class Program
             try
             {
                 TestState();
+                await TestActivation();
                 await TestWindow(args.Length == 1 ? args[0] : null);
                 Console.WriteLine($"Passed {_checks} native account checks. Provider requests 0. Settings writes 0.");
                 exit = 0;
@@ -47,6 +48,41 @@ internal static class Program
     {
         if (!value) throw new InvalidOperationException(name);
         ++_checks;
+    }
+    private static async Task TestActivation()
+    {
+        using var backend = new SyntheticBackend();
+        using var http = new HttpClient(backend) { BaseAddress = new Uri("http://127.0.0.1:1") };
+        var panel = new ActivationPanel(http);
+        JsonObject sample = JsonNode.Parse("""
+            {"activation":{"storageError":false,"preferences":{"enabled":false,"accounts":[],"idleMinutes":30,"suggestions":true},
+            "accounts":[{"accountId":"claude-a","label":"Sample Claude","supported":true,"status":"Waiting for the inactivity delay.","reason":"Synthetic runner"},
+            {"accountId":"antigravity-b","label":"Sample Antigravity","supported":false,"status":"Unavailable","reason":"Runner unverified"}]}}
+            """)!.AsObject();
+        void Render() { using var doc = JsonDocument.Parse(sample.ToJsonString()); panel.Render(doc.RootElement); }
+        Render();
+        Check(backend.Requests == 0 && Field<CheckBox>(panel,"enabled").IsChecked == false,
+            "Rendering activation defaults cannot opt in or issue requests");
+        var selections = Field<Dictionary<string, CheckBox>>(panel,"selections");
+        Check(selections["claude-a"].IsChecked == false && !selections["antigravity-b"].IsEnabled,
+            "New accounts are unselected and unsupported providers cannot be selected");
+        Field<CheckBox>(panel,"enabled").IsChecked = true;
+        Field<CheckBox>(panel,"enabled").RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));
+        selections["claude-a"].IsChecked = true;
+        Render();
+        Check(Field<CheckBox>(panel,"enabled").IsChecked == true, "Status refresh preserves the unsaved activation choice");
+        await Call(panel,"Save");
+        var saved = JsonNode.Parse(backend.LastBody!)!;
+        Check(backend.LastPath == "/api/activation" && saved["enabled"]!.GetValue<bool>() &&
+            saved["accounts"]!.AsArray().Count == 1 && saved["accounts"]![0]!.GetValue<string>() == "claude-a" &&
+            saved["idleMinutes"]!.GetValue<int>() == 30, "Only explicitly selected accounts and validated defaults are saved");
+        backend.PostStatus = HttpStatusCode.ServiceUnavailable;
+        await Call(panel,"Save");
+        Check(Field<TextBlock>(panel,"feedback").Text.Contains("previous choices remain active"), "A failed save never claims the old settings changed");
+        sample["activation"]!["storageError"] = true;
+        Render();
+        Check(!Field<CheckBox>(panel,"enabled").IsEnabled && !Field<Button>(panel,"save").IsEnabled,
+            "Corrupt or unavailable storage disables activation changes");
     }
     private static string Snapshot(params string[] ids) => JsonSerializer.Serialize(new
     {
@@ -385,6 +421,12 @@ internal static class Program
                 }
                 handler.Status = preview.ToJsonString();
                 await Call(window, "PollAsync");
+                using var activationSample = JsonDocument.Parse("""
+                    {"activation":{"storageError":false,"preferences":{"enabled":false,"accounts":[],"idleMinutes":30,"suggestions":true},
+                    "accounts":[{"accountId":"sample-claude","label":"jordan@example.test","supported":true,"status":"Waiting for the inactivity delay.","reason":"Claude five-hour activation with Haiku."}]}}
+                    """);
+                Field<ActivationPanel>(window,"_activation").Render(activationSample.RootElement);
+                window.ShowActivation();
                 Field<TextBlock>(window, "_message").Text = "Synthetic preview. No provider account is connected.";
                 Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "details:sample-copilot")!);
                 window.Height = 920;
