@@ -250,6 +250,10 @@ class ActivationTests(unittest.TestCase):
         self.engine = self.new_engine(); self.mature(36)
         self.assertIsNone(self.engine.snapshot()['suggestion'])
         self.assertEqual(self.runner.sends, 0)
+        self.engine.configure({'suggestions':True})
+        self.tick()
+        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
+        self.assertFalse(self.journal.data['preferences']['enabled'])
 
     def test_invalid_preferences_never_change_existing_settings(self):
         for bad in ({'enabled':'yes'}, {'accounts':['unknown']}, {'idleMinutes':0}, {'dismiss':'retry'}, {'model':'expensive'}):

@@ -208,6 +208,7 @@ class Activation:
             raise ValueError('Invalid dismissal')
         with self.journal.transaction() as data:
             prefs = data['preferences']
+            reset_suggestions = payload.get('suggestions') is True and not prefs['suggestions']
             prefs.update({k: v for k, v in payload.items() if k != 'dismiss'})
             action = payload.get('dismiss')
             if action == 'later':
@@ -223,6 +224,9 @@ class Activation:
                     data['suggested'].append(current['accountId'])
             if payload.get('suggestions') is True:
                 prefs['dismissed'] = False
+            if reset_suggestions:
+                prefs['snoozeUntil'] = 0
+                data['suggested'] = []
             self.journal.save(data)
         with self.lock:
             self.view['preferences'] = copy.deepcopy(prefs)
