@@ -16,6 +16,10 @@ from .vault import crypt
 DEFAULTS = dict(enabled=False, accounts=[], idleMinutes=30, suggestions=True,
                 snoozeUntil=0, dismissed=False)
 MAX_GAP = 660
+# Confirmation accepts a deadline within this many seconds of the expected end.
+TOLERANCE = 600
+SECONDS = {'five_hour': 18000, '5h': 18000, 'seven_day': 604800, 'weekly': 604800}
+PENDING = ('reserved', 'sent', 'uncertain')
 
 
 def number(value):
@@ -31,6 +35,7 @@ def timestamp(value):
 
 
 from .activation_windows import classify, target, targets
+from .activation_runners import NotLaunched
 
 
 class Journal:
@@ -75,9 +80,10 @@ class Journal:
             raise ValueError('Invalid activation journal')
         for attempt in value['attempts'].values():
             if (not isinstance(attempt, dict) or not isinstance(attempt.get('id'), str) or
-                    attempt.get('state') not in ('reserved', 'sent', 'uncertain', 'confirmed') or
-                    not number(attempt.get('at')) or attempt.get('window') not in ('five_hour', 'seven_day', '5h', 'weekly') or
-                    (attempt['state'] == 'confirmed' and not number(attempt.get('reset')))):
+                    attempt.get('state') not in (*PENDING, 'confirmed', 'expired') or
+                    not number(attempt.get('at')) or attempt.get('window') not in SECONDS or
+                    (attempt['state'] == 'confirmed' and not number(attempt.get('reset'))) or
+                    (attempt['state'] == 'expired' and not number(attempt.get('expired')))):
                 raise ValueError('Invalid activation receipt')
         if any(not isinstance(h, dict) or not isinstance(h.get('accountId'), str) or not number(h.get('at')) for h in value['history']):
             raise ValueError('Invalid activation history')
@@ -153,6 +159,7 @@ class Activation:
         self.error = False
         self.busy = False
         self.preflight_failures = {}
+        self.barriers = {}
         self.view = dict(preferences=copy.deepcopy(DEFAULTS), accounts=[], suggestion=None)
 
     def snapshot(self):
@@ -221,9 +228,11 @@ class Activation:
                     30 <= elapsed <= MAX_GAP and number(old.get('reset'))):
                 movement = reset-old['reset']
                 state = 'inactive' if abs(movement-elapsed) <= 15 else 'running' if abs(movement) <= 15 else 'unknown'
+        barrier = self.barriers.get(key)
         continuous = (old.get('source') == source and number(old.get('last')) and
                       0 < read-old['last'] <= MAX_GAP and (old.get('state') == state or
-                      (old.get('state') == 'full_deadline' and state in ('inactive', 'running'))))
+                      (old.get('state') == 'full_deadline' and state in ('inactive', 'running'))) and
+                      not (number(barrier) and old.get('since', read) <= barrier < read))
         if state == 'running':
             continuous = continuous and old.get('reset') is not None and abs(old['reset']-reset)<=15
         obs = dict(state=state, raw=raw_state, source=source, last=read, reset=reset,
@@ -254,7 +263,7 @@ class Activation:
         candidate = None
         with self.journal.transaction() as data:
             prefs = data['preferences']
-            dirty = False
+            dirty = self._expire(data, now)
             summaries = []
             suggestion = None
             for row in rows:
@@ -263,9 +272,9 @@ class Activation:
                 key = row['activationKey']
                 obs = self._observe(row, now)
                 attempt = data['attempts'].get(key)
-                if attempt and attempt['state'] in ('reserved', 'sent', 'uncertain') and obs['state']=='running' and obs.get('count',0)>=2:
+                if attempt and attempt['state'] in PENDING and obs['state']=='running' and obs.get('count',0)>=2:
                     # Confirmation cannot use the reads from before dispatch.
-                    if obs['since']>attempt['at'] and abs(obs['reset']-attempt['at']-row['activationSeconds'])<=600:
+                    if obs['since']>attempt['at'] and abs(obs['reset']-attempt['at']-row['activationSeconds'])<=TOLERANCE:
                         attempt.update(state='confirmed', reset=obs['reset'])
                         for receipt in data['history']:
                             if receipt.get('id') == attempt['id'] and receipt.get('window') == attempt['window']:
@@ -281,8 +290,9 @@ class Activation:
                 waited = max(0, obs.get('last',now)-obs.get('since',now))
                 if attempt:
                     status = {'reserved':'A prompt may have been sent. No automatic retry.', 'sent':'Prompt sent. Waiting for two fresh countdown readings.',
-                              'uncertain':'Delivery is uncertain. No automatic retry.', 'confirmed':'Last activation confirmed.'}.get(attempt['state'], status)
-                    eligible = eligible and attempt['state']=='confirmed' and now>attempt.get('reset',float('inf')) and obs.get('since',0)>attempt.get('reset',float('inf'))
+                              'uncertain':'Delivery is uncertain. No automatic retry.', 'confirmed':'Last activation confirmed.',
+                              'expired':'The last prompt was never confirmed and its window has ended. Waiting for new inactivity.'}.get(attempt['state'], status)
+                    eligible = eligible and self._released(attempt, obs.get('since', 0))
                 eligible = eligible and not self._group_pending(data, row, key)
                 if eligible and not prefs['enabled'] and prefs['suggestions'] and not prefs['dismissed'] and now>=prefs['snoozeUntil'] and waited>=10800 and key not in data['suggested']:
                     suggestion = dict(accountId=key, label=row.get('label',row['provider'])+' · '+row['activationLabel'], message='This quota window is waiting to start. AQM can send a short prompt so its reset countdown begins earlier. This uses subscription allowance.')
@@ -312,9 +322,33 @@ class Activation:
                 continue
             account = receipt.get('accountId', key)
             group = receipt.get('group', 'direct')
-            if account == row['id'] and group == row['activationGroup'] and receipt['state'] != 'confirmed':
+            if account == row['id'] and group == row['activationGroup'] and receipt['state'] in PENDING:
                 return True
         return False
+
+    @staticmethod
+    def _released(attempt, since):
+        """A new streak must begin after the last window this receipt could have started."""
+        if not attempt:
+            return True
+        end = {'confirmed': attempt.get('reset'), 'expired': attempt.get('expired')}.get(attempt['state'])
+        return number(end) and number(since) and since > end
+
+    def _expire(self, data, now):
+        # An unconfirmed prompt can no longer own a live window once the latest
+        # deadline it could have produced has passed. Only then may it stop blocking.
+        changed = False
+        for receipt in data['attempts'].values():
+            end = receipt['at']+SECONDS[receipt['window']]+TOLERANCE
+            if receipt['state'] in PENDING and now > end:
+                receipt.update(state='expired', expired=end)
+                for entry in data['history']:
+                    if entry.get('id') == receipt['id'] and entry.get('window') == receipt['window']:
+                        entry.update(receipt)
+                changed = True
+        # Inactivity evidence never spans an expiry, so the next streak starts after it.
+        self.barriers = {k: r['expired'] for k, r in data['attempts'].items() if r['state'] == 'expired'}
+        return changed
 
     @staticmethod
     def _recent(data, row, now):
@@ -349,13 +383,12 @@ class Activation:
             obs = self.observations[key]
             if not prefs['enabled'] or key not in prefs['accounts'] or obs['last']-obs['since']<prefs['idleMinutes']*60:
                 return
-            old = data['attempts'].get(key)
-            if old and not (old['state']=='confirmed' and obs['since']>old.get('reset',float('inf'))):
+            if not self._released(data['attempts'].get(key), obs['since']):
                 return
             if self._recent(data, row, now)>=5 or self._group_pending(data, row, key):
                 return
             batch = uuid.uuid4().hex
-            reserved = []
+            reserved, priors = [], {}
             # One prompt can start both windows in this group. Reserve both observed
             # inactive windows, even if only one is selected, without opting the other in.
             for sibling in targets(latest):
@@ -365,8 +398,9 @@ class Activation:
                         sibling_obs.get('state') != 'inactive' or sibling_obs.get('count', 0) < 2):
                     continue
                 prior = data['attempts'].get(sibling_key)
-                if prior and not (prior['state'] == 'confirmed' and sibling_obs['since'] > prior.get('reset', float('inf'))):
+                if not self._released(prior, sibling_obs['since']):
                     return
+                priors[sibling_key] = copy.deepcopy(prior)
                 receipt = dict(id=batch, state='reserved', at=now, episode=sibling_obs['episode'],
                                window=sibling['activationWindow'], group=row['activationGroup'], accountId=row['id'])
                 data['attempts'][sibling_key] = receipt
@@ -377,6 +411,7 @@ class Activation:
             attempt = data['attempts'][key]
             self.journal.save(data)
         if self.stop.is_set():
+            self._release(attempt['id'], priors)
             return
         with self.lock:
             self.busy=True
@@ -385,19 +420,41 @@ class Activation:
             # No inference fallback and no resend, including after a timeout.
             usage = runner.send(executable)
             state = 'sent'
+        except NotLaunched:
+            # The runner proved that no process started, so nothing was delivered.
+            state = None
         except Exception:
             pass
         finally:
             with self.lock:
                 self.busy=False
+        if state is None:
+            self.preflight_failures[key] = self.clock()+300
+            self._release(attempt['id'], priors)
+            return
         with self.journal.transaction() as data:
             if data['attempts'][key]['id']==attempt['id']:
                 for reserved_key in reserved:
-                    data['attempts'][reserved_key].update(state=state,usage=usage)
+                    if data['attempts'][reserved_key]['state'] == 'reserved':
+                        data['attempts'][reserved_key].update(state=state,usage=usage)
                 for receipt in data['history']:
-                    if receipt.get('id') == attempt['id']:
+                    if receipt.get('id') == attempt['id'] and receipt.get('state') == 'reserved':
                         receipt.update(state=state,usage=usage)
                 self.journal.save(data)
+
+    def _release(self, batch, priors):
+        """Undo a reservation whose prompt never started. It does not count toward the daily limit."""
+        with self.journal.transaction() as data:
+            for key, prior in priors.items():
+                current = data['attempts'].get(key)
+                if not current or current['id'] != batch or current['state'] != 'reserved':
+                    continue
+                if prior:
+                    data['attempts'][key] = prior
+                else:
+                    del data['attempts'][key]
+            data['history'] = [h for h in data['history'] if not (h.get('id') == batch and h.get('state') == 'reserved')]
+            self.journal.save(data)
 
     def run(self):
         while not self.stop.is_set():

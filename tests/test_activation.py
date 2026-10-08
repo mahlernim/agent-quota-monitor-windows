@@ -12,6 +12,7 @@ from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
 from quota.activation import Activation, ClaudeRunner, DEFAULTS, Journal, classify
+from quota.activation_runners import NotLaunched
 from quota import model
 from quota.server import handler
 from quota.vault import crypt
@@ -41,12 +42,15 @@ class Runner:
         self.ready = True
         self.before = lambda: None
         self.fail = False
+        self.not_launched = False
 
     def capability(self): return self.ready, 'Synthetic runner'
     def prepare(self, row):
         self.before()
         return 'synthetic'
     def send(self, executable):
+        if self.not_launched:
+            raise NotLaunched('Synthetic identity change before launch')
         self.sends += 1
         if self.fail:
             raise TimeoutError('Synthetic uncertain delivery')
@@ -233,6 +237,140 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(self.journal.data['history'][0]['state'],'confirmed')
         self.assertEqual(self.journal.data['history'][1]['state'],'sent')
 
+    def attempts(self):
+        return self.journal.data['attempts']
+
+    def status(self, key=None):
+        key = key or self.monitor.rows[0]['id']
+        return next(a['status'] for a in self.engine.snapshot()['accounts'] if a['accountId'] == key)
+
+    def test_sent_receipt_expires_after_unobserved_window_and_needs_new_streak(self):
+        self.enable(); self.mature()
+        receipt = self.attempts()[self.monitor.rows[0]['id']]
+        self.assertEqual(receipt['state'], 'sent')
+        end = receipt['at']+18000+600
+        # The PC sleeps through the whole window. Nothing confirms it.
+        self.tick(end-self.now)
+        self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'sent')
+        self.tick(1)
+        expired = self.attempts()[self.monitor.rows[0]['id']]
+        self.assertEqual((expired['state'], expired['expired'], expired['id']), ('expired', end, receipt['id']))
+        self.assertEqual(self.journal.data['history'][0]['state'], 'expired')
+        self.assertIn('never confirmed', self.status())
+        # The read at the deadline cannot seed the new streak.
+        self.mature(5)
+        self.assertEqual(self.runner.sends, 1)
+        self.tick()
+        self.assertEqual(self.runner.sends, 2)
+        self.assertEqual([h['state'] for h in self.journal.data['history']], ['expired', 'sent'])
+        self.mature(12)
+        self.assertEqual(self.runner.sends, 2)
+
+    def test_uncertain_receipt_expires_and_continuous_inactivity_restarts_streak(self):
+        self.enable(); self.runner.fail = True; self.mature()
+        receipt = self.attempts()[self.monitor.rows[0]['id']]
+        self.assertEqual(receipt['state'], 'uncertain')
+        self.runner.fail = False
+        end = receipt['at']+18600
+        while self.now+300 <= end:
+            self.tick()
+            self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'uncertain')
+        self.assertEqual(self.runner.sends, 1)
+        # Inactivity never stopped, yet evidence from before the expiry is discarded.
+        self.tick()
+        self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'expired')
+        for _ in range(5): self.tick()
+        self.assertEqual(self.runner.sends, 1)
+        self.tick()
+        self.assertEqual(self.runner.sends, 2)
+        self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'sent')
+
+    def coalesce(self):
+        self.monitor.rows[0]['groups'][0]['buckets'][1].update(remaining=100, resetsAt=None, inactiveReported=True)
+        self.enable(); self.mature()
+        self.assertEqual(self.runner.sends, 1)
+        self.assertEqual({r['state'] for r in self.attempts().values()}, {'sent'})
+        self.assertEqual(len(self.attempts()), 2)
+        return next(iter(self.attempts().values()))['at']
+
+    def test_coalesced_group_stays_blocked_while_weekly_window_may_be_live(self):
+        at = self.coalesce()
+        weekly = self.monitor.rows[0]['id']+'|direct|seven_day'
+        self.tick(at+18601-self.now)
+        self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'expired')
+        self.assertEqual(self.attempts()[weekly]['state'], 'sent')
+        self.mature(12)
+        self.assertEqual(self.runner.sends, 1)
+        # The weekly countdown from that prompt is observed, so the group is resolved.
+        self.monitor.rows[0]['groups'][0]['buckets'][1].update(remaining=99, resetsAt=model.timestamp(at+604800), inactiveReported=False)
+        self.tick(); self.tick()
+        self.assertEqual(self.attempts()[weekly]['state'], 'confirmed')
+        self.tick()
+        self.assertEqual(self.runner.sends, 2)
+        self.assertEqual(self.attempts()[weekly]['state'], 'confirmed')
+        self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'sent')
+
+    def test_coalesced_group_reopens_after_both_windows_expire(self):
+        at = self.coalesce()
+        self.tick(at+604800+601-self.now)
+        self.assertEqual({r['state'] for r in self.attempts().values()}, {'expired'})
+        self.assertEqual({h['state'] for h in self.journal.data['history']}, {'expired'})
+        self.mature(5)
+        self.assertEqual(self.runner.sends, 1)
+        self.tick()
+        self.assertEqual(self.runner.sends, 2)
+        self.assertEqual({r['state'] for r in self.attempts().values()}, {'sent'})
+        self.assertEqual(len(self.journal.data['history']), 4)
+
+    def test_expired_receipt_survives_restart_and_restart_needs_new_streak(self):
+        self.enable(); self.mature()
+        key = self.monitor.rows[0]['id']
+        receipt = copy.deepcopy(self.attempts()[key])
+        self.engine = self.new_engine()
+        self.tick(receipt['at']+18601-self.now)
+        stored = copy.deepcopy(self.journal.data)
+        self.assertEqual(stored['attempts'][key]['state'], 'expired')
+        self.engine = self.new_engine(); self.engine.tick()
+        self.assertEqual(self.journal.data, stored)
+        self.assertIn('never confirmed', self.status())
+        self.mature(5)
+        self.assertEqual(self.runner.sends, 1)
+        self.tick()
+        self.assertEqual(self.runner.sends, 2)
+
+    def test_daily_limit_still_counts_expired_receipts(self):
+        self.enable()
+        key = self.monitor.rows[0]['id']
+        self.journal.data['history'] = [dict(id=str(i), accountId=key, group='direct', state='expired', at=self.now-3600) for i in range(5)]
+        self.journal.data['attempts'][key] = dict(id='4', state='expired', at=self.now-86400, expired=self.now-67000, window='five_hour', group='direct', accountId=key)
+        self.mature(12)
+        self.assertEqual(self.runner.sends, 0)
+        self.assertEqual(self.status(), 'Daily activation limit reached.')
+
+    def test_identity_change_before_launch_releases_reservation(self):
+        self.enable(); self.runner.not_launched = True; self.mature()
+        self.assertEqual(self.runner.sends, 0)
+        self.assertEqual(self.attempts(), {})
+        self.assertEqual(self.journal.data['history'], [])
+        self.runner.not_launched = False
+        self.tick(10)
+        self.assertIn('could not be verified', self.status())
+        self.assertEqual(self.runner.sends, 0)
+        self.tick(290)
+        self.assertEqual(self.runner.sends, 1)
+        self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'sent')
+
+    def test_release_restores_prior_expired_receipt(self):
+        self.enable(); self.mature()
+        key = self.monitor.rows[0]['id']
+        self.tick(self.attempts()[key]['at']+18601-self.now)
+        prior = copy.deepcopy(self.attempts()[key])
+        history = copy.deepcopy(self.journal.data['history'])
+        self.runner.not_launched = True
+        self.mature(6)
+        self.assertEqual(self.attempts()[key], prior)
+        self.assertEqual(self.journal.data['history'], history)
+
     def test_three_hour_suggestion_snooze_dismissal_and_restart(self):
         self.mature(35)
         self.assertIsNone(self.engine.snapshot()['suggestion'])
@@ -336,6 +474,26 @@ class DurableJournalTests(unittest.TestCase):
             with self.assertRaises(Exception):
                 with second.transaction(): pass
             self.assertEqual(path.read_bytes(),b'corrupt')
+
+    def test_upgrade_preserves_stuck_legacy_receipt_and_expires_it_durably(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'activation.dpapi'
+            now, monitor = 1700000000, Monitor(row(1700000000))
+            key = monitor.rows[0]['id']
+            legacy = dict(id='legacy', state='sent', at=now-86400, window='five_hour', usage=dict(input_tokens=3))
+            journal = Journal(path)
+            with journal.transaction() as value:
+                value['attempts'][key] = copy.deepcopy(legacy)
+                value['history'].append(dict(legacy, accountId=key))
+                journal.save(value)
+            Activation(monitor, Journal(path), Runner(), lambda:now, lambda:now).tick()
+            with Journal(path).transaction() as value:
+                stored = value['attempts'][key]
+                self.assertEqual(stored, dict(legacy, state='expired', expired=legacy['at']+18600))
+                self.assertEqual(value['history'], [dict(stored, accountId=key)])
+            invalid = copy.deepcopy(value)
+            del invalid['attempts'][key]['expired']
+            with self.assertRaises(ValueError): Journal.validate(invalid)
 
     def test_malformed_stored_preferences_cannot_enable_dispatch(self):
         data = MemoryJournal().data

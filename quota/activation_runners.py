@@ -8,6 +8,10 @@ PROMPT = 'Reply only OK. Do not use tools, read files, access URLs, or delegate.
 MODELS = {'gemini': 'gemini-3.8-flash-low', 'claude-gpt': 'gpt-oss-120b-medium'}
 
 
+class NotLaunched(Exception):
+    """Raised only before any child process starts, so the reservation can be released."""
+
+
 def environment():
     denied = ('OPENAI_', 'CODEX_', 'ANTHROPIC_', 'HERDR_',
               'GEMINI_API_', 'GOOGLE_API_', 'GOOGLE_GEMINI_', 'GOOGLE_GENAI_',
@@ -63,7 +67,10 @@ class CodexRunner:
     def send(self, prepared):
         executable, identity, cwd = prepared
         # Re-read immediately before launch, without copying, refreshing or changing auth.
-        self.identity({'id': identity})
+        try:
+            self.identity({'id': identity})
+        except Exception as error:
+            raise NotLaunched('Codex identity changed') from error
         args = ['exec', '--ignore-user-config', '--ignore-rules', '--ephemeral',
                 '--skip-git-repo-check', '--sandbox', 'read-only', '--json', '--color', 'never',
                 '--model', 'gpt-6-luna']
@@ -110,9 +117,13 @@ class AntigravityRunner:
 
     def send(self, prepared):
         executable, selected, revision, cwd = prepared
-        antigravity_cli.check_auth_mode()
-        if antigravity_cli.credential()[1] != revision:
-            raise ValueError('Antigravity identity changed')
+        try:
+            antigravity_cli.check_auth_mode()
+            current = antigravity_cli.credential()[1]
+        except Exception as error:
+            raise NotLaunched('Antigravity identity unavailable') from error
+        if current != revision:
+            raise NotLaunched('Antigravity identity changed')
         args = ['-p', PROMPT, '--model', selected, '--mode', 'plan', '--disable-slash-commands',
                 '--output-format', 'stream-json', '--print-timeout', '60s']
         code, text = claude_cli.run(executable, args, timeout=75, env=environment(), cwd=cwd)
