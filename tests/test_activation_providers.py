@@ -5,7 +5,7 @@ from unittest.mock import patch
 from quota import model
 from quota.activation import Activation, Journal
 from quota.activation_windows import AG_SOURCE, CODEX_SOURCE, classify, targets
-from quota.activation_runners import AntigravityRunner, CodexRunner, environment
+from quota.activation_runners import AntigravityRunner, CodexRunner, NotLaunched, environment
 from tests.test_activation import MemoryJournal, Monitor, Runner, row
 
 
@@ -152,7 +152,7 @@ class ProviderActivationTests(unittest.TestCase):
         self.setup(row)
         self.monitor.rows[0]['groups'][0]['buckets'][1].update(remaining=100,resetsAt=None,inactiveReported=True)
         key = self.monitor.rows[0]['id']
-        self.journal.data['attempts'][key] = dict(id='legacy', state='uncertain', at=self.now-86400, window='five_hour')
+        self.journal.data['attempts'][key] = dict(id='legacy', state='uncertain', at=self.now-600, window='five_hour')
         self.enable([1])
         self.engine.tick()
         for _ in range(8): self.tick(moving=False)
@@ -191,6 +191,16 @@ class ProviderRunnerTests(unittest.TestCase):
         for auth in ({'auth_mode':'apikey'}, {'tokens':{'account_id':'different','access_token':'synthetic'}}):
             with patch('quota.activation_runners.providers.load',return_value=auth):
                 with self.assertRaises(ValueError): CodexRunner.identity({'id':'codex-a'})
+
+    def test_failed_identity_recheck_never_launches(self):
+        with patch.object(CodexRunner,'identity',side_effect=ValueError('changed')), patch('quota.activation_runners.claude_cli.run') as run:
+            with self.assertRaises(NotLaunched): CodexRunner().send(('synthetic.exe','codex-a','empty'))
+        run.assert_not_called()
+        for revision in ('other', None):
+            credential = patch('quota.activation_runners.antigravity_cli.credential',return_value=('synthetic',revision)) if revision else                 patch('quota.activation_runners.antigravity_cli.credential',side_effect=OSError('locked'))
+            with patch('quota.activation_runners.antigravity_cli.check_auth_mode'), credential, patch('quota.activation_runners.claude_cli.run') as run:
+                with self.assertRaises(NotLaunched): AntigravityRunner().send(('synthetic.exe','gpt-oss-120b-medium','revision','empty'))
+            run.assert_not_called()
 
     def test_antigravity_exact_group_model_plan_mode_and_uncertain_tool_result(self):
         output = json.dumps(dict(event='result',result=dict(status='SUCCESS',usage=dict(input_tokens=12))))
