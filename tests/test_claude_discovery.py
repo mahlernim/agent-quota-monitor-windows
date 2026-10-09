@@ -13,7 +13,9 @@ class DiscoveryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Windows CI may expose TEMP through an 8.3 alias. Discovery returns
+        # resolved executable paths, so fixtures must use that same identity.
+        self.root = Path(self.temp.name).resolve()
         cli._versions.clear()
         self.addCleanup(cli._versions.clear)
 
