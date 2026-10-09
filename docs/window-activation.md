@@ -29,7 +29,7 @@ A window started by a prompt ends at its dispatch time plus the window length, a
 
 ## Official subscription runners
 
-Claude supports 2.1.280 and newer 2.x clients, verifies the account UUID, organization, and Pro or Max subscription, and uses safe mode, empty strict MCP configuration, disabled hooks and tools, and no saved session. Usage sources that omit extra-usage status cannot authorize an inactive-window prompt.
+Claude supports 2.1.280 and newer 2.x clients, verifies the account UUID, organization, and Pro or Max subscription, and uses safe mode, empty strict MCP configuration, disabled hooks and tools, and no saved session. The CLI reader preserves the reported extra-usage flag. Only an explicit false value can authorize an inactive-window prompt. Missing or malformed billing information and missing reset fields never count as eligibility.
 
 Codex requires CLI support for ignoring user configuration and ephemeral execution. It verifies the signed-in account, forces ChatGPT authentication and the OpenAI provider, and uses an empty workspace, read-only sandbox, low reasoning, disabled shell, hooks, apps, delegation and web search. Official credentials remain in their original location and are not copied or renewed by AQM.
 
@@ -39,7 +39,7 @@ Runners remove API-key and alternate-provider environment overrides from their c
 
 ## Settings and suggestions
 
-Preferences and receipts live in Windows-user-encrypted activation.dpapi alongside the monitor data. Receipts contain no response text or credentials. Choose individual account windows in Settings and save. Failed saves leave the previous preferences active.
+Preferences and receipts live in Windows-user-encrypted activation.dpapi alongside the monitor data. Receipts contain no response text or credentials. Choose individual account windows in Settings and save. Failed saves leave the previous preferences active. Current window state or blockers take precedence over completed activation messages. Previous receipts remain in the encrypted journal and status API. Pending or uncertain delivery still displays its no-retry status.
 
 After three hours of eligible inactivity while activation is off, AQM can show one quiet suggestion in the visible main window. It does not open a window or send an OS notification. Configure opens Settings without opting in. Later snoozes for a week. Don't show again persists until suggestions are explicitly re-enabled. The app must be running to observe and act.
 

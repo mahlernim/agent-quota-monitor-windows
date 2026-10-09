@@ -285,9 +285,10 @@ class Activation:
                 eligible = supported and obs['state']=='inactive' and obs.get('count',0)>=2
                 waited = max(0, obs.get('last',now)-obs.get('since',now))
                 if attempt:
+                    # Completed receipts remain in lastAttempt, while current window
+                    # evidence explains the next delay or blocker.
                     status = {'reserved':'A prompt may have been sent. No automatic retry.', 'sent':'Prompt sent. Waiting for two fresh countdown readings.',
-                              'uncertain':'Delivery is uncertain. No automatic retry.', 'confirmed':'Last activation confirmed.',
-                              'expired':'The last prompt was never confirmed and its window has ended. Waiting for new inactivity.'}.get(attempt['state'], status)
+                              'uncertain':'Delivery is uncertain. No automatic retry.'}.get(attempt['state'], status)
                     eligible = eligible and self._released(attempt, obs.get('since', 0))
                 eligible = eligible and not self._group_pending(data, row, key)
                 if eligible and not prefs['enabled'] and prefs['suggestions'] and not prefs['dismissed'] and now>=prefs['snoozeUntil'] and waited>=10800 and key not in data['suggested']:

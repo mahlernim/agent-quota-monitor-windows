@@ -40,6 +40,42 @@ class ParseTests(unittest.TestCase):
         groups = cli.parse_usage(stream(events([dict(kind='weekly_all', percent=100)])))
         self.assertEqual([b['id'] for b in groups[0]['buckets']], ['seven_day'])
 
+    def test_extra_usage_preserves_explicit_billing_boolean(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                rows = events()
+                rows[0]['usage_report']['rate_limits']['extra_usage'] = dict(
+                    is_enabled=enabled, monthly_limit=None, used_credits=None, utilization=None)
+                groups = cli.parse_usage(stream(rows))
+                self.assertIs(groups[0]['extraUsageEnabled'], enabled)
+
+    def test_extra_usage_without_boolean_stays_unknown(self):
+        self.assertIsNone(cli.parse_usage(stream(events()))[0]['extraUsageEnabled'])
+        cases = (None, False, 0, 'off', [], {}, dict(is_enabled=None),
+                 dict(is_enabled=0), dict(is_enabled=1), dict(is_enabled='false'),
+                 dict(is_enabled='true'), dict(is_enabled=[]), dict(is_enabled={}))
+        for extra in cases:
+            with self.subTest(extra=extra):
+                rows = events()
+                rows[0]['usage_report']['rate_limits']['extra_usage'] = extra
+                groups = cli.parse_usage(stream(rows))
+                self.assertIsNone(groups[0]['extraUsageEnabled'])
+                self.assertEqual(len(groups[0]['buckets']), 2)
+
+    def test_inactive_window_requires_zero_usage_and_explicit_null_reset(self):
+        cases = ((dict(percent=0), False),
+                 (dict(percent=0, resets_at=None), True),
+                 (dict(percent=0, resets_at='2026-10-01T19:59:59+00:00'), False),
+                 (dict(percent=0.01, resets_at=None), False))
+        for kind in ('session', 'weekly_all'):
+            for fields, inactive in cases:
+                with self.subTest(kind=kind, fields=fields):
+                    rows = events([dict(kind=kind, **fields)])
+                    rows[0]['usage_report']['rate_limits']['extra_usage'] = dict(is_enabled=False)
+                    bucket = cli.parse_usage(stream(rows))[0]['buckets'][0]
+                    self.assertIs(bucket['inactiveReported'], inactive)
+                    self.assertEqual(bucket['remaining'], 100-fields['percent'])
+
     def test_cost_only_output_is_unavailable(self):
         rows = events()
         rows[0]['usage_report']['rate_limits'] = None

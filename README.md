@@ -6,7 +6,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 [Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.3)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.4/agent-quota-monitor-windows-0.4.4-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.4/agent-quota-monitor-windows-0.4.4-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.4)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -43,7 +43,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.4/agent-quota-monitor-windows-0.4.4-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
@@ -198,7 +198,7 @@ Supports **Codex weekly**, **direct Claude five-hour and weekly**, and **Antigra
 
 AQM uses the signed-in official CLI with a fixed economical model. Codex uses GPT-6 Luna with low reasoning, Claude uses Haiku, Antigravity Gemini uses Flash, and Antigravity Claude/GPT uses GPT-OSS. Claude requires a Pro or Max subscription with extra usage off. Codex requires a recent client with isolated ephemeral execution. Antigravity uses plan mode and requires a CLI without configured plugins or MCP servers. Keep official clients current. Prompts consume subscription allowance, including CLI context that can be much larger than the short reply. There is no paid/API fallback.
 
-Claude activation stays unavailable when its quota source does not report whether extra usage is off. This includes CLI reports without that billing information. Updating Claude Code can therefore restore monitoring while leaving activation unavailable.
+Claude activation uses the extra-usage status reported by its quota source, including the official CLI. If that status is missing or extra usage is enabled, activation waits without sending a prompt. Settings shows the current reason. Your activation history is preserved.
 
 AQM requires consecutive fresh successful readings throughout the chosen delay. Full quota with a fixed running countdown, stale readings, unknown reset information, and exhausted weekly quota never trigger activation. After a prompt, two fresh countdown readings must confirm the change. An uncertain delivery is not automatically retried. If a prompt is never confirmed before its window would have ended, for example because the PC slept, AQM records it as expired and waits for a new inactivity period. Settings shows the current activation status. At most five prompts can be sent per account and quota group in 24 hours. For Codex and Antigravity, consecutive full-quota readings must show a deadline moving with time before AQM treats a window as idle.
 

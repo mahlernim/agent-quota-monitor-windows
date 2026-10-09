@@ -11,7 +11,7 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
-from quota.activation import Activation, ClaudeRunner, DEFAULTS, Journal, classify
+from quota.activation import Activation, ClaudeRunner, DEFAULTS, Journal, classify, targets
 from quota.activation_runners import NotLaunched
 from quota import claude_cli, model
 from quota.server import handler
@@ -69,6 +69,16 @@ def row(now=1700000000, subject='account-a'):
                     five_hour=dict(utilization=0, resets_at=None),
                     seven_day=dict(utilization=20, resets_at=model.timestamp(now+604800)),
                     extra_usage=dict(is_enabled=False))))
+
+
+def cli_row(now, limits=None, **rate_fields):
+    report = dict(type='assistant', usage_report=dict(rate_limits=dict(limits=limits if limits is not None else [
+        dict(kind='session', percent=0, resets_at=None),
+        dict(kind='weekly_all', percent=20, resets_at=model.timestamp(now + 604800))], **rate_fields)))
+    result = dict(type='result', subtype='success', is_error=False, num_turns=0, total_cost_usd=0,
+                  usage=dict(input_tokens=0, output_tokens=0, cache_creation_input_tokens=0, cache_read_input_tokens=0))
+    return dict(row(now), source=claude_cli.SOURCE, groups=claude_cli.parse_usage(
+        '\n'.join(json.dumps(item) for item in (report, result))))
 
 
 class ActivationTests(unittest.TestCase):
@@ -149,18 +159,84 @@ class ActivationTests(unittest.TestCase):
             self.assertEqual(self.runner.sends, 0)
 
     def test_cli_quota_without_extra_usage_evidence_never_activates(self):
-        report = dict(type='assistant', usage_report=dict(rate_limits=dict(limits=[
-            dict(kind='session', percent=0, resets_at=None),
-            dict(kind='weekly_all', percent=20, resets_at=model.timestamp(self.now + 604800))])))
-        result = dict(type='result', subtype='success', is_error=False, num_turns=0, total_cost_usd=0,
-                      usage=dict(input_tokens=0, output_tokens=0, cache_creation_input_tokens=0, cache_read_input_tokens=0))
-        self.monitor.rows[0].update(source=claude_cli.SOURCE, groups=claude_cli.parse_usage(
-            '\n'.join(json.dumps(item) for item in (report, result))))
+        self.monitor.rows[0] = cli_row(self.now)
         self.assertEqual(classify(self.monitor.rows[0], self.now)[0], 'billing_unknown')
         self.enable()
         self.mature(12)
         self.assertEqual(self.runner.sends, 0)
         self.assertEqual(self.journal.data['attempts'], {})
+
+    def test_cli_extra_usage_off_starts_once_after_new_delay_with_completed_receipt(self):
+        for state in (None, 'confirmed', 'expired'):
+            with self.subTest(receipt=state):
+                self.setUp()
+                self.monitor.rows[0] = cli_row(self.now, extra_usage=dict(
+                    is_enabled=False, monthly_limit=None, used_credits=None, utilization=None, currency=None))
+                self.assertEqual(classify(self.monitor.rows[0], self.now)[0], 'inactive')
+                prior = self.completed_receipt(state) if state else None
+                self.enable()
+                self.mature(5)
+                self.assertEqual(self.runner.sends, 0)
+                self.assertEqual(self.status(), 'Waiting for the inactivity delay.')
+                if prior:
+                    self.assertEqual(self.engine.snapshot()['accounts'][0]['lastAttempt'], prior)
+                self.tick()
+                self.assertEqual(self.runner.sends, 1)
+                self.assertEqual(self.attempts()[self.monitor.rows[0]['id']]['state'], 'sent')
+                self.mature(6)
+                self.assertEqual(self.runner.sends, 1)
+                if prior:
+                    self.assertEqual(self.journal.data['history'][0], prior)
+
+    def test_cli_extra_usage_enabled_or_unknown_never_sends_with_old_receipt(self):
+        for extra in (dict(is_enabled=True), None, {}, dict(is_enabled=None),
+                      dict(is_enabled=0), dict(is_enabled='false'), []):
+            with self.subTest(extra=extra):
+                self.setUp()
+                self.monitor.rows[0] = cli_row(self.now, extra_usage=extra)
+                prior = self.completed_receipt('confirmed')
+                self.enable()
+                self.mature(12)
+                self.assertEqual(classify(self.monitor.rows[0], self.now)[0], 'billing_unknown')
+                self.assertEqual(self.status(), 'Extra usage must be off and reported by the provider.')
+                self.assertEqual(self.runner.sends, 0)
+                self.assertEqual(self.engine.snapshot()['accounts'][0]['lastAttempt'], prior)
+
+    def test_cli_missing_reset_never_activates_even_with_extra_usage_off(self):
+        for selected, kind in enumerate(('session', 'weekly_all')):
+            with self.subTest(window=kind):
+                self.setUp()
+                limits = [dict(kind=k, percent=0, resets_at=None) for k in ('session', 'weekly_all')]
+                del limits[selected]['resets_at']
+                self.monitor.rows[0] = cli_row(self.now, limits=limits, extra_usage=dict(is_enabled=False))
+                window = targets(self.monitor.rows[0])[selected]
+                self.assertEqual(classify(window, self.now)[0], 'unknown')
+                self.engine.configure(dict(enabled=True, accounts=[window['activationKey']]))
+                self.mature(12)
+                self.assertEqual(self.runner.sends, 0)
+                self.assertEqual(self.attempts(), {})
+
+    def test_cli_weekly_selection_requires_extra_usage_off_and_coalesces_one_prompt(self):
+        for enabled in (False, True, None):
+            with self.subTest(extra_usage=enabled):
+                self.setUp()
+                limits = [dict(kind=k, percent=0, resets_at=None) for k in ('session', 'weekly_all')]
+                self.monitor.rows[0] = cli_row(self.now, limits=limits, extra_usage=dict(is_enabled=enabled))
+                weekly = targets(self.monitor.rows[0])[1]
+                self.engine.configure(dict(enabled=True, accounts=[weekly['activationKey']]))
+                self.mature(5)
+                self.assertEqual(self.runner.sends, 0)
+                self.tick()
+                self.assertEqual(self.runner.sends, 1 if enabled is False else 0)
+                if enabled is False:
+                    self.assertEqual({a['window'] for a in self.attempts().values()}, {'five_hour', 'seven_day'})
+                    self.assertEqual(len({a['id'] for a in self.attempts().values()}), 1)
+                    self.assertEqual(self.engine.snapshot()['preferences']['accounts'], [weekly['activationKey']])
+                    self.mature()
+                    self.assertEqual(self.runner.sends, 1)
+                else:
+                    self.assertEqual(self.attempts(), {})
+                    self.assertEqual(self.status(weekly['activationKey']), 'Extra usage must be off and reported by the provider.')
 
     def test_missing_or_malformed_raw_reset_is_not_inactive(self):
         for raw in ({'utilization':0}, {'utilization':0,'resets_at':'bad'}, {'utilization':False,'resets_at':None}):
@@ -258,6 +334,51 @@ class ActivationTests(unittest.TestCase):
         key = key or self.monitor.rows[0]['id']
         return next(a['status'] for a in self.engine.snapshot()['accounts'] if a['accountId'] == key)
 
+    def completed_receipt(self, state):
+        key = self.monitor.rows[0]['id']
+        receipt = dict(id='previous', state=state, at=self.now-19000, window='five_hour',
+                       group='direct', accountId=key, **{('reset' if state == 'confirmed' else 'expired'): self.now-100})
+        self.journal.data['attempts'][key] = copy.deepcopy(receipt)
+        self.journal.data['history'].append(copy.deepcopy(receipt))
+        return receipt
+
+    def test_completed_receipts_do_not_hide_current_window_status(self):
+        cases = [
+            (lambda a: a['groups'][0].update(extraUsageEnabled=None), 'Extra usage must be off and reported by the provider.'),
+            (lambda a: a.update(status='stale'), 'Waiting for fresh provider readings.'),
+            (lambda a: a['groups'][0]['buckets'][1].update(remaining=0), 'Subscription allowance is unavailable.'),
+            (lambda a: a['groups'][0]['buckets'][0].update(inactiveReported=False), 'Window state is not established.'),
+            (lambda a: a.update(source='unknown'), 'Activation is not supported for this source.'),
+            (lambda a: a['groups'][0]['buckets'][0].update(resetsAt=model.timestamp(self.now+18000)), 'Window is already running.')]
+        for state in ('confirmed', 'expired'):
+            for mutate, status in cases:
+                with self.subTest(receipt=state, status=status):
+                    self.setUp()
+                    prior = self.completed_receipt(state)
+                    mutate(self.monitor.rows[0])
+                    self.engine.tick()
+                    self.assertEqual(self.status(), status)
+                    self.assertEqual(self.engine.snapshot()['accounts'][0]['lastAttempt'], prior)
+                    self.assertEqual(self.journal.data['history'], [prior])
+                    self.assertEqual(self.runner.sends, 0)
+
+    def test_pending_receipts_keep_delivery_status_despite_current_billing_blocker(self):
+        for state, status in (
+                ('reserved', 'A prompt may have been sent. No automatic retry.'),
+                ('sent', 'Prompt sent. Waiting for two fresh countdown readings.'),
+                ('uncertain', 'Delivery is uncertain. No automatic retry.')):
+            with self.subTest(receipt=state):
+                self.setUp()
+                key = self.monitor.rows[0]['id']
+                receipt = dict(id='pending', state=state, at=self.now, window='five_hour')
+                self.journal.data['attempts'][key] = copy.deepcopy(receipt)
+                self.monitor.rows[0]['groups'][0]['extraUsageEnabled'] = None
+                self.enable()
+                self.mature()
+                self.assertEqual(self.status(), status)
+                self.assertEqual(self.attempts()[key], receipt)
+                self.assertEqual(self.runner.sends, 0)
+
     def test_sent_receipt_expires_after_unobserved_window_and_needs_new_streak(self):
         self.enable(); self.mature()
         receipt = self.attempts()[self.monitor.rows[0]['id']]
@@ -270,7 +391,7 @@ class ActivationTests(unittest.TestCase):
         expired = self.attempts()[self.monitor.rows[0]['id']]
         self.assertEqual((expired['state'], expired['expired'], expired['id']), ('expired', end, receipt['id']))
         self.assertEqual(self.journal.data['history'][0]['state'], 'expired')
-        self.assertIn('never confirmed', self.status())
+        self.assertEqual(self.status(), 'Waiting for the inactivity delay.')
         # The read at the deadline cannot seed the new streak.
         self.mature(5)
         self.assertEqual(self.runner.sends, 1)
@@ -346,7 +467,7 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(stored['attempts'][key]['state'], 'expired')
         self.engine = self.new_engine(); self.engine.tick()
         self.assertEqual(self.journal.data, stored)
-        self.assertIn('never confirmed', self.status())
+        self.assertEqual(self.status(), 'Waiting for the inactivity delay.')
         self.mature(5)
         self.assertEqual(self.runner.sends, 1)
         self.tick()

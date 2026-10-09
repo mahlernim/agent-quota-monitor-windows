@@ -188,7 +188,7 @@ def parse_usage(text):
         limits = rates['limits']
         if not isinstance(limits, list):
             raise ValueError()
-        raw = {}
+        raw = dict(extra_usage=rates.get('extra_usage'))
         for limit in limits:
             if not isinstance(limit, dict):
                 raise ValueError()
@@ -200,7 +200,9 @@ def parse_usage(text):
             reset = limit.get('resets_at')
             if name in raw or used is None or (reset is not None and model.timestamp(reset) is None):
                 raise ValueError()
-            raw[name] = dict(utilization=used, resets_at=reset)
+            raw[name] = dict(utilization=used)
+            if 'resets_at' in limit:
+                raw[name]['resets_at'] = reset
         groups = model.claude(raw)
         if not groups:
             raise ReadError('quota_not_reported')
