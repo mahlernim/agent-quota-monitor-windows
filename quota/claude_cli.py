@@ -14,6 +14,8 @@ from .providers import ReadError, account, load
 MIN_VERSION = (2, 1, 281)
 MAX_OUTPUT = 1024 * 1024
 VERSION_RETRY_SECONDS = 300
+VERSION_PROBE_BUDGET_SECONDS = 10
+CLIENT_FIELDS = ('clientVersion', 'clientState', 'clientUpdateMethod', 'clientMinimumVersion')
 SOURCE = 'Official Claude Code CLI /usage'
 _versions = {}
 _version_lock = threading.Lock()
@@ -90,36 +92,58 @@ def run(executable, args, timeout=30, *, env=None, cwd=None):
             process.stdout.close()
 
 
-def supported_command():
-    from .connections import client_command
-    command = client_command('claude')
-    if not command:
-        return None
-    executable = command[0]
-    try:
-        stat = Path(executable).stat()
-        key = (executable, stat.st_mtime_ns, stat.st_size)
-    except OSError:
-        return None
+def client_info(minimum=MIN_VERSION):
+    """Resolve a versioned client. client_fields() supplies the safe API diagnostics."""
+    from .connections import claude_candidates
+    candidates = claude_candidates()
     with _version_lock:
-        now = time.monotonic()
-        cached = _versions.get(key)
-        if cached is None or (cached[1] is not None and now >= cached[1]):
-            supported, retry_at = False, None
+        end = time.monotonic() + VERSION_PROBE_BUDGET_SECONDS
+        found, keys = [], set()
+        for candidate in candidates:
+            executable = candidate['executable']
             try:
-                code, text = run(executable, ['--version'], timeout=5)
-                match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)\s*', text)
-                if code or not match:
-                    raise ReadError('claude_cli_failed')
-                version = tuple(map(int, match.groups()))
-                supported = MIN_VERSION <= version < (3, 0, 0)
-            except (ReadError, ValueError):
-                # Capability discovery is a local probe, not a failed quota read.
-                # Preserve the legacy reader while bounding repeated probe attempts.
-                retry_at = time.monotonic() + VERSION_RETRY_SECONDS
-            _versions.clear()
-            _versions[key] = supported, retry_at
-        return executable if _versions[key][0] else None
+                stat = Path(executable).stat()
+            except OSError:
+                continue
+            key = (executable, stat.st_mtime_ns, stat.st_size)
+            keys.add(key)
+            now = time.monotonic()
+            cached = _versions.get(key)
+            if (cached is None or cached[1] is not None and now >= cached[1]) and now < end:
+                version, retry_at = None, None
+                try:
+                    code, text = run(executable, ['--version'], timeout=min(5, end-now))
+                    match = re.fullmatch(r'(\d{1,6})\.(\d{1,6})\.(\d{1,6}) \(Claude Code\)\s*', text)
+                    if code or not match:
+                        raise ReadError('claude_cli_failed')
+                    version = tuple(map(int, match.groups()))
+                except (ReadError, ValueError):
+                    # A failed local probe is not evidence of an old version or logout.
+                    retry_at = time.monotonic() + VERSION_RETRY_SECONDS
+                cached = _versions[key] = version, retry_at
+            version = cached[0] if cached else None
+            state = ('unverified' if version is None else 'supported' if minimum <= version < (3, 0, 0)
+                     else 'outdated' if version < minimum else 'unsupported')
+            found.append(dict(candidate, version=version, clientState=state))
+        # Retain every current candidate, dropping replaced binaries and removed clients.
+        for key in list(_versions):
+            if key not in keys:
+                del _versions[key]
+        ranks = {'supported': 4, 'outdated': 3, 'unsupported': 2, 'unverified': 1}
+        selected = max(found, key=lambda item: (ranks[item['clientState']], item['version'] or (0, 0, 0)),
+                       default=dict(executable=None, updateMethod='manual', version=None, clientState='missing'))
+        return dict(selected, clientVersion='.'.join(map(str, selected['version'])) if selected['version'] else '',
+                    clientUpdateMethod=selected['updateMethod'], clientMinimumVersion='.'.join(map(str, minimum)))
+
+
+def client_fields(info):
+    """Safe capability diagnostics. Executable paths and raw probe output stay local."""
+    return {key: info[key] for key in CLIENT_FIELDS}
+
+
+def supported_command():
+    info = client_info()
+    return info['executable'] if info['clientState'] == 'supported' else None
 
 
 def auth_status(executable):

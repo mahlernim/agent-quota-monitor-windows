@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from quota.activation import Activation, ClaudeRunner, DEFAULTS, Journal, classify
 from quota.activation_runners import NotLaunched
-from quota import model
+from quota import claude_cli, model
 from quota.server import handler
 from quota.vault import crypt
 
@@ -147,6 +147,20 @@ class ActivationTests(unittest.TestCase):
         for mutate in mutations:
             self.setUp(); self.enable(); mutate(self.monitor.rows[0]); self.mature()
             self.assertEqual(self.runner.sends, 0)
+
+    def test_cli_quota_without_extra_usage_evidence_never_activates(self):
+        report = dict(type='assistant', usage_report=dict(rate_limits=dict(limits=[
+            dict(kind='session', percent=0, resets_at=None),
+            dict(kind='weekly_all', percent=20, resets_at=model.timestamp(self.now + 604800))])))
+        result = dict(type='result', subtype='success', is_error=False, num_turns=0, total_cost_usd=0,
+                      usage=dict(input_tokens=0, output_tokens=0, cache_creation_input_tokens=0, cache_read_input_tokens=0))
+        self.monitor.rows[0].update(source=claude_cli.SOURCE, groups=claude_cli.parse_usage(
+            '\n'.join(json.dumps(item) for item in (report, result))))
+        self.assertEqual(classify(self.monitor.rows[0], self.now)[0], 'billing_unknown')
+        self.enable()
+        self.mature(12)
+        self.assertEqual(self.runner.sends, 0)
+        self.assertEqual(self.journal.data['attempts'], {})
 
     def test_missing_or_malformed_raw_reset_is_not_inactive(self):
         for raw in ({'utilization':0}, {'utilization':0,'resets_at':'bad'}, {'utilization':False,'resets_at':None}):
@@ -402,10 +416,10 @@ class ActivationTests(unittest.TestCase):
 class RunnerTests(unittest.TestCase):
     def test_only_verified_version_and_subscription_identity_allowed(self):
         runner = ClaudeRunner()
-        with patch('quota.activation.connections.client_command', return_value=['synthetic.exe']), patch('quota.activation.claude_cli.run', return_value=(0,'2.1.281 (Claude Code)')):
+        with patch('quota.activation.claude_cli.client_info', return_value=dict(executable='synthetic.exe', clientState='supported')):
             self.assertTrue(runner.capability()[0])
         metadata = dict(accountUuid='account-a', organizationUuid='org-a', emailAddress='same@example.test')
-        with patch.object(runner,'capability',return_value=(True,'')), patch('quota.activation.connections.client_command',return_value=['synthetic.exe']), patch('quota.activation.providers.load',return_value={'oauthAccount':metadata}), patch('quota.activation.claude_cli.auth_status', return_value=dict(orgId='org-b',email='same@example.test',subscriptionType='pro')):
+        with patch('quota.activation.claude_cli.client_info',return_value=dict(executable='synthetic.exe', clientState='supported')), patch('quota.activation.providers.load',return_value={'oauthAccount':metadata}), patch('quota.activation.claude_cli.auth_status', return_value=dict(orgId='org-b',email='same@example.test',subscriptionType='pro')):
             with self.assertRaises(ValueError): runner.prepare(row())
 
     def test_prompt_restrictions_fixed_model_and_no_output_retention(self):

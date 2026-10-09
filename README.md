@@ -6,7 +6,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 [Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.2/agent-quota-monitor-windows-0.4.2-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.2/agent-quota-monitor-windows-0.4.2-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.2)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.3)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -43,7 +43,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.2/agent-quota-monitor-windows-0.4.2-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
@@ -83,7 +83,9 @@ Use Claude Code 2.1.281 or a newer 2.x version for quota reads through its built
 
 The monitor uses the default Claude Code subscription login. API keys, alternate endpoints, and custom configuration directories set in environment variables do not redirect its reads. Your environment and client settings stay unchanged.
 
-Older clients, or clients whose version cannot be checked, use the saved-session reader. Settings shows that session's expiry. If it expires, choose **Sign in**. Signing in does not reset quota. A failed version check is retried after five minutes.
+The monitor chooses the newest supported Claude Code it finds among known installation locations. Settings shows the selected version and reading source. If only an older client is available, **Update Claude Code** offers the official update for that installation. The command runs only after you confirm. When it finishes, the monitor detects the updated client and switches readers automatically.
+
+Older clients, or clients whose version cannot be checked, retain the saved-session reader. Settings explains why and shows its expiry. A failed version check is retried after five minutes. Update an outdated client before repeating sign-in. If the official client itself reports that you are signed out, use **Sign in**. Signing in does not reset quota.
 
 ### Google Antigravity
 
@@ -141,7 +143,8 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | The Antigravity CLI isn't installed and the desktop app is closed | No Antigravity source is running | **Install CLI**, or open the desktop app |
 | The Antigravity CLI needs sign-in | The CLI session lapsed | **Copy command**, then run `agy -p /usage` in a terminal |
 | Codex didn't accept the saved session | The Codex session lapsed | Open Codex, or **Sign in** |
-| Your Claude Code session expired | The saved Claude Code session needs renewal | Choose **Sign in**. No message or available quota is needed |
+| Claude Code is too old for CLI-managed reads | An older client is using the saved-session reader | Choose **Update Claude Code** and confirm the official update |
+| Your Claude Code session expired | The saved Claude Code session needs renewal | Update an outdated client first, or choose **Sign in** if the official login needs attention |
 | Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
 | GitHub Copilot isn't set up yet, or Copilot is set up | Setup is incomplete, or no GitHub account is linked | **Set up Copilot**, then **Connect** |
 | No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
@@ -194,6 +197,8 @@ Activation is off on a fresh install and when first introduced by an update. Lat
 Supports **Codex weekly**, **direct Claude five-hour and weekly**, and **Antigravity Gemini and Claude/GPT five-hour and weekly** windows. Antigravity groups have separate controls. One prompt can start both windows in its group, so AQM records both and avoids a second prompt. Codex plans without a five-hour window do not get an invented one.
 
 AQM uses the signed-in official CLI with a fixed economical model. Codex uses GPT-6 Luna with low reasoning, Claude uses Haiku, Antigravity Gemini uses Flash, and Antigravity Claude/GPT uses GPT-OSS. Claude requires a Pro or Max subscription with extra usage off. Codex requires a recent client with isolated ephemeral execution. Antigravity uses plan mode and requires a CLI without configured plugins or MCP servers. Keep official clients current. Prompts consume subscription allowance, including CLI context that can be much larger than the short reply. There is no paid/API fallback.
+
+Claude activation stays unavailable when its quota source does not report whether extra usage is off. This includes CLI reports without that billing information. Updating Claude Code can therefore restore monitoring while leaving activation unavailable.
 
 AQM requires consecutive fresh successful readings throughout the chosen delay. Full quota with a fixed running countdown, stale readings, unknown reset information, and exhausted weekly quota never trigger activation. After a prompt, two fresh countdown readings must confirm the change. An uncertain delivery is not automatically retried. If a prompt is never confirmed before its window would have ended, for example because the PC slept, AQM records it as expired and waits for a new inactivity period. Settings shows the current activation status. At most five prompts can be sent per account and quota group in 24 hours. For Codex and Antigravity, consecutive full-quota readings must show a deadline moving with time before AQM treats a window as idle.
 

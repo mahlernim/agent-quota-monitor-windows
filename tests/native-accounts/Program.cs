@@ -202,6 +202,64 @@ internal static class Program
             "Offline and format-change failures have specific guidance");
         TestCards();
         TestProblems();
+        TestClaudeClientState();
+    }
+
+    private static JsonObject ClaudeSnapshot(string state = "outdated", string method = "npm", string error = "session_expired")
+    {
+        JsonObject sample = JsonNode.Parse(Snapshot("claude-update"))!.AsObject();
+        JsonObject row = sample["accounts"]![0]!.AsObject();
+        row["provider"] = "claude"; row["source"] = "Official Claude Code session / OAuth usage endpoint";
+        row["error"] = error; row["clientState"] = state; row["clientVersion"] = "2.1.280";
+        row["clientUpdateMethod"] = method; row["clientMinimumVersion"] = "2.1.281";
+        return sample;
+    }
+
+    private static void TestClaudeClientState()
+    {
+        AccountStatus outdated = Parse(ClaudeSnapshot().ToJsonString())[0];
+        Check(outdated.ClientVersion == "2.1.280" && outdated.ClientMinimumVersion == "2.1.281" &&
+            outdated.ClientState == "outdated" && outdated.ClientUpdateMethod == "npm" && outdated.Problem?.Action == "update-claude" &&
+            outdated.Problem.ActionLabel == "Update Claude Code" && outdated.Guidance.Contains("Update Claude Code") &&
+            !outdated.Guidance.Contains("Choose Sign in"), "An expired legacy session with a verified old client offers a source-specific update");
+        Check((outdated with { Error = "" }).Problem?.Action == "update-claude" &&
+            (outdated with { Error = "rate_limited" }).Problem?.Action is null &&
+            (outdated with { Error = "sign_in_required" }).Guidance.Contains("sign-in after updating"),
+            "A working old client offers an update while genuine provider cooldown keeps its waiting banner");
+        Check(outdated.ClientDetails.Contains("2.1.280") && outdated.ClientDetails.Contains("2.1.281 or newer 2.x") &&
+            outdated.Diagnostics().Contains("Update method · npm") && !outdated.Diagnostics().Contains(outdated.Label),
+            "Client version, support floor and update source enter Details and credential-free diagnostics");
+        AccountStatus unverified = outdated with { ClientVersion = "", ClientState = "unverified", Error = "" };
+        AccountStatus future = outdated with { ClientVersion = "3.0.0", ClientState = "unsupported", Error = "" };
+        Check(!unverified.ClaudeUpdateAvailable && unverified.Problem?.Action is null && unverified.Guidance.Contains("could not be checked") &&
+            unverified.Guidance.Contains("five minutes") && !unverified.Guidance.Contains("older than"),
+            "Failed version probes are not presented as outdated or as a logout");
+        Check(!future.ClaudeUpdateAvailable && future.Problem?.Action is null && future.Guidance.Contains("outside the supported range") &&
+            !future.Guidance.Contains("older than"), "An unsupported future major is not told to update an outdated client");
+        AccountStatus supported = outdated with { ClientVersion = "2.1.281", ClientState = "supported", Source = "Official Claude Code CLI /usage" };
+        Check((supported with { Error = "sign_in_required" }).Problem?.Action == "sign-in" &&
+            (supported with { Error = "sign_in_required" }).Guidance.Contains("reports that you are signed out") &&
+            !(supported with { Error = "sign_in_required" }).Problem!.Summary.Contains("saved session") &&
+            (supported with { Error = "claude_cli_failed" }).Problem?.Action is null &&
+            (supported with { Error = "claude_cli_timeout" }).Problem?.Action is null &&
+            (supported with { Error = "" }).Problem is null,
+            "CLI-managed reads require sign-in only for a reported auth failure, never a failed or timed-out quota read");
+        Check((outdated with { ClientUpdateMethod = "manual" }).Problem?.Action == "claude-update-help" &&
+            OfficialInstall.ClaudeUpdate("manual") is null && OfficialInstall.ClaudeUpdate("npm; arbitrary-command") is null,
+            "Unknown installation methods offer official instructions and cannot become command text");
+        foreach (var (method, expected) in new[] {
+            ("npm", "npm install -g @anthropic-ai/claude-code@latest"),
+            ("native", "& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe') update"),
+            ("winget", "winget upgrade Anthropic.ClaudeCode") })
+        {
+            var update = OfficialInstall.ClaudeUpdate(method)!;
+            var start = update.StartInfo();
+            Check(update.Command == expected && update.Confirmation.Contains(expected) && update.Script.Contains(expected) &&
+                update.Confirmation.Contains("Finish any active Claude Code work first") &&
+                start.ArgumentList.Contains("-NoExit") && !start.CreateNoWindow && !start.UseShellExecute &&
+                !update.Script.Contains("auth login") && !update.Script.Contains(" -p "),
+                method + " updates show and run the fixed official command in a visible window without sign-in or a prompt");
+        }
     }
 
     private static void TestCards()
@@ -247,10 +305,11 @@ internal static class Program
         int changed = 0, installs = 0;
         bool backendReady = true, confirmInstall = false;
         var clientInstalls = new List<OfficialInstall>();
+        var openedLinks = new List<string>();
         owner.Show();
         var window = new AccountsWindow(owner, http, () => ++changed, backendReady: () => backendReady,
             confirmCliInstall: _ => confirmInstall, startCliInstall: () => ++installs,
-            confirmInstall: (_, _) => confirmInstall, startInstall: clientInstalls.Add)
+            confirmInstall: (_, _) => confirmInstall, startInstall: clientInstalls.Add, openLink: openedLinks.Add)
         { WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000, ShowActivated = false, ShowInTaskbar = false };
         bool closed = false;
         window.Closed += (_, _) => closed = true;
@@ -323,6 +382,38 @@ internal static class Program
             await Call(window, "PollAsync");
             Check(installButtons["codex"].Visibility == Visibility.Collapsed && signInButtons["codex"].Visibility == Visibility.Visible,
                 "Sign in returns once the client is found");
+            JsonObject claudeUpdate = ClaudeSnapshot();
+            handler.Status = claudeUpdate.ToJsonString();
+            await Call(window, "PollAsync");
+            var claudeUpdateButton = Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-claude:claude-update")!;
+            Check(claudeUpdateButton.Content.ToString() == "Update Claude Code", "Settings offers Update Claude Code for a verified old client");
+            int beforeClaudeUpdate = clientInstalls.Count, requestsBeforeClaudeUpdate = handler.Requests;
+            confirmInstall = false;
+            Click(claudeUpdateButton);
+            Check(clientInstalls.Count == beforeClaudeUpdate && handler.Requests == requestsBeforeClaudeUpdate,
+                "Declining a Claude update launches nothing and sends no backend request");
+            confirmInstall = true;
+            Click(claudeUpdateButton);
+            Check(clientInstalls.Count == beforeClaudeUpdate + 1 && clientInstalls.Last() == OfficialInstall.ClaudeUpdate("npm") &&
+                handler.Requests == requestsBeforeClaudeUpdate && Field<TextBlock>(window, "_message").Text.Contains("within a minute"),
+                "A confirmed Claude update launches only its matching updater without signing in or refreshing quota");
+            Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "details:claude-update")!);
+            string claudeDetails = Tagged<TextBlock>(Field<StackPanel>(window, "_accounts"), "detail-text:claude-update")!.Text;
+            Check(claudeDetails.Contains("Claude Code session") && claudeDetails.Contains("2.1.280") && claudeDetails.Contains("2.1.281 or newer 2.x"),
+                "Expanded Settings details show the selected version, reading source and support floor");
+            claudeUpdate["accounts"]![0]!["clientUpdateMethod"] = "manual";
+            handler.Status = claudeUpdate.ToJsonString();
+            await Call(window, "PollAsync");
+            Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-claude:claude-update")!);
+            Check(openedLinks.SequenceEqual(new[] { OfficialInstall.ClaudeUpdateHelp }) && clientInstalls.Count == beforeClaudeUpdate + 1,
+                "An unknown installation opens only the fixed official update guide");
+            claudeUpdate["accounts"]![0]!["clientState"] = "supported";
+            handler.Status = claudeUpdate.ToJsonString();
+            await Call(window, "PollAsync");
+            Check(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-claude:claude-update") is null,
+                "Polling removes the update action once the backend reports a supported replacement");
+            handler.Status = missing.ToJsonString();
+            await Call(window, "PollAsync");
             await TestCopilot(window, handler, missing, clientInstalls);
             confirmInstall = false;
             await TestProviders(window, handler);
@@ -436,6 +527,11 @@ internal static class Program
                     account["nextAttempt"] = 1790000300;
                     if (index != 2) account["groups"] = new JsonArray();
                 }
+                JsonObject oldClaude = preview["accounts"]![1]!.AsObject();
+                oldClaude["source"] = "Official Claude Code session / OAuth usage endpoint";
+                oldClaude["status"] = "stale"; oldClaude["error"] = "session_expired";
+                oldClaude["clientVersion"] = "2.1.280"; oldClaude["clientState"] = "outdated";
+                oldClaude["clientUpdateMethod"] = "npm"; oldClaude["clientMinimumVersion"] = "2.1.281";
                 handler.Status = preview.ToJsonString();
                 await Call(window, "PollAsync");
                 using var activationSample = JsonDocument.Parse("""
@@ -443,10 +539,9 @@ internal static class Program
                     "accounts":[{"accountId":"sample-claude","label":"jordan@example.test","supported":true,"status":"Waiting for the inactivity delay.","reason":"Claude five-hour activation with Haiku."}]}}
                     """);
                 Field<ActivationPanel>(window,"_activation").Render(activationSample.RootElement);
-                window.ShowActivation();
                 Field<TextBlock>(window, "_message").Text = "Synthetic preview. No provider account is connected.";
-                Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "details:sample-copilot")!);
-                window.Height = 920;
+                Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "details:sample-claude")!);
+                window.Height = 1000;
                 window.UpdateLayout();
                 await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                 var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
@@ -483,7 +578,9 @@ internal static class Program
         string scripts = Path.Combine(Path.GetTempPath(), "aqm-installer-scripts");
         Directory.CreateDirectory(scripts);
         foreach ((string name, OfficialInstall installer) in new[] { ("antigravity", OfficialInstall.Antigravity), ("claude", OfficialInstall.Claude),
-                     ("codex", OfficialInstall.Codex), ("copilot", OfficialInstall.Copilot) })
+                     ("codex", OfficialInstall.Codex), ("copilot", OfficialInstall.Copilot),
+                     ("claude-update-npm", OfficialInstall.ClaudeUpdate("npm")!), ("claude-update-native", OfficialInstall.ClaudeUpdate("native")!),
+                     ("claude-update-winget", OfficialInstall.ClaudeUpdate("winget")!) })
             File.WriteAllText(Path.Combine(scripts, name + ".ps1"), installer.Script);
         Check(script.Contains("--id $id --exact --source winget") && !script.Contains("--accept") && script.Contains("'GitHub.cli'") &&
             script.Contains("'OpenJS.NodeJS.LTS'") && script.Contains("'GitHub.Copilot'") && script.Contains(OfficialInstall.CopilotSdk) &&

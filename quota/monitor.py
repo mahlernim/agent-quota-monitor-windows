@@ -220,12 +220,21 @@ class Monitor:
                 return
             old = copy.deepcopy(self.rows.get(key, {}))
         repair_retry_state(old, now)
+        # Client diagnostics may change during a cooldown without making a provider call.
+        if account.get('provider') == 'claude':
+            from .claude_cli import CLIENT_FIELDS, SOURCE
+            migrated = (old.get('source') == 'Official Claude Code session / OAuth usage endpoint'
+                        and account.get('source') == SOURCE and account.get('clientState') == 'supported'
+                        and old.get('error') == 'session_expired' and not old.get('providerCooldown'))
+            old.update({field: account[field] for field in CLIENT_FIELDS if field in account})
+        else:
+            migrated = False
         if old.get('retryState') == 'suspended':
             with self.lock:
                 self.rows[key] = old
             return
         renewed = old.get('error') in SESSION_ERRORS and not old.get('providerCooldown') and account.get('sessionRevision') != old.get('sessionRevision')
-        if not renewed and now < old.get('nextAttempt', 0):
+        if not renewed and not migrated and now < old.get('nextAttempt', 0):
             with self.lock:
                 self.rows[key] = old
             return
@@ -285,6 +294,7 @@ class Monitor:
             self.next_discovery = now + 60
             found = []
             discovery_errors = {}
+            discovery_clients = {}
             for provider, fn in [('codex', providers.codex_account), ('claude', providers.claude_account), ('antigravity', providers.antigravity_accounts), ('copilot', copilot_account)]:
                 if self.enabled is not None and provider not in self.enabled:
                     continue
@@ -293,6 +303,8 @@ class Monitor:
                     found.extend(result if isinstance(result, list) else [result])
                 except Exception as err:
                     discovery_errors[provider] = err.code if isinstance(err, providers.ReadError) else 'local_discovery_failed'
+                    if provider == 'claude' and isinstance(err, providers.ReadError):
+                        discovery_clients[provider] = getattr(err, 'client_fields', {})
             self._refresh_accounts(found)
             # Discovery can find a CLI session whose quota read still fails.
             # Read the desktop as an independent source, never relabel its quota
@@ -318,6 +330,7 @@ class Monitor:
                         recent = row.get('status') == 'live' and finite_number(success) and now - success <= INTERVAL*2
                         row.update(status='live' if recent else 'stale' if success else 'pending',
                                    error=discovery_errors.get(row['provider'], 'local_session_unavailable'))
+                        row.update(discovery_clients.get(row['provider'], {}))
                         if row.get('retryState') == 'startup_retry':
                             row.pop('retryState')
                         if not row.get('providerCooldown') and row.get('retryState') != 'suspended':
@@ -329,6 +342,7 @@ class Monitor:
                         self.rows.pop(placeholder, None)
                     elif self.enabled is not None and provider in self.enabled and not any(r['provider'] == provider for r in self.rows.values()):
                         self.rows[placeholder] = dict(id=placeholder, provider=provider, label='Sign-in needed', source='No readable official session', identityStatus='Unverified', groups=[], status='pending', error=discovery_errors.get(provider, 'local_session_unavailable'), lastSuccess=None)
+                        self.rows[placeholder].update(discovery_clients.get(provider, {}))
             with self.lock:
                 try:
                     self.vault.save(self.rows)
