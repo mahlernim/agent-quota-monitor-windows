@@ -210,6 +210,7 @@ public sealed class MainWindow : Window
         _selectedKey = selectedKey;
         _pins = pins ?? new HashSet<string>();
         var structure = string.Join("|", Sections().Select(section => section.Id + ":" + section.Problem?.Summary + ":" +
+            section.Problem?.Action + ":" + section.Status?.ClientUpdateMethod + ":" +
             string.Join(",", section.Items.Select(item => item.Key))));
         if (_cards.Count == _items.Count && structure == _structure)
         {

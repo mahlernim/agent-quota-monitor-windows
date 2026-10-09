@@ -166,11 +166,17 @@ def claude_expiry(oauth):
 
 
 def claude_account():
-    from .claude_cli import cli_account, supported_command
-    executable = supported_command()
-    if executable:
-        return cli_account(executable, HOME)
-    return claude_legacy_account()
+    from .claude_cli import cli_account, client_info, client_fields
+    info = client_info()
+    fields = client_fields(info)
+    try:
+        result = (cli_account(info['executable'], HOME) if info['clientState'] == 'supported'
+                  else claude_legacy_account())
+    except ReadError as error:
+        error.client_fields = fields
+        raise
+    result.update(fields)
+    return result
 
 
 def claude_legacy_account():

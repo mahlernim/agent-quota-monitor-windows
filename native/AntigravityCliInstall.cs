@@ -19,6 +19,30 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
         "It installs Claude Code for your Windows account in %USERPROFILE%\\.local\\bin. " +
         "Claude Code needs a Claude Pro, Max, Team, or Enterprise plan.", "Anthropic Claude");
 
+    internal const string ClaudeUpdateHelp = "https://code.claude.com/docs/en/setup#update-claude-code";
+
+    /// <summary>Only known installation methods map to fixed vendor commands. Unknown installations use the guide.</summary>
+    internal static OfficialInstall? ClaudeUpdate(string method)
+    {
+        string? command = method switch
+        {
+            "npm" => "npm install -g @anthropic-ai/claude-code@latest",
+            "native" => "& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe') update",
+            "winget" => "winget upgrade Anthropic.ClaudeCode",
+            _ => null
+        };
+        if (command is null) return null;
+        string confirmation = "Update Claude Code?\n\nA PowerShell window will run this official update command for your " +
+            (method == "native" ? "native" : method == "winget" ? "WinGet" : "npm") + " installation.\n\n" + command +
+            "\n\nFinish any active Claude Code work first. The monitor will detect the updated client within a minute. " +
+            "The update does not send a model prompt or start sign-in.";
+        string script = string.Join("\n", "$ErrorActionPreference = 'Stop'", command,
+            "if ($LASTEXITCODE) { throw 'Claude Code update did not finish. Check the output above.' }",
+            "Write-Host ''",
+            "Write-Host 'Update command finished. Agent Quota Monitor detects supported clients within a minute.' -ForegroundColor Green");
+        return new OfficialInstall("Update Claude Code", command, confirmation, script);
+    }
+
     /// <summary>OpenAI's official standalone Codex installer. OpenAI documents running it with a process-only execution policy bypass.</summary>
     internal static readonly OfficialInstall Codex = Client("Codex", "https://chatgpt.com/codex/install.ps1",
         "It installs Codex for your Windows account in %LOCALAPPDATA%\\Programs\\OpenAI\\Codex and adds it to your PATH.", "OpenAI Codex", true);

@@ -151,14 +151,14 @@ class RoutingTests(unittest.TestCase):
             with self.subTest(response=response), tempfile.TemporaryDirectory() as directory:
                 exe = Path(directory) / 'claude.exe'; exe.write_text('binary')
                 now = [1000]
-                with patch('quota.connections.client_command', return_value=[str(exe), 'auth', 'login']), \
+                with patch('quota.connections.claude_candidates', return_value=[dict(executable=str(exe), updateMethod='native')]), \
                         patch.object(cli, 'run', side_effect=[response, (0, '2.1.281 (Claude Code)')]) as run, \
                         patch('time.monotonic', side_effect=lambda: now[0]), \
-                        patch.object(providers, 'claude_legacy_account', return_value='legacy'):
+                        patch.object(providers, 'claude_legacy_account', return_value={'source': 'legacy'}):
                     cli._versions.clear()
-                    self.assertEqual(providers.claude_account(), 'legacy')
+                    self.assertEqual(providers.claude_account()['source'], 'legacy')
                     now[0] += 299
-                    self.assertEqual(providers.claude_account(), 'legacy')
+                    self.assertEqual(providers.claude_account()['source'], 'legacy')
                     self.assertEqual(run.call_count, 1)
                     now[0] += 1
                     self.assertEqual(cli.supported_command(), str(exe))
@@ -167,7 +167,7 @@ class RoutingTests(unittest.TestCase):
     def test_upgrade_bypasses_failed_probe_cooldown(self):
         with tempfile.TemporaryDirectory() as directory:
             exe = Path(directory) / 'claude.exe'; exe.write_text('old')
-            with patch('quota.connections.client_command', return_value=[str(exe), 'auth', 'login']), \
+            with patch('quota.connections.claude_candidates', return_value=[dict(executable=str(exe), updateMethod='native')]), \
                     patch.object(cli, 'run', side_effect=[(1, ''), (0, '2.1.281 (Claude Code)')]) as run:
                 cli._versions.clear()
                 self.assertIsNone(cli.supported_command())
@@ -178,27 +178,34 @@ class RoutingTests(unittest.TestCase):
     def test_missing_executable_falls_back_without_probe(self):
         with tempfile.TemporaryDirectory() as directory:
             exe = Path(directory) / 'missing.exe'
-            with patch('quota.connections.client_command', return_value=[str(exe)]), \
+            with patch('quota.connections.claude_candidates', return_value=[dict(executable=str(exe), updateMethod='native')]), \
                     patch.object(cli, 'run') as run, \
-                    patch.object(providers, 'claude_legacy_account', return_value='legacy'):
-                self.assertEqual(providers.claude_account(), 'legacy')
+                    patch.object(providers, 'claude_legacy_account', return_value={'source': 'legacy'}):
+                self.assertEqual(providers.claude_account()['source'], 'legacy')
                 run.assert_not_called()
 
     def test_cli_errors_never_fall_back_to_direct_http(self):
-        with patch.object(cli, 'supported_command', return_value='claude.exe'), \
+        info = dict(executable='claude.exe', clientVersion='2.1.281', clientState='supported',
+                    clientUpdateMethod='native', clientMinimumVersion='2.1.281')
+        with patch.object(cli, 'client_info', return_value=info), \
                 patch.object(cli, 'cli_account', side_effect=providers.ReadError('claude_cli_failed')), \
                 patch.object(providers, 'claude_legacy_account') as old:
             with self.assertRaises(providers.ReadError): providers.claude_account()
             old.assert_not_called()
 
     def test_older_client_uses_existing_reader(self):
-        with patch.object(cli, 'supported_command', return_value=None), patch.object(providers, 'claude_legacy_account', return_value='legacy'):
-            self.assertEqual(providers.claude_account(), 'legacy')
+        info = dict(executable='claude.exe', clientVersion='2.1.280', clientState='outdated',
+                    clientUpdateMethod='npm', clientMinimumVersion='2.1.281')
+        with patch.object(cli, 'client_info', return_value=info), patch.object(providers, 'claude_legacy_account', return_value={'source': 'legacy'}):
+            row = providers.claude_account()
+            self.assertEqual(row['source'], 'legacy')
+            self.assertEqual(row['clientState'], 'outdated')
+            self.assertNotIn('executable', row)
 
     def test_version_cache_is_invalidated_on_upgrade(self):
         with tempfile.TemporaryDirectory() as directory:
             exe = Path(directory) / 'claude.exe'; exe.write_text('old')
-            with patch('quota.connections.client_command', return_value=[str(exe), 'auth', 'login']), \
+            with patch('quota.connections.claude_candidates', return_value=[dict(executable=str(exe), updateMethod='native')]), \
                     patch.object(cli, 'run', return_value=(0, '2.1.280 (Claude Code)')) as run:
                 cli._versions.clear()
                 self.assertIsNone(cli.supported_command())

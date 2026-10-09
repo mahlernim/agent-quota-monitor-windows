@@ -1,5 +1,6 @@
 """Bounded official-client login handoffs. No credential or OAuth ownership."""
 import copy
+from itertools import islice
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +13,8 @@ PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
 ACTIVE = ('starting', 'waiting', 'verifying')
 EARLY_EXIT_SECONDS = 5
 CLIENT_RECHECK_SECONDS = 20
+MAX_CLAUDE_CANDIDATES = 16
+MAX_CLAUDE_DISCOVERY_FILES = 128
 WAITING = {
     'copilot': 'Follow the GitHub CLI sign-in window and browser. The monitor verifies the quota afterward.',
     'claude': 'Complete sign-in in the browser. If it shows a code instead of returning, paste the code into the Claude Code window.',
@@ -34,7 +37,74 @@ def _newest(root, pattern):
         return []
 
 
+def claude_candidates():
+    """Known existing client locations only. No command or package-manager calls."""
+    from .providers import refresh_path
+    refresh_path()
+    home = Path.home()
+    local, roaming = _environment_path('LOCALAPPDATA'), _environment_path('APPDATA')
+    native = home / '.local'
+    npm = roaming / 'npm/node_modules/@anthropic-ai/claude-code' if roaming else None
+    winget = local / 'Microsoft/WinGet' if local else None
+
+    def method(path):
+        # Update commands refer to the installation, never arbitrary PATH text.
+        # The native updater targets this stable launcher. A PATH-only version
+        # file or copied binary must not offer an updater for a missing launcher.
+        if path == native / 'bin/claude.exe':
+            return 'native'
+        if npm and path.is_relative_to(npm):
+            return 'npm'
+        if winget and (path == winget / 'Links/claude.exe' or
+                       path.is_relative_to(winget / 'Packages') and
+                       path.relative_to(winget / 'Packages').parts[0].startswith('Anthropic.ClaudeCode_')):
+            return 'winget'
+        return 'manual'
+
+    def matches(root, pattern):
+        try:
+            # Limit cache/package enumeration as well as version subprocesses.
+            return sorted(islice(root.glob(pattern), MAX_CLAUDE_DISCOVERY_FILES), key=str)
+        except OSError:
+            return []
+
+    paths = []
+    installed = shutil.which('claude.exe')
+    if installed:
+        paths.append(Path(installed))
+    paths.append(native / 'bin/claude.exe')
+    if npm:
+        paths.append(npm / 'bin/claude.exe')
+        paths += matches(npm / 'node_modules', '@anthropic-ai/claude-code-win32-*/claude.exe')
+    if winget:
+        paths.append(winget / 'Links/claude.exe')
+        paths += matches(winget / 'Packages', 'Anthropic.ClaudeCode_*/claude.exe')
+    if local:
+        paths += matches(local / 'npm-cache/_npx', '*/node_modules/@anthropic-ai/claude-code-win32-*/claude.exe')
+    found = {}
+    for path in paths:
+        try:
+            if not path.is_file():
+                continue
+            resolved = path.resolve()
+            key = os.path.normcase(str(resolved))
+            update = method(path)
+            if key in found:
+                if found[key]['updateMethod'] == 'manual':
+                    found[key]['updateMethod'] = update
+            elif len(found) < MAX_CLAUDE_CANDIDATES:
+                found[key] = dict(executable=str(resolved), updateMethod=update)
+        except OSError:
+            # An official update may replace files while we enumerate them.
+            continue
+    return list(found.values())
+
+
 def client_command(provider):
+    if provider == 'claude':
+        from .claude_cli import client_info
+        executable = client_info()['executable']
+        return [executable, 'auth', 'login', '--claudeai'] if executable else None
     from .providers import refresh_path
     refresh_path()
     local = _environment_path('LOCALAPPDATA')
@@ -45,14 +115,6 @@ def client_command(provider):
     if provider == 'antigravity':
         candidates = [local / 'Programs/Antigravity/Antigravity.exe'] if local else []
         args = []
-    elif provider == 'claude':
-        candidates = [Path.home() / '.local/bin/claude.exe']
-        if roaming:
-            candidates.append(roaming / 'npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe')
-            candidates += _newest(roaming / 'npm/node_modules/@anthropic-ai/claude-code/node_modules', '@anthropic-ai/claude-code-win32-*/claude.exe')
-        if local:
-            candidates += _newest(local / 'npm-cache/_npx', '*/node_modules/@anthropic-ai/claude-code-win32-*/claude.exe')
-        args = ['auth', 'login', '--claudeai']
     elif provider == 'codex':
         # The official standalone installer uses this per-user folder by default.
         candidates = [local / 'Programs/OpenAI/Codex/bin/codex.exe'] if local else []

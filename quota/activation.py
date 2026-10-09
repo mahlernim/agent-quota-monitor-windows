@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 import uuid
-from . import claude_cli, connections, model, providers
+from . import claude_cli, model, providers
 from .vault import crypt
 
 DEFAULTS = dict(enabled=False, accounts=[], idleMinutes=30, suggestions=True,
@@ -102,22 +102,18 @@ class Journal:
 
 class ClaudeRunner:
     def capability(self):
-        command = connections.client_command('claude')
-        if not command:
+        info = claude_cli.client_info(minimum=(2, 1, 280))
+        if info['clientState'] == 'missing':
             return False, 'Install Claude Code to use activation.'
-        executable = command[0]
-        code, version = claude_cli.run(executable, ['--version'], timeout=5)
-        import re
-        match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)\s*', version)
-        if code or not match or not (2, 1, 280) <= tuple(map(int, match.groups())) < (3, 0, 0):
+        if info['clientState'] != 'supported':
             return False, 'Update Claude Code to use activation.'
         return True, 'A short Haiku subscription prompt. Extra usage must be off.'
 
     def prepare(self, row):
-        ready, _ = self.capability()
-        if not ready:
+        info = claude_cli.client_info(minimum=(2, 1, 280))
+        if info['clientState'] != 'supported':
             raise ValueError('Runner unavailable')
-        executable = connections.client_command('claude')[0]
+        executable = info['executable']
         metadata = providers.load(Path.home()/'.claude.json').get('oauthAccount') or {}
         if not all(isinstance(metadata.get(k), str) and metadata[k] for k in ('accountUuid', 'organizationUuid', 'emailAddress')):
             raise ValueError('Unverified identity')

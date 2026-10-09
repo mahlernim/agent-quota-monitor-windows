@@ -41,7 +41,7 @@ class ConnectionTests(unittest.TestCase):
             executable = root / 'npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe'
             executable.parent.mkdir(parents=True)
             executable.touch()
-            with patch('quota.connections._environment_path', return_value=root), patch('quota.connections.Path.home', return_value=root), patch('quota.connections.shutil.which', return_value=None):
+            with patch('quota.connections._environment_path', return_value=root), patch('quota.connections.Path.home', return_value=root), patch('quota.connections.shutil.which', return_value=None), patch('quota.claude_cli.run', return_value=(0, '2.1.281 (Claude Code)')):
                 self.assertEqual(client_command('claude'), [str(executable.resolve()), 'auth', 'login', '--claudeai'])
 
     def setUp(self):

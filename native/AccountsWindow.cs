@@ -77,6 +77,7 @@ public sealed class AccountsWindow : Window
     private readonly Action _startCliInstall;
     private readonly Func<Window, OfficialInstall, bool> _confirmInstall;
     private readonly Action<OfficialInstall> _startInstall;
+    private readonly Action<string> _openLink;
     private readonly Dictionary<string, Button> _clientInstallButtons = [];
     private readonly Button _copilotSetup = Ui.Apply(new Button { Content = "Set up Copilot", Tag = "setup:copilot", Visibility = Visibility.Collapsed,
         Margin = new Thickness(0, 1, 6, 1), ToolTip = "Installs the official GitHub tools and SDK after you confirm." });
@@ -86,12 +87,13 @@ public sealed class AccountsWindow : Window
 
     internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null, Func<bool>? backendReady = null,
         Func<Window, bool>? confirmCliInstall = null, Action? startCliInstall = null,
-        Func<Window, OfficialInstall, bool>? confirmInstall = null, Action<OfficialInstall>? startInstall = null)
+        Func<Window, OfficialInstall, bool>? confirmInstall = null, Action<OfficialInstall>? startInstall = null, Action<string>? openLink = null)
     {
         _confirmCliInstall = confirmCliInstall ?? AntigravityCliInstall.Confirm;
         _startCliInstall = startCliInstall ?? AntigravityCliInstall.Start;
         _confirmInstall = confirmInstall ?? ((window, installer) => installer.Confirm(window));
         _startInstall = startInstall ?? (installer => installer.Start());
+        _openLink = openLink ?? (url => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }));
         _updates = updates;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -502,6 +504,17 @@ public sealed class AccountsWindow : Window
         content.Children.Add(line);
         if (account.Guidance.Length > 0)
             content.Children.Add(new TextBlock { Text = account.Guidance, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Ui.WarningText, Margin = new Thickness(14, 2, 0, 0) });
+        if (account.ClaudeUpdateAvailable && !editing)
+        {
+            var update = Ui.Button("Update Claude Code", () => UpdateClaude(account));
+            update.Tag = "update-claude:" + account.Id;
+            update.HorizontalAlignment = HorizontalAlignment.Left;
+            update.Margin = new Thickness(14, 4, 0, 2);
+            update.ToolTip = account.ClaudeUpdateAction == "claude-update-help" ? "Open the official update instructions for this installation."
+                : "Shows the official update command first. Runs only after you confirm.";
+            AutomationProperties.SetName(update, "Update Claude Code for " + account.Label);
+            content.Children.Add(update);
+        }
         if (expanded && !editing)
             content.Children.Add(new TextBlock { Text = DetailText(account), Tag = "detail-text:" + account.Id, TextWrapping = TextWrapping.Wrap,
                 FontSize = 12, Foreground = Ui.Muted, Margin = new Thickness(14, 4, 0, 2) });
@@ -566,6 +579,7 @@ public sealed class AccountsWindow : Window
         };
         if (account.SessionExpiresAt.HasValue) lines.Add("Session expires · " + AccountStatus.Timestamp(account.SessionExpiresAt, "Not reported"));
         if (account.SessionRenewedAt.HasValue) lines.Add("Session last renewed · " + AccountStatus.Timestamp(account.SessionRenewedAt, "Not reported"));
+        if (account.ClientDetails.Length > 0) lines.Add(account.ClientDetails);
         if (account.QuotaDetails.Length > 0) lines.Add(account.QuotaDetails);
         return string.Join("\n", lines);
     }
@@ -700,6 +714,21 @@ public sealed class AccountsWindow : Window
             ShowSuccess("The official installer opened in PowerShell. " + next);
         }
         catch (Exception) { ShowError("PowerShell couldn't be started. Run the install command shown in the confirmation yourself."); }
+    }
+
+    private void UpdateClaude(AccountStatus account)
+    {
+        if (_closed || !account.ClaudeUpdateAvailable) return;
+        var update = OfficialInstall.ClaudeUpdate(account.ClientUpdateMethod);
+        if (update is null)
+        {
+            try { _openLink(OfficialInstall.ClaudeUpdateHelp); ShowSuccess("Official Claude Code update instructions opened in your browser."); }
+            catch (Exception) { ShowError("The browser couldn't be started. See code.claude.com/docs/en/setup for update instructions."); }
+            return;
+        }
+        if (!_confirmInstall(this, update)) return;
+        try { _startInstall(update); ShowSuccess("The Claude Code update opened in PowerShell. The monitor detects the updated client within a minute."); }
+        catch (Exception) { ShowError("PowerShell couldn't be started. Run the update command shown in the confirmation yourself."); }
     }
 
     private async Task ConnectCopilotAsync()

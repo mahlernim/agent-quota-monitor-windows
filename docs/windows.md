@@ -6,9 +6,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 Requires Windows 10 or 11 on x64 and an eligible account with each provider you enable.
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.2/agent-quota-monitor-windows-0.4.2-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.2/agent-quota-monitor-windows-0.4.2-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.3/agent-quota-monitor-windows-0.4.3-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -27,7 +27,11 @@ With Claude Code 2.1.281 or a newer 2.x version, the monitor uses its built-in `
 
 The default Claude Code subscription login is used. Environment variables for API keys, alternate endpoints, and custom configuration directories do not redirect the monitor's reads. Your environment and client settings stay unchanged.
 
-Older clients, or clients whose version cannot be checked, use the saved-session reader and show its expiry in Settings. Failed version checks retry after five minutes. If the session needs attention, use **Sign in**. No message or available quota is needed, and signing in does not reset quota.
+The monitor chooses the newest supported client in known installation locations. Settings shows its version and source. An outdated client offers **Update Claude Code**, with the official update command shown before confirmation. The monitor detects the updated client while running and switches readers automatically.
+
+Older clients or failed version checks retain the saved-session reader. Settings explains the fallback and shows the session expiry. Failed version probes retry after five minutes. Update an outdated client before repeating sign-in. If the official client itself needs a login, choose **Sign in**. No message or available quota is needed, and signing in does not reset quota.
+
+Claude window activation requires explicit confirmation from the quota source that extra usage is off. CLI quota reports without that information keep activation unavailable, even when monitoring succeeds.
 
 ### Antigravity sources and account identity
 
@@ -122,6 +126,6 @@ Quota settings and cached snapshots are encrypted for your Windows user under `%
 
 Activation choices and attempt receipts are encrypted separately in `activation.dpapi` in that folder. Receipts contain stable account IDs, timestamps, outcomes, and numeric token counts. They do not contain response text or credentials. Updates preserve this file. Do not delete it to retry an uncertain prompt.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.2) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.3) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

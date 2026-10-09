@@ -10,7 +10,8 @@ internal sealed record AccountProblem(string Summary, string? Action = null, str
 
 internal sealed record AccountStatus(string Id, string Provider, string Label, string Status,
     string Source, string Identity, string Error, double? LastSuccess, double? NextAttempt, string QuotaDetails = "", string RetryState = "",
-    double? SessionExpiresAt = null, double? SessionRenewedAt = null)
+    double? SessionExpiresAt = null, double? SessionRenewedAt = null, string ClientVersion = "", string ClientState = "",
+    string ClientUpdateMethod = "", string ClientMinimumVersion = "")
 {
     internal static AccountStatus[] Parse(JsonElement status)
     {
@@ -27,7 +28,8 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         Text(account, "id"), Text(account, "provider"), Text(account, "label"), Text(account, "status"),
         Text(account, "source"), Text(account, "identityStatus"), Text(account, "error"),
         Number(account, "lastSuccess"), Number(account, "nextAttempt"), DescribeQuotas(account), Text(account, "retryState"),
-        Number(account, "sessionExpiresAt"), Number(account, "sessionRenewedAt"));
+        Number(account, "sessionExpiresAt"), Number(account, "sessionRenewedAt"), Text(account, "clientVersion"),
+        Text(account, "clientState"), Text(account, "clientUpdateMethod"), Text(account, "clientMinimumVersion"));
 
     internal static string Timestamp(double? seconds, string fallback)
     {
@@ -42,7 +44,31 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
     /// <summary>The current reader could not interpret the provider response, so a newer monitor may help.</summary>
     internal bool ReportsFormatChange => Error == "schema_changed" && !AwaitingStartupRetry;
 
-    internal string Guidance => RetryState == "suspended"
+    internal bool ClaudeUpdateAvailable => Provider == "claude" && ClientState == "outdated";
+    internal string ClaudeUpdateAction => OfficialInstall.ClaudeUpdate(ClientUpdateMethod) is null ? "claude-update-help" : "update-claude";
+    private string ClaudeMinimum => ClientMinimumVersion.Length > 0 ? ClientMinimumVersion : "2.1.281";
+    internal string ClientDetails => Provider != "claude" || ClientState.Length == 0 ? "" :
+        "Claude Code version · " + (ClientVersion.Length > 0 ? ClientVersion : "Not verified") + "\n" +
+        "CLI quota support · " + (ClientState switch {
+            "supported" => "Supported", "outdated" => "Update required", "unverified" => "Version check failed",
+            "unsupported" => "Unsupported version", "missing" => "Not installed", _ => "Not verified" }) + "\n" +
+        "Supported versions · " + ClaudeMinimum + " or newer 2.x\n" +
+        "Update method · " + (ClientUpdateMethod switch {
+            "npm" => "npm", "native" => "Native installer", "winget" => "WinGet", _ => "Official instructions" });
+
+    private string ClientGuidance => Provider != "claude" ? "" : ClientState switch
+    {
+        "outdated" => $"Claude Code {ClientVersion} is older than {ClaudeMinimum}. Update Claude Code for CLI-managed quota reads and session renewal. " +
+            (ClaudeUpdateAction == "claude-update-help" ? "Update Claude Code opens the official instructions for this installation." : "The update command runs only after you confirm."),
+        "unverified" => "The Claude Code version could not be checked. The monitor uses the saved session and retries the version check after five minutes.",
+        "unsupported" => $"Claude Code {ClientVersion} is outside the supported range for CLI quota reads. The monitor uses the saved session. " +
+            $"Supported versions are {ClaudeMinimum} or newer 2.x.",
+        _ => ""
+    };
+
+    internal string Guidance => string.Join(" ", new[] { ErrorGuidance, ClientGuidance }.Where(value => value.Length > 0));
+
+    private string ErrorGuidance => RetryState == "suspended"
         ? "Automatic reads are paused because the provider reported an unusable retry time. Check the official client for status."
         : AwaitingStartupRetry
         ? "The last read before the monitor restarted could not interpret the provider response. The monitor is reading again now and keeps the last values until then."
@@ -55,11 +81,16 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             "Antigravity desktop session was rejected. Sign in through the Antigravity desktop app, then press Refresh in the monitor.",
         "local_session_unavailable" when IsAntigravityDesktop =>
             "Antigravity desktop session is unavailable. Open the Antigravity desktop app, then press Refresh in the monitor.",
+        "sign_in_required" when ClaudeUpdateAvailable =>
+            "The saved Claude Code session was rejected. If Claude Code still requires sign-in after updating, choose Sign in.",
+        "sign_in_required" when IsClaudeCli =>
+            "Claude Code reports that you are signed out. Choose Sign in through Claude Code and your browser. No message is needed.",
         "sign_in_required" when Provider == "claude" =>
             "Claude quota read was rejected. Check claude auth status, open Claude Code, then press Refresh. If Claude Code reports an expired login or the read still fails after renewal, sign in through Claude Code.",
         "sign_in_required" when Provider == "codex" =>
             "Codex did not accept the saved session. Open the Codex app or CLI to renew it. The monitor resumes by itself afterward. Sign in again only if that does not help.",
         "sign_in_required" => "Session expired or rejected. Sign in through the official client.",
+        "session_expired" when ClaudeUpdateAvailable => "The saved Claude Code session expired.",
         "session_expired" when Provider == "claude" =>
             "The Claude Code session expired. Choose Sign in to renew it through Claude Code and your browser. " +
             "No message is needed, even when your usage limit is reached. Signing in does not reset your quota. The monitor resumes by itself.",
@@ -102,6 +133,12 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         {
             if (RetryState == "suspended") return new("Automatic reads are paused by the provider's retry time.");
             if (AwaitingStartupRetry) return new("Reading again after the monitor restarted.");
+            if (ClaudeUpdateAvailable && Error is "" or "session_expired" or "sign_in_required" or "local_session_unavailable")
+                return new(Error == "session_expired" ? "Your saved Claude Code session expired. Update Claude Code for CLI-managed renewal."
+                    : $"Claude Code {ClientVersion} needs an update for CLI-managed quota reads.", ClaudeUpdateAction, "Update Claude Code");
+            if (Provider == "claude" && Error.Length == 0 && ClientState is "unverified" or "unsupported")
+                return new(ClientState == "unverified" ? "Claude Code version could not be checked. Using the saved session."
+                    : $"Claude Code {ClientVersion} is unsupported for CLI quota reads. Using the saved session.");
             bool official = Provider is "codex" or "claude" or "copilot";
             return Error switch
             {
@@ -118,6 +155,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 "client_not_installed" when Provider == "claude" => new("Claude Code isn't installed. The Claude desktop app alone isn't enough.", "install-claude", "Install Claude Code"),
                 "session_expired" => new("The session expired. Open the official client to renew it."),
                 "sign_in_required" when Provider == "codex" => new("Codex didn't accept the saved session. Open Codex, or sign in again.", "sign-in", "Sign in"),
+                "sign_in_required" when IsClaudeCli => new("Claude Code needs sign-in. No message is needed.", "sign-in", "Sign in"),
                 "sign_in_required" when Provider == "claude" => new("Claude didn't accept the saved session. Open Claude Code, or sign in again.", "sign-in", "Sign in"),
                 "sign_in_required" when official => new("The official client needs sign-in.", "sign-in", "Sign in"),
                 "local_session_unavailable" when official => new("No readable session from the official client.", "sign-in", "Sign in"),
@@ -155,6 +193,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "Error · " + (Error.Length > 0 ? Error : "none"),
         "Retry state · " + (RetryState.Length > 0 ? RetryState : "normal"),
         "Source · " + (Source.Length > 0 ? Source : "not reported"),
+        ClientDetails,
         "Identity · " + (Identity.Length > 0 ? Identity : "not reported"),
         "Account ID · " + Id,
         "Last successful read · " + Timestamp(LastSuccess, "never"),
@@ -162,8 +201,9 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "Session expires · " + Timestamp(SessionExpiresAt, "not reported"),
         "Session last renewed · " + Timestamp(SessionRenewedAt, "not reported"),
         "Account label omitted. Add it yourself only if it is needed."
-    });
+    }.Where(line => line.Length > 0));
 
+    private bool IsClaudeCli => Provider == "claude" && Source == "Official Claude Code CLI /usage";
     private bool IsAntigravityCli => Provider == "antigravity" &&
         Source.StartsWith("Official Antigravity CLI", StringComparison.Ordinal);
     private bool IsAntigravityDesktop => Provider == "antigravity" &&
