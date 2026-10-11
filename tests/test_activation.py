@@ -551,7 +551,8 @@ class RunnerTests(unittest.TestCase):
         self.assertIn('--safe-mode',args)
         self.assertIn('--strict-mcp-config',args)
         self.assertIn('--no-session-persistence',args)
-        self.assertEqual(args[args.index('--model')+1], 'claude-haiku-4-5-20251001')
+        self.assertEqual(args[args.index('--model')+1], 'claude-haiku-5-5')
+        self.assertEqual(args[args.index('--effort')+1], 'low')
         self.assertEqual(args[args.index('--tools')+1], '')
         self.assertEqual(run.call_args.kwargs['timeout'],90)
 

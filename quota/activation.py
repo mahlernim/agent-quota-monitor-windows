@@ -107,7 +107,7 @@ class ClaudeRunner:
             return False, 'Install Claude Code to use activation.'
         if info['clientState'] != 'supported':
             return False, 'Update Claude Code to use activation.'
-        return True, 'A short Haiku subscription prompt. Extra usage must be off.'
+        return True, 'A short Haiku 5.5 subscription prompt with low effort. Extra usage must be off.'
 
     def prepare(self, row):
         info = claude_cli.client_info(minimum=(2, 1, 280))
@@ -127,7 +127,8 @@ class ClaudeRunner:
     def send(self, executable):
         args = ['--safe-mode', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
                 '--settings', '{"disableAllHooks":true,"remoteControlAtStartup":false}',
-                '--tools', '', '--no-session-persistence', '--model', 'claude-haiku-4-5-20251001',
+                '--tools', '', '--no-session-persistence', '--model', 'claude-haiku-5-5',
+                '--effort', 'low',
                 '--system-prompt', 'Reply with exactly OK. Do not use tools.',
                 '--output-format', 'json', '-p', 'Reply only OK.']
         code, text = claude_cli.run(executable, args, timeout=90)

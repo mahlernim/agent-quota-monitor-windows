@@ -7,7 +7,7 @@ Monitoring remains read-only. Activation is a separate opt-in action that consum
 | Provider | Windows | Fixed model |
 | --- | --- | --- |
 | Codex | Weekly | GPT-6 Luna, low reasoning |
-| Direct Claude | Five-hour and all-model weekly | Haiku 4.5 |
+| Direct Claude | Five-hour and all-model weekly | Haiku 5.5 with low effort |
 | Antigravity Gemini | Five-hour and weekly | Gemini 3.8 Flash Low |
 | Antigravity Claude/GPT | Five-hour and weekly | GPT-OSS 120B Medium |
 
