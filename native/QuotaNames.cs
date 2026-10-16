@@ -16,15 +16,17 @@ internal static class QuotaNames
 {
     internal const int MaxInitials = 3;
     internal const int MaxName = 16;
-    internal static readonly string[] Types = ["codex", "claude", "antigravity-gemini", "antigravity-claude-gpt", "copilot"];
+    internal static readonly string[] Types = ["codex", "claude", "antigravity-gemini", "antigravity-argon", "antigravity-claude-gpt", "copilot"];
     internal static readonly IReadOnlyDictionary<string, string> TypeLabels = new Dictionary<string, string>
     {
         ["codex"] = "OpenAI Codex", ["claude"] = "Anthropic Claude", ["antigravity-gemini"] = "Antigravity Gemini",
+        ["antigravity-argon"] = "Antigravity Gemini 4 Argon",
         ["antigravity-claude-gpt"] = "Antigravity Claude and GPT", ["copilot"] = "GitHub Copilot"
     };
     internal static readonly IReadOnlyDictionary<string, QuotaName> Defaults = new Dictionary<string, QuotaName>
     {
         ["codex"] = new("CX", "Codex"), ["claude"] = new("CL", "Claude"), ["antigravity-gemini"] = new("AG", "Gemini"),
+        ["antigravity-argon"] = new("AR", "Argon"),
         ["antigravity-claude-gpt"] = new("AC", "Claude and GPT"), ["copilot"] = new("CP", "Copilot")
     };
     private static volatile IReadOnlyDictionary<string, QuotaName> current = Defaults;
@@ -33,6 +35,7 @@ internal static class QuotaNames
     internal static string TypeFor(string provider, string group) => provider switch
     {
         "codex" or "claude" or "copilot" => provider,
+        "antigravity" when group == "Gemini 4 Argon" => "antigravity-argon",
         "antigravity" => group.Contains("Gemini", StringComparison.OrdinalIgnoreCase) ? "antigravity-gemini" : "antigravity-claude-gpt",
         _ => ""
     };

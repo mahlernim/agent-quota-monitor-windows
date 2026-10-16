@@ -73,7 +73,8 @@ def profile(access):
 def parse_usage(text):
     groups = {}
     seen = set()
-    names = {'Gemini Models': 'gemini', 'Claude and GPT models': 'claude-gpt'}
+    names = {'Gemini Models': 'gemini', 'Claude and GPT models': 'claude-gpt',
+             'Gemini 4 Argon': 'gemini-argon'}
     windows = {'Weekly Limit Remaining': ('weekly', 604800), 'Five Hour Limit Remaining': ('5h', 18000)}
     for line in text.splitlines():
         if not line.strip():
@@ -98,9 +99,11 @@ def parse_usage(text):
                 raise ReadError('schema_changed')
         # New model-specific limits can be appended without changing existing
         # quotas. Validate their structure, but do not infer group or duration.
-        if name not in names or window not in windows:
+        supported = ({'Gemini 4 Argon Weekly Limit': ('weekly', 604800)}
+                     if name == 'Gemini 4 Argon' else windows)
+        if name not in names or window not in supported:
             continue
-        key, seconds = windows[window]
+        key, seconds = supported[window]
         group = groups.setdefault(names[name], dict(id=names[name], label=name, buckets=[]))
         # The CLI explicitly reports inactive windows as disabled with no reset.
         # Do not invent a percentage or discard the other active windows.

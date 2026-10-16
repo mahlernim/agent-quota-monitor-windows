@@ -17,6 +17,7 @@ class QuotaLabelTests(unittest.TestCase):
     def test_display_names_are_validated_before_saving(self):
         from quota.server import valid_quota_labels
         good = {'antigravity-gemini': {'initials': 'AG', 'name': 'Gemini'},
+                'antigravity-argon': {'initials': 'AR', 'name': 'Argon'},
                 'antigravity-claude-gpt': {'initials': 'AC', 'name': 'Claude and GPT'}}
         self.assertTrue(valid_quota_labels(good))
         self.assertTrue(valid_quota_labels({}))

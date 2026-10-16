@@ -33,6 +33,29 @@ internal static class PresentationChecks
             return QuotaItem.Parse(document.RootElement, now).Single();
         }
         void Check(bool condition, string name) { if (!condition) throw new InvalidOperationException(name); }
+        using (var argonData = JsonDocument.Parse("""
+            {"accounts":[{"id":"ag","provider":"antigravity","label":"Sample","status":"live",
+              "groups":[{"id":"gemini","label":"Gemini Models","buckets":[
+                {"id":"weekly","remaining":70,"windowSeconds":604800}]},
+                {"id":"gemini-argon","label":"Gemini 4 Argon","buckets":[
+                {"id":"weekly","remaining":98,"windowSeconds":604800,"resetsAt":"2026-09-25T12:00:00Z"}]}]}]}
+            """))
+        {
+            var rings = QuotaItem.Parse(argonData.RootElement, now);
+            var argon = rings[1];
+            Check(argon.Label == "Argon 7d" && argon.ShortLabel == "AR 7d" && argon.Code == "AR" &&
+                argon.Type == "antigravity-argon" && argon.TimeRemaining == 50 && argon.Remaining == 98,
+                "Argon has its own weekly name and reported quota");
+            Check(argon.Key != rings[0].Key && argon.IdentityColor != rings[0].IdentityColor && rings[0].Label == "Gemini 7d",
+                "Argon preserves existing Gemini identity and presentation");
+            var argonMain = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {});
+            argonMain.SetData(rings, argon.Key, new HashSet<string> { argon.Key });
+            Check(argonMain.Cards.Count == 2 && argonMain.Cards[argon.Key].Tray.Visibility == Visibility.Visible,
+                "Argon can be selected separately in the tray");
+            var argonFloating = new FloatingWindow(() => {}, () => {});
+            argonFloating.SetData(new[] { argon });
+            Check(Elements<FitText>(argonFloating).Any(t => t.Text == "Argon 7d"), "Pinned Argon has a distinct floating label");
+        }
         Check(Read(reset: now.AddHours(2.5)).TimeRemaining == 50, "Half of a five-hour window remains");
         Check(Read(duration: 604800, reset: now.AddDays(3.5)).TimeRemaining == 50, "Half of a weekly window remains");
         Check(Read().TimeRemaining is null, "Unknown reset has no time ring");

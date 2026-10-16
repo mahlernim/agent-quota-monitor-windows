@@ -19,7 +19,7 @@ public sealed class QuotaItem
     {
         get => type.Length > 0 ? type : Code switch
         {
-            "CX" => "codex", "CL" => "claude", "GM" => "antigravity-gemini", "CG" => "antigravity-claude-gpt", "CP" => "copilot", _ => ""
+            "CX" => "codex", "CL" => "claude", "GM" => "antigravity-gemini", "AR" => "antigravity-argon", "CG" => "antigravity-claude-gpt", "CP" => "copilot", _ => ""
         };
         init => type = value;
     }
@@ -47,7 +47,7 @@ public sealed class QuotaItem
     public bool WeeklyLimitReached => !Stale && weeklyResetText.Length > 0;
     public bool Stale => Status != "live";
     public void MarkDisconnected() { Status = "stale"; TimeRemaining = null; Tooltip = "Disconnected · cached quota\n" + Tooltip.Replace("Disconnected · cached quota\n", ""); }
-    public string IdentityColor => Code switch { "CX" => "#168f87", "CL" => "#c46843", "GM" => "#287bc1", "CG" => "#99734b", "CP" => "#488b74", _ => "#287bc1" };
+    public string IdentityColor => Code switch { "CX" => "#168f87", "CL" => "#c46843", "GM" => "#287bc1", "AR" => "#7b61b5", "CG" => "#99734b", "CP" => "#488b74", _ => "#287bc1" };
     public string Color => Stale || Disabled ? "#89929d" : IdentityColor;
     public string NumberColor => Stale || Disabled ? "#89929d" : TimeRemaining is > 0 && Remaining.HasValue
         ? Remaining < TimeRemaining / 4 ? "#c54444" : Remaining < TimeRemaining / 2 ? "#c18a19" : "#25313d"
@@ -97,6 +97,7 @@ public sealed class QuotaItem
             var guidance = AccountStatus.From(a).Guidance; var note = guidance.Length > 0 ? "\n" + guidance : "";
             var provider = Text(a, "provider"); var group = Text(g, "label"); var status = Text(a, "status");
             var code = provider switch { "codex" => "CX", "claude" => "CL", "copilot" => "CP",
+                "antigravity" when group == "Gemini 4 Argon" => "AR",
                 "antigravity" => group.Contains("Gemini", StringComparison.OrdinalIgnoreCase) ? "GM" : "CG", _ => "?" };
             var disabled = b.TryGetProperty("disabled", out var d) && d.ValueKind == JsonValueKind.True;
             var remaining = disabled ? null : Number(b, "remaining"); if (remaining is < 0 or > 100) remaining = null;

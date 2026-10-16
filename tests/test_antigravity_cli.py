@@ -40,10 +40,31 @@ class ParsingTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(providers.ReadError):
                 cli.parse_usage(text)
 
-    def test_additional_argon_row_does_not_discard_supported_windows(self):
+    def test_argon_weekly_is_separate_and_preserves_existing_windows(self):
         extra = 'Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t100%\t2026-10-23T00:32:31Z\n'
         for text in (USAGE + extra, extra + USAGE):
-            self.assertEqual(cli.parse_usage(text), cli.parse_usage(USAGE))
+            groups = cli.parse_usage(text)
+            self.assertEqual([g for g in groups if g['id'] != 'gemini-argon'], cli.parse_usage(USAGE))
+            argon = next(g for g in groups if g['id'] == 'gemini-argon')
+            self.assertEqual(argon['label'], 'Gemini 4 Argon')
+            self.assertEqual(len(argon['buckets']), 1)
+            self.assertEqual(argon['buckets'][0]['id'], 'weekly')
+            self.assertEqual(argon['buckets'][0]['remaining'], 100)
+            self.assertEqual(argon['buckets'][0]['windowSeconds'], 604800)
+        self.assertEqual(cli.parse_usage(extra), [argon])
+        disabled = cli.parse_usage(extra.replace('100%\t2026-10-23T00:32:31Z', 'disabled\t'))[0]['buckets'][0]
+        self.assertTrue(disabled['disabled'])
+        self.assertIsNone(disabled['remaining'])
+        with self.assertRaises(providers.ReadError):
+            cli.parse_usage(USAGE + extra + extra)
+
+    def test_argon_unreported_windows_and_activation_are_not_inferred(self):
+        from quota.activation_windows import targets
+        self.assertFalse(any(s['activationGroup'] == 'gemini-argon'
+                             for s in targets(dict(id='sample', provider='antigravity'))))
+        for label in ('Five Hour Limit Remaining', 'Weekly Limit Remaining'):
+            extra = f'Gemini 4 Argon\t{label}\t50%\t2026-10-23T00:32:31Z\n'
+            self.assertEqual(cli.parse_usage(USAGE + extra), cli.parse_usage(USAGE))
 
     def test_future_groups_and_windows_are_validated_but_not_inferred(self):
         for extra in ('Future Models\tWeekly Limit Remaining\t25%\t2026-10-23T00:32:31Z\n',

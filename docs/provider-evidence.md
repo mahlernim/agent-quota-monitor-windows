@@ -74,3 +74,7 @@ The ring then shows 0% and the tooltip, tray tooltip, and account details explai
 ## Research
 
 Compared CodexBar, WhereMyTokens, shuvquota, and onWatch. The application implements its own bounded connection coordinator, explicit quota model, and Windows presentation. See THIRD-PARTY-NOTICES.md. Account values and development snapshots are not included in this repository.
+
+## Gemini 4 Argon weekly display
+
+A quota-only official CLI read on October 16, 2026 reported `Gemini 4 Argon` with `Gemini 4 Argon Weekly Limit`, 98% remaining, and a separate reset timestamp while the existing Gemini weekly limit reported 100%. The exact group and window pair maps to its own `gemini-argon` group and `weekly` bucket with a seven-day duration. No five-hour bucket is inferred. The native app labels it Argon 7d with independent display preferences and pin identity. Argon activation is not supported. Unknown additive rows retain the existing validation and omission behavior.
