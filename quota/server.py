@@ -10,7 +10,7 @@ from .vault import Vault
 from .connections import Connections
 from .activation import Activation, Journal
 
-QUOTA_TYPES = ('codex', 'claude', 'antigravity-gemini', 'antigravity-claude-gpt', 'copilot')
+QUOTA_TYPES = ('codex', 'claude', 'antigravity-gemini', 'antigravity-argon', 'antigravity-claude-gpt', 'copilot')
 
 
 def valid_quota_labels(value):
