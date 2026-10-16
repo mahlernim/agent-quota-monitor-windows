@@ -36,9 +36,36 @@ class ParsingTests(unittest.TestCase):
     def test_malformed_duplicate_and_unknown_output_is_rejected(self):
         for text in ('', 'login required', USAGE.replace('71%', '101%'), USAGE.replace('71%', 'NaN%'),
                      USAGE.replace('2026-09-26T00:46:07Z', 'tomorrow'), USAGE + USAGE,
-                     USAGE.replace('Gemini Models', 'Unknown Group')):
+                     USAGE.replace('Gemini Models', 'Unknown Group').replace('Claude and GPT models', 'Other Group')):
             with self.subTest(text=text), self.assertRaises(providers.ReadError):
                 cli.parse_usage(text)
+
+    def test_additional_argon_row_does_not_discard_supported_windows(self):
+        extra = 'Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t100%\t2026-10-23T00:32:31Z\n'
+        for text in (USAGE + extra, extra + USAGE):
+            self.assertEqual(cli.parse_usage(text), cli.parse_usage(USAGE))
+
+    def test_future_groups_and_windows_are_validated_but_not_inferred(self):
+        for extra in ('Future Models\tWeekly Limit Remaining\t25%\t2026-10-23T00:32:31Z\n',
+                      'Gemini Models\tFuture Limit\t25%\t2026-10-23T00:32:31Z\n',
+                      'Future Models\tFuture Limit\tdisabled\t\n'):
+            with self.subTest(extra=extra):
+                self.assertEqual(cli.parse_usage(USAGE + extra), cli.parse_usage(USAGE))
+                with self.assertRaises(providers.ReadError):
+                    cli.parse_usage(extra)
+                with self.assertRaises(providers.ReadError):
+                    cli.parse_usage(USAGE + extra + extra)
+
+    def test_additional_rows_cannot_hide_invalid_data(self):
+        for extra in ('Future\tLimit\t101%\t2026-10-23T00:32:31Z\n',
+                      'Future\tLimit\tNaN%\t2026-10-23T00:32:31Z\n',
+                      'Future\tLimit\t25%\ttomorrow\n',
+                      'Future\tLimit\tdisabled\t2026-10-23T00:32:31Z\n',
+                      '\tLimit\t25%\t2026-10-23T00:32:31Z\n',
+                      'Future\t\t25%\t2026-10-23T00:32:31Z\n',
+                      'login required\n', 'Future\tLimit\t25%\n'):
+            with self.subTest(extra=extra), self.assertRaises(providers.ReadError):
+                cli.parse_usage(USAGE + extra)
 
     def test_disabled_window_preserves_other_quotas_without_inventing_a_value(self):
         disabled = 'Claude and GPT models\tFive Hour Limit Remaining\tdisabled\t\n'
