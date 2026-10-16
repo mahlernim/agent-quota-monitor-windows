@@ -82,24 +82,31 @@ def parse_usage(text):
         if len(fields) != 4:
             raise ReadError('schema_changed')
         name, window, remaining, reset = fields
-        if name not in names or window not in windows:
+        if not name.strip() or not window.strip():
             raise ReadError('schema_changed')
-        identity = (names[name], windows[window][0])
+        identity = (name, window)
         if identity in seen:
             raise ReadError('schema_changed')
         seen.add(identity)
+        disabled = remaining == 'disabled' and reset == ''
+        value = None
+        if not disabled:
+            if not re.fullmatch(r'\d+(?:\.\d+)?%', remaining):
+                raise ReadError('schema_changed')
+            value = model.percent(float(remaining[:-1]))
+            if value is None or model.timestamp(reset) is None:
+                raise ReadError('schema_changed')
+        # New model-specific limits can be appended without changing existing
+        # quotas. Validate their structure, but do not infer group or duration.
+        if name not in names or window not in windows:
+            continue
         key, seconds = windows[window]
         group = groups.setdefault(names[name], dict(id=names[name], label=name, buckets=[]))
         # The CLI explicitly reports inactive windows as disabled with no reset.
         # Do not invent a percentage or discard the other active windows.
-        if remaining == 'disabled' and reset == '':
+        if disabled:
             group['buckets'].append(dict(model.bucket(key, window, None, seconds), disabled=True))
             continue
-        if not re.fullmatch(r'\d+(?:\.\d+)?%', remaining):
-            raise ReadError('schema_changed')
-        value = model.percent(float(remaining[:-1]))
-        if value is None or model.timestamp(reset) is None:
-            raise ReadError('schema_changed')
         group['buckets'].append(model.bucket(key, window, value, seconds, reset))
     if not groups:
         raise ReadError('quota_not_reported')
