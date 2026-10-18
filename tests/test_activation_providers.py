@@ -23,6 +23,12 @@ def codex(now):
                     dict(used_percent=0, limit_window_seconds=604800, reset_at=now+604800)}}))
 
 
+def argon(now):
+    account = antigravity(now)
+    account['groups'].append(dict(id='gemini-argon', buckets=[model.bucket('weekly', 'Argon weekly', 100, 604800, now+604800)]))
+    return account
+
+
 class ProviderActivationTests(unittest.TestCase):
     def setup(self, provider):
         self.now = 1700000000
@@ -54,7 +60,7 @@ class ProviderActivationTests(unittest.TestCase):
         self.monitor.rows.extend([antigravity(self.now), codex(self.now)])
         self.engine.tick()
         view = self.engine.snapshot()
-        self.assertEqual(len(view['accounts']), 7)
+        self.assertEqual(len(view['accounts']), 8)
         self.assertEqual(sum(a['selected'] for a in view['accounts']), 1)
         self.assertEqual(view['preferences']['accounts'], [self.monitor.rows[0]['id']])
         self.assertEqual([a['window'] for a in view['accounts'] if a['provider']=='codex'], ['weekly'])
@@ -73,6 +79,57 @@ class ProviderActivationTests(unittest.TestCase):
         self.assertEqual(len(self.journal.data['attempts']), 4)
         self.tick()
         self.assertEqual(self.runner.sends, 2)
+
+    def test_argon_weekly_is_separate_and_requires_explicit_selection(self):
+        self.setup(argon)
+        self.enable([0, 1, 2, 3])
+        self.mature()
+        self.tick()
+        self.assertEqual(self.runner.sends, 2)
+        choices = [t for t in targets(self.monitor.rows[0]) if t['activationGroup'] == 'gemini-argon']
+        self.assertEqual([t['activationWindow'] for t in choices], ['weekly'])
+        key = choices[0]['activationKey']
+        self.assertNotIn(key, self.journal.data['preferences']['accounts'])
+        self.assertNotIn(key, self.journal.data['attempts'])
+        self.enable([4])
+        self.tick()
+        self.assertEqual(self.runner.sends, 3)
+        receipt = self.journal.data['attempts'][key]
+        self.assertEqual((receipt['group'], receipt['window']), ('gemini-argon', 'weekly'))
+        self.tick(moving=False)
+        self.assertEqual(self.journal.data['attempts'][key]['state'], 'sent')
+        self.tick(moving=False)
+        self.assertEqual(self.journal.data['attempts'][key]['state'], 'confirmed')
+        self.assertEqual(self.engine._recent(self.journal.data, choices[0], self.now), 1)
+        self.assertEqual(self.runner.sends, 3)
+
+    def test_argon_only_weekly_works_without_other_groups_or_five_hour(self):
+        self.setup(argon)
+        self.monitor.rows[0]['groups'] = self.monitor.rows[0]['groups'][-1:]
+        self.enable([4])
+        self.mature()
+        self.assertEqual(self.runner.sends, 1)
+        self.assertEqual(len(self.journal.data['attempts']), 1)
+        self.runner.fail = True
+        self.engine = Activation(self.monitor, self.journal, self.runner, lambda:self.now, lambda:self.now)
+        self.mature()
+        self.assertEqual(self.runner.sends, 1)
+
+    def test_argon_invalid_allowance_never_borrows_other_groups(self):
+        for mutation in ('missing', 'disabled', 'exhausted', 'duplicate', 'duration', 'partial', 'fixed', 'stale'):
+            with self.subTest(mutation=mutation):
+                self.setup(argon)
+                self.enable([4])
+                buckets = self.monitor.rows[0]['groups'][-1]['buckets']
+                if mutation == 'missing': buckets.clear()
+                if mutation == 'disabled': buckets[0]['disabled'] = True
+                if mutation == 'exhausted': buckets[0]['remaining'] = 0
+                if mutation == 'duplicate': buckets.append(copy.deepcopy(buckets[0]))
+                if mutation == 'duration': buckets[0]['windowSeconds'] = 18000
+                if mutation == 'partial': buckets[0]['remaining'] = 99.999999
+                self.engine.tick()
+                for _ in range(8): self.tick(moving=mutation != 'fixed', fresh=mutation != 'stale')
+                self.assertEqual(self.runner.sends, 0)
 
     def test_codex_weekly_needs_moving_deadlines_not_rounded_full_quota(self):
         self.setup(codex)
@@ -170,6 +227,29 @@ class ProviderActivationTests(unittest.TestCase):
 
 
 class ProviderRunnerTests(unittest.TestCase):
+    def test_argon_prepares_exact_model_and_never_falls_back_on_failure(self):
+        runner = AntigravityRunner()
+        with patch.object(runner, 'identity', return_value='revision'), \
+                patch('quota.activation_runners.antigravity_cli.command', return_value=['synthetic.exe']), \
+                patch('quota.activation_runners.workspace', return_value='empty'), \
+                patch('quota.activation_runners.claude_cli.run', side_effect=[(0, 'No imported plugins.'), (0, 'No MCP servers configured.')]):
+            prepared = runner.prepare(dict(activationGroup='gemini-argon'))
+        self.assertEqual(prepared, ('synthetic.exe', 'gemini-4-argon-low', 'revision', 'empty'))
+        for code, output in ((0, dict(status='SUCCESS', usage=dict(input_tokens=12, output_tokens=2))),
+                             (1, dict(status='ERROR'))):
+            with self.subTest(code=code), \
+                    patch('quota.activation_runners.antigravity_cli.check_auth_mode'), \
+                    patch('quota.activation_runners.antigravity_cli.credential', return_value=('synthetic', 'revision')), \
+                    patch('quota.activation_runners.claude_cli.run', return_value=(code, json.dumps(dict(event='result', result=output)))) as run:
+                if code:
+                    with self.assertRaises(ValueError): runner.send(prepared)
+                else:
+                    self.assertEqual(runner.send(prepared), dict(input_tokens=12, output_tokens=2))
+                run.assert_called_once()
+                args = run.call_args.args[1]
+                self.assertEqual(args[args.index('--model')+1], 'gemini-4-argon-low')
+                self.assertIn('plan', args)
+
     def test_child_environment_removes_paid_routes_without_mutating_parent(self):
         with patch.dict('os.environ', {'OPENAI_API_KEY':'synthetic', 'CODEX_API_KEY':'synthetic', 'GEMINI_API_KEY':'synthetic', 'HERDR_ENV':'1'}):
             env = environment()

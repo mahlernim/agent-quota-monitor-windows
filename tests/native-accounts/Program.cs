@@ -70,18 +70,20 @@ internal static class Program
             ("codex-a|codex|weekly", "Codex · weekly"),
             ("claude-a|direct|seven_day", "Claude · weekly"),
             ("antigravity-a|gemini|weekly", "Antigravity Gemini · weekly"),
-            ("antigravity-a|claude-gpt|weekly", "Antigravity Claude/GPT · weekly") })
+            ("antigravity-a|claude-gpt|weekly", "Antigravity Claude/GPT · weekly"),
+            ("antigravity-a|gemini-argon|weekly", "Antigravity Argon · weekly") })
         {
             sample["activation"]!["accounts"]!.AsArray().Add(new JsonObject {
                 ["accountId"] = key, ["label"] = "same@example.test", ["displayLabel"] = label,
                 ["supported"] = true, ["status"] = "Waiting", ["reason"] = "Synthetic runner" });
         }
         Render();
-        Check(selections.Count == 6 && selections.Values.All(c => c.IsChecked == false),
+        Check(selections.Count == 7 && selections.Values.All(c => c.IsChecked == false),
             "Newly supported windows stay unselected without losing existing controls");
         Check(selections["antigravity-a|gemini|weekly"].Content.ToString()!.Contains("Antigravity Gemini") &&
             selections["antigravity-a|claude-gpt|weekly"].Content.ToString()!.Contains("Claude/GPT") &&
-            selections["codex-a|codex|weekly"].Content.ToString()!.Contains("Codex"),
+            selections["codex-a|codex|weekly"].Content.ToString()!.Contains("Codex") &&
+            selections["antigravity-a|gemini-argon|weekly"].Content.ToString()!.Contains("Argon"),
             "Same-email selections explicitly distinguish provider and quota group");
         Field<CheckBox>(panel,"enabled").IsChecked = true;
         Field<CheckBox>(panel,"enabled").RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));

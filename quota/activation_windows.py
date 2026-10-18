@@ -14,6 +14,7 @@ def targets(row):
         specs = [(group, window, seconds, 'Antigravity ' + label + ' · ' + duration)
                  for group, label in [('gemini', 'Gemini'), ('claude-gpt', 'Claude/GPT')]
                  for window, seconds, duration in [('5h', 18000, 'five-hour'), ('weekly', 604800, 'weekly')]]
+        specs.append(('gemini-argon', 'weekly', 604800, 'Antigravity Argon · weekly'))
     elif provider == 'codex':
         # No synthetic five-hour limit for plans that do not report one.
         specs = [('codex', 'weekly', 604800, 'Codex · weekly')]
@@ -59,7 +60,11 @@ def classify(row, now):
         relevant = [b for b in buckets if b.get('id') in
                     (('five_hour', 'seven_day') if provider == 'claude' else ('5h', 'weekly'))]
         expected = {'five_hour': 18000, 'seven_day': 604800, '5h': 18000, 'weekly': 604800}
-        if len(relevant) != 2 or any(b.get('windowSeconds') != expected[b['id']] for b in relevant):
+        # Argon reports only a weekly allowance. Never borrow Flash limits or
+        # invent a five-hour window to make it eligible.
+        required = {'weekly'} if provider == 'antigravity' and row['activationGroup'] == 'gemini-argon' else (
+            {'five_hour', 'seven_day'} if provider == 'claude' else {'5h', 'weekly'})
+        if {b['id'] for b in relevant} != required or any(b.get('windowSeconds') != expected[b['id']] for b in relevant):
             return 'unavailable', None
     if len(chosen) != 1 or len(weekly) != 1:
         return 'unknown', None

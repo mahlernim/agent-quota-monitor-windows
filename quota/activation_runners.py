@@ -5,7 +5,8 @@ from pathlib import Path
 from . import antigravity_cli, claude_cli, connections, model, providers
 
 PROMPT = 'Reply only OK. Do not use tools, read files, access URLs, or delegate.'
-MODELS = {'gemini': 'gemini-3.8-flash-low', 'claude-gpt': 'gpt-oss-120b-medium'}
+MODELS = {'gemini': 'gemini-3.8-flash-low', 'claude-gpt': 'gpt-oss-120b-medium',
+          'gemini-argon': 'gemini-4-argon-low'}
 
 
 class NotLaunched(Exception):
@@ -92,7 +93,7 @@ class CodexRunner:
 class AntigravityRunner:
     def capability(self):
         antigravity_cli.command()
-        return True, 'A short Flash or GPT-OSS subscription prompt in plan mode. CLI context also uses allowance.'
+        return True, 'A short Flash, Argon Low, or GPT-OSS subscription prompt for the selected group in plan mode. CLI context also uses allowance.'
 
     @staticmethod
     def identity(row):
