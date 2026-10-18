@@ -9,9 +9,10 @@ Monitoring remains read-only. Activation is a separate opt-in action that consum
 | Codex | Weekly | GPT-6 Luna, low reasoning |
 | Direct Claude | Five-hour and all-model weekly | Haiku 5.5 with low effort |
 | Antigravity Gemini | Five-hour and weekly | Gemini 3.8 Flash Low |
+| Antigravity Argon | Weekly | Gemini 4 Argon Low |
 | Antigravity Claude/GPT | Five-hour and weekly | GPT-OSS 120B Medium |
 
-Account identity, quota group, and window remain separate. Codex plans without a five-hour limit do not receive an invented one. A single prompt may start both windows in its group. AQM reserves both observed inactive windows before that prompt, even when only one was selected, without enabling the other window. The two Antigravity groups require separate prompts and receipts.
+Account identity, quota group, and window remain separate. Codex plans without a five-hour limit do not receive an invented one. A single prompt may start both windows in its group. AQM reserves both observed inactive windows before that prompt, even when only one was selected, without enabling the other window. The three Antigravity groups require separate prompts and receipts. Argon is weekly-only and starts unselected after an upgrade. Its eligibility depends on its own reported weekly allowance, without borrowing Flash or Claude/GPT quota or requiring an unreported five-hour bucket.
 
 ## Evidence and dispatch
 
@@ -46,3 +47,5 @@ After three hours of eligible inactivity while activation is off, AQM can show o
 ## Verification
 
 Synthetic tests cover moving versus fixed deadlines, exact quota precision, group isolation, coalesced windows, legacy receipt preservation, source and clock changes, uncertain delivery, unconfirmed receipt expiry, released pre-launch reservations, storage failures, post-send confirmation, daily limits, and native controls. Controlled provider observations establish the representations used here. A Codex request in an already-running weekly window verified the runner without claiming a controlled weekly activation. Natural-reset follow-ups remain supplementary evidence and are not a release prerequisite.
+
+Argon model selection was verified through the official CLI model list. A fixed Argon weekly deadline was observed across quota-only reads. The local runner preflight rejected installed CLI plugins before any prompt was sent, so live Argon dispatch and natural idle-to-running activation remain unverified. Synthetic checks cover moving and fixed deadlines, unavailable allowance, independent selection, confirmation, restart suppression, exact Argon Low routing, and no model fallback.

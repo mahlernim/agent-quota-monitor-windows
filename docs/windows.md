@@ -6,9 +6,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 Requires Windows 10 or 11 on x64 and an eligible account with each provider you enable.
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.7/agent-quota-monitor-windows-0.4.7-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.8/agent-quota-monitor-windows-0.4.8-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.7/agent-quota-monitor-windows-0.4.7-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.8/agent-quota-monitor-windows-0.4.8-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -82,11 +82,11 @@ If a source becomes unavailable, its cached reading becomes stale. When discover
 
 Activation stays off on fresh installs and on the update that first adds it. In **Settings → Quota window activation**, explicitly choose each account and window, enable automatic activation, and click **Save activation settings**. Later updates preserve choices and attempt records. Newly discovered accounts and newly supported windows remain off.
 
-Choose Codex weekly, direct Claude five-hour or weekly, and Antigravity Gemini or Claude/GPT five-hour or weekly independently. New windows remain unselected after an update. A short subscription prompt starts an eligible countdown after 30 minutes of consecutive fresh inactive readings. The delay can be 60 or 120 minutes. If both windows in a group are idle, one prompt can start both and is recorded once.
+Choose Codex weekly, direct Claude five-hour or weekly, Antigravity Gemini or Claude/GPT five-hour or weekly, and Antigravity Argon weekly independently. Argon has a separate selection and trigger from Gemini Flash, with no five-hour window inferred. New windows remain unselected after an update. A short subscription prompt starts an eligible countdown after 30 minutes of consecutive fresh inactive readings. The delay can be 60 or 120 minutes. If both windows in a group are idle, one prompt can start both and is recorded once.
 
 Fixed running countdowns never need activation, even at full quota. Codex and Antigravity inactivity requires full quota and a deadline that moves with time across fresh provider reads. Unknown or stale data and exhausted allowance prevent activation. The app waits for two new countdown readings after a prompt and never retries uncertain delivery. A prompt that is never confirmed before its window would have ended is recorded as expired, and a new inactivity period is required. Durable reservations prevent duplicates across restarts and updates. The limit is five prompts per account and quota group per 24 hours.
 
-The official clients supply subscription authentication. Codex uses GPT-6 Luna with low reasoning, read-only ephemeral execution, and ignored user configuration. Claude uses Haiku 5.5 with low effort, tools and hooks disabled and requires extra usage off. Antigravity uses Flash for Gemini and GPT-OSS for Claude/GPT, in plan mode without automatic permission approval. Configured Antigravity CLI plugins or MCP servers pause activation. Keep clients current. Even a short prompt can consume substantial CLI context. See [activation behavior](window-activation.md) for details.
+The official clients supply subscription authentication. Codex uses GPT-6 Luna with low reasoning, read-only ephemeral execution, and ignored user configuration. Claude uses Haiku 5.5 with low effort, tools and hooks disabled and requires extra usage off. Antigravity uses Flash for Gemini, Argon Low for Argon, and GPT-OSS for Claude/GPT, in plan mode without automatic permission approval. Configured Antigravity CLI plugins or MCP servers pause activation. Keep clients current. Even a short prompt can consume substantial CLI context. See [activation behavior](window-activation.md) for details.
 
 After three hours of observed inactivity, a supported account can receive a quiet suggestion in the main window. **Configure activation** opens Settings without enabling anything. **Later** snoozes for one week. **Don't show again** persists. Suggestions can also be disabled in Settings. Sleep or stale readings restart the observation delay. The app must remain running to observe and activate windows.
 
@@ -126,6 +126,6 @@ Quota settings and cached snapshots are encrypted for your Windows user under `%
 
 Activation choices and attempt receipts are encrypted separately in `activation.dpapi` in that folder. Receipts contain stable account IDs, timestamps, outcomes, and numeric token counts. They do not contain response text or credentials. Updates preserve this file. Do not delete it to retry an uncertain prompt.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.7) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.8) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

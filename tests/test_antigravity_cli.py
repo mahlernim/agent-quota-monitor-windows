@@ -58,10 +58,10 @@ class ParsingTests(unittest.TestCase):
         with self.assertRaises(providers.ReadError):
             cli.parse_usage(USAGE + extra + extra)
 
-    def test_argon_unreported_windows_and_activation_are_not_inferred(self):
+    def test_argon_unreported_windows_are_not_inferred(self):
         from quota.activation_windows import targets
-        self.assertFalse(any(s['activationGroup'] == 'gemini-argon'
-                             for s in targets(dict(id='sample', provider='antigravity'))))
+        self.assertEqual([s['activationWindow'] for s in targets(dict(id='sample', provider='antigravity'))
+                          if s['activationGroup'] == 'gemini-argon'], ['weekly'])
         for label in ('Five Hour Limit Remaining', 'Weekly Limit Remaining'):
             extra = f'Gemini 4 Argon\t{label}\t50%\t2026-10-23T00:32:31Z\n'
             self.assertEqual(cli.parse_usage(USAGE + extra), cli.parse_usage(USAGE))
