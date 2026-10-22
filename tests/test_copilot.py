@@ -22,6 +22,48 @@ class Store:
 
 
 class CopilotTests(unittest.TestCase):
+    def test_node_security_floors_allow_patched_supported_releases(self):
+        for version in ('v22.23.4', 'v22.24.0', 'v24.22.1', 'v24.23.0', 'v26.12.1', 'v26.13.0'):
+            with self.subTest(version=version), patch.object(copilot.subprocess, 'run',
+                    return_value=Mock(returncode=0, stdout=version + '\n')) as run:
+                copilot.validate_node('C:/tools/node.exe')
+                self.assertEqual(run.call_args.args[0], ['C:/tools/node.exe', '--version'])
+                self.assertEqual(run.call_args.kwargs['timeout'], 5)
+                self.assertEqual(run.call_args.kwargs['stdin'], subprocess.DEVNULL)
+                self.assertEqual(run.call_args.kwargs['stderr'], subprocess.DEVNULL)
+                self.assertEqual(run.call_args.kwargs['creationflags'], getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+    def test_node_security_check_rejects_old_unsupported_and_unverified_releases(self):
+        versions = ('v22.23.3', 'v24.22.0', 'v26.12.0', 'v20.99.0', 'v23.99.0', 'v25.99.0',
+                    'v27.0.0', 'v24.22.1-rc.1', 'v24.22.1-private', 'node v24.22.1', '', 'private diagnostic')
+        for version in versions:
+            with self.subTest(version=version), patch.object(copilot.subprocess, 'run',
+                    return_value=Mock(returncode=0, stdout=version)):
+                with self.assertRaises(providers.ReadError) as error:
+                    copilot.validate_node('C:/tools/node.exe')
+                self.assertEqual(str(error.exception), 'copilot_node_update_required')
+
+    def test_node_probe_failure_is_redacted(self):
+        failures = (OSError('private diagnostic'), subprocess.TimeoutExpired('private command', 5),
+                    subprocess.CalledProcessError(1, 'private command', stderr='private diagnostic'))
+        for failure in failures:
+            with self.subTest(failure=type(failure)), patch.object(copilot.subprocess, 'run', side_effect=failure):
+                with self.assertRaises(providers.ReadError) as error:
+                    copilot.validate_node('C:/tools/node.exe')
+                self.assertEqual(str(error.exception), 'copilot_node_update_required')
+
+    def test_unsupported_node_stops_before_the_bridge_starts(self):
+        with patch.dict(copilot.os.environ, {'LOCALAPPDATA': 'C:/local'}), \
+                patch('quota.providers.refresh_path'), patch.object(copilot.shutil, 'which', return_value='C:/tools/node.exe'), \
+                patch.object(copilot.Path, 'is_file', return_value=True), \
+                patch.object(copilot.subprocess, 'run', return_value=Mock(returncode=0, stdout='v24.22.0\n')), \
+                patch.object(copilot.subprocess, 'Popen') as launch:
+            self.assertFalse(copilot.setup_ready())
+            with self.assertRaises(providers.ReadError) as error:
+                copilot.read_snapshot()
+            self.assertEqual(error.exception.code, 'copilot_node_update_required')
+            launch.assert_not_called()
+
     def test_monthly_units_and_provider_reset(self):
         groups=model.copilot(fixture())
         b=groups[0]['buckets'][0]
@@ -73,7 +115,7 @@ class CopilotTests(unittest.TestCase):
             m=Monitor(Store(),lambda:now[0]); m.refresh_one(a)
             original=m.rows[a['id']]['groups']
             m.refresh_one(a); self.assertEqual(read.call_count,1)
-            for i,code in enumerate(('sign_in_required','rate_limited','schema_changed')):
+            for i,code in enumerate(('sign_in_required','rate_limited','schema_changed','copilot_node_update_required')):
                 now[0]=m.rows[a['id']]['nextAttempt']+1
                 read.side_effect=providers.ReadError(code,1000 if code=='rate_limited' else 0)
                 m.refresh_one(a); row=m.rows[a['id']]

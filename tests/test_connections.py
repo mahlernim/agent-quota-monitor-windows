@@ -105,11 +105,23 @@ class ConnectionTests(unittest.TestCase):
         from quota.providers import ReadError
         class Empty:
             def load(self): return {}
-        for ready, code in ((False, 'copilot_setup_required'), (True, 'copilot_not_connected')):
-            with patch.object(copilot, 'descriptor_vault', return_value=Empty()), patch.object(copilot, 'setup_ready', return_value=ready):
+        for failure, code in ((ReadError('copilot_setup_required'), 'copilot_setup_required'),
+                              (ReadError('copilot_node_update_required'), 'copilot_node_update_required'),
+                              (None, 'copilot_not_connected')):
+            with patch.object(copilot, 'descriptor_vault', return_value=Empty()), patch.object(copilot, 'command', side_effect=failure):
                 with self.assertRaises(ReadError) as raised:
                     copilot.copilot_account()
             self.assertEqual(raised.exception.code, code)
+
+    def test_copilot_old_node_never_launches_login_or_reader(self):
+        from quota.providers import ReadError
+        with patch('quota.copilot.command', side_effect=ReadError('copilot_node_update_required')), \
+                patch('quota.copilot.bind_current_account') as bind:
+            for verify in (False, True):
+                with self.assertRaisesRegex(ValueError, 'Install Node.js 24.22.1'):
+                    self.connection.start('copilot', verify=verify)
+        self.assertIsNone(self.connection.worker)
+        bind.assert_not_called()
 
     def test_copilot_setup_missing_never_launches_login(self):
         with patch('quota.copilot.command', side_effect=RuntimeError('missing')):

@@ -207,9 +207,13 @@ class Connections:
             if not command:
                 raise ValueError('Official client not found. Install it from Settings, then choose Sign in again.')
             if provider == 'copilot':
-                from .copilot import command as quota_command
+                from .copilot import NODE_UPDATE_HELP, ReadError, command as quota_command
                 try:
                     quota_command()
+                except ReadError as error:
+                    if error.code == 'copilot_node_update_required':
+                        raise ValueError(NODE_UPDATE_HELP) from None
+                    raise ValueError('Copilot setup is required. Choose Set up Copilot first.') from None
                 except Exception:
                     raise ValueError('Copilot setup is required. Choose Set up Copilot first.') from None
             self.stop = threading.Event()

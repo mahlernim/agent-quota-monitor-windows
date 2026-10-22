@@ -2,12 +2,34 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 from . import model
 from .providers import ReadError, account
 from .vault import Vault
+
+NODE_MINIMUM_VERSIONS = {22: (22, 23, 4), 24: (24, 22, 1), 26: (26, 12, 1)}
+NODE_UPDATE_HELP = ('Copilot needs a security-updated Node.js runtime. Install Node.js 24.22.1 or newer 24.x, '
+                    'or use Node.js 22.23.4 or newer 22.x or 26.12.1 or newer 26.x, then retry.')
+
+
+def validate_node(node):
+    if not node:
+        raise ReadError('copilot_node_update_required')
+    try:
+        result = subprocess.run([node, '--version'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True, timeout=5, check=True,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        match = re.fullmatch(r'v(\d+)\.(\d+)\.(\d+)', result.stdout.strip())
+        version = tuple(map(int, match.groups())) if match else ()
+        minimum = NODE_MINIMUM_VERSIONS.get(version[0]) if version else None
+        if minimum is not None and version >= minimum:
+            return
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    raise ReadError('copilot_node_update_required')
 
 
 def descriptor_vault():
@@ -34,6 +56,7 @@ def command():
     bridge_data = bundled_path('quota', 'copilot_bridge_data.mjs')
     if not node or not cli or not gh or not sdk.is_file() or not bridge.is_file() or not bridge_data.is_file():
         raise ReadError('copilot_setup_required')
+    validate_node(node)
     return [node, str(bridge), cli, gh]
 
 
@@ -91,7 +114,7 @@ def read_snapshot():
 
 
 def setup_ready():
-    """True when the official tools and SDK runtime exist. It never starts a reader."""
+    """True when the official tools and supported runtime are ready. It never starts a reader."""
     try:
         command()
         return True
@@ -105,7 +128,8 @@ def copilot_account():
     subject = binding.get('id')
     if not isinstance(subject,int) or isinstance(subject,bool) or subject<=0:
         # Setup can be complete while no GitHub account has been linked yet.
-        raise ReadError('copilot_not_connected' if setup_ready() else 'copilot_setup_required')
+        command()
+        raise ReadError('copilot_not_connected')
     def read():
         raw = read_snapshot()
         if raw['id'] != subject:

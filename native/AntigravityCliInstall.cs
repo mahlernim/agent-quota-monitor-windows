@@ -48,6 +48,14 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
         "It installs Codex for your Windows account in %LOCALAPPDATA%\\Programs\\OpenAI\\Codex and adds it to your PATH.", "OpenAI Codex", true);
 
     internal const string CopilotSdk = "@github/copilot-sdk@1.0.14";
+    internal const string CopilotNodeRequirement = "Copilot needs a security-updated Node.js runtime. Install Node.js 24.22.1 or newer 24.x, " +
+        "or use Node.js 22.23.4 or newer 22.x or 26.12.1 or newer 26.x, then retry.";
+    internal static readonly string CopilotNodeCheck = string.Join("\n",
+        "$nodeOutput = & node.exe --version",
+        "if ($LASTEXITCODE -or $nodeOutput -cnotmatch '^v(\\d+)\\.(\\d+)\\.(\\d+)$') { throw '" + CopilotNodeRequirement + "' }",
+        "$nodeVersion = [version]$nodeOutput.TrimStart('v')",
+        "$nodeMinimum = @{ 22 = [version]'22.23.4'; 24 = [version]'24.22.1'; 26 = [version]'26.12.1' }[$nodeVersion.Major]",
+        "if (-not $nodeMinimum -or $nodeVersion -lt $nodeMinimum) { throw '" + CopilotNodeRequirement + "' }");
 
     /// <summary>
     /// Official Copilot components for installed copies. winget installs only missing tools and
@@ -58,6 +66,7 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
         "Set up GitHub Copilot monitoring?\n\nA PowerShell window will:\n\n" +
         "1. Install any missing official tools with winget: GitHub CLI (GitHub.cli), Node.js LTS (OpenJS.NodeJS.LTS), and GitHub Copilot CLI (GitHub.Copilot). " +
         "winget may ask you to accept their terms, and Node.js may ask for administrator approval.\n" +
+        "Setup stops if an existing Node.js installation needs a security update. " + CopilotNodeRequirement + "\n" +
         "2. Install the official Copilot SDK (" + CopilotSdk + ") into %LOCALAPPDATA%\\QuotaDashboard\\copilot-runtime.\n" +
         "3. Start GitHub sign-in in your browser only if the GitHub CLI isn't signed in yet.\n\n" +
         "Then choose Connect beside GitHub Copilot. The monitor never sees your credentials and sends no prompts.",
@@ -74,6 +83,7 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
             "}",
             "Install-Missing 'GitHub.cli' { Get-Command gh.exe -ErrorAction SilentlyContinue }",
             "Install-Missing 'OpenJS.NodeJS.LTS' { Get-Command node.exe -ErrorAction SilentlyContinue }",
+            CopilotNodeCheck,
             "Install-Missing 'GitHub.Copilot' { (Get-Command copilot.exe -ErrorAction SilentlyContinue) -or (Get-ChildItem \"$env:LOCALAPPDATA\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_*\\copilot.exe\" -ErrorAction SilentlyContinue) }",
             "$runtime = Join-Path $env:LOCALAPPDATA 'QuotaDashboard\\copilot-runtime'",
             "New-Item -ItemType Directory -Path $runtime -Force | Out-Null",
