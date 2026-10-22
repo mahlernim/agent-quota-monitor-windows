@@ -14,6 +14,8 @@ Copilot needs a one-time setup. The monitor reads Copilot quota through the offi
 
 Tools installed during setup are found within a minute without restarting the monitor. winget comes with App Installer on current Windows versions. If it's missing, install App Installer from the Microsoft Store first.
 
+Copilot requires a supported, security-updated Node.js release. Use Node.js 24.22.1 or newer 24.x, 22.23.4 or newer 22.x, or 26.12.1 or newer 26.x. Setup and quota reads stop if the selected runtime is older, unsupported, or cannot be verified. Update an existing Node.js installation with its original installer or version manager, then retry. Setup does not automatically replace existing runtimes. These minimum versions include the [October 2026 security fixes](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
+
 ## Sign in again or choose another account
 
 In Settings, choose **Sign in** beside GitHub Copilot. Complete the prompts in the GitHub CLI console and browser, and leave the console open until it finishes. The monitor checks the account and quota before connecting it. This also changes the session the GitHub CLI uses.

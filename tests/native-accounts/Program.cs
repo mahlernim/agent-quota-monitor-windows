@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -588,6 +589,9 @@ internal static class Program
             script.Contains("'OpenJS.NodeJS.LTS'") && script.Contains("'GitHub.Copilot'") && script.Contains(OfficialInstall.CopilotSdk) &&
             script.Contains("gh auth status") && !script.Contains("python") && OfficialInstall.Copilot.Confirmation.Contains("administrator approval"),
             "Copilot setup installs only missing official tools, leaves license prompts to winget, and needs no Python");
+        Check(script.IndexOf(OfficialInstall.CopilotNodeCheck, StringComparison.Ordinal) < script.IndexOf("npm install", StringComparison.Ordinal),
+            "Copilot setup validates the Node runtime before npm can download or execute the SDK");
+        TestCopilotNodeRequirement();
 
         JsonObject unlinked = JsonNode.Parse(status.ToJsonString())!.AsObject();
         unlinked["connections"]!["clients"]!["copilotReady"] = true;
@@ -605,6 +609,40 @@ internal static class Program
         status["connections"]!["clients"]!["copilotReady"] = true;
         handler.Status = status.ToJsonString();
         await Call(window, "PollAsync");
+    }
+
+    private static void TestCopilotNodeRequirement()
+    {
+        string script = string.Join("\n",
+            "$ErrorActionPreference = 'Stop'",
+            "function global:node.exe { $global:LASTEXITCODE = $global:nodeExit; $global:nodeVersionOutput }",
+            "$check = {", OfficialInstall.CopilotNodeCheck, "}",
+            "$global:nodeExit = 0",
+            "foreach ($candidate in @('v22.23.4', 'v22.24.0', 'v24.22.1', 'v24.23.0', 'v26.12.1', 'v26.13.0')) {",
+            "  $global:nodeVersionOutput = $candidate; & $check",
+            "}",
+            "foreach ($candidate in @('v22.23.3', 'v24.22.0', 'v26.12.0', 'v20.99.0', 'v23.99.0', 'v25.99.0', 'v27.0.0', 'v24.22.1-rc.1', 'private diagnostic', '')) {",
+            "  $global:nodeVersionOutput = $candidate; $rejected = $false",
+            "  try { & $check } catch { $rejected = $_.Exception.Message -eq '" + OfficialInstall.CopilotNodeRequirement + "' }",
+            "  if (-not $rejected) { throw 'Unsupported Node version was not rejected with update guidance.' }",
+            "}",
+            "$global:nodeVersionOutput = 'v24.22.1'; $global:nodeExit = 1; $rejected = $false",
+            "try { & $check } catch { $rejected = $_.Exception.Message -eq '" + OfficialInstall.CopilotNodeRequirement + "' }",
+            "if (-not $rejected) { throw 'A failed Node version probe was accepted.' }");
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        start.ArgumentList.Add("-NoProfile");
+        start.ArgumentList.Add("-NonInteractive");
+        start.ArgumentList.Add("-EncodedCommand");
+        start.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(script)));
+        using var process = Process.Start(start)!;
+        if (!process.WaitForExit(15000)) { process.Kill(true); throw new Exception("Node prerequisite regression timed out."); }
+        Check(process.ExitCode == 0, "Copilot setup accepts patched releases and rejects old, unsupported, malformed, and failed Node probes");
     }
 
     private static async Task TestProviders(AccountsWindow window, SyntheticBackend handler)
@@ -695,6 +733,10 @@ internal static class Program
         Check(Problem("copilot", "copilot_setup_required")?.Action == "setup-copilot" && Problem("copilot", "copilot_not_connected")?.Action == "connect-copilot" &&
             !Problem("copilot", "copilot_setup_required")!.Summary.Contains("Setup-Copilot.ps1"),
             "Copilot banners separate missing setup from an unlinked account and never point to the source script");
+        Check(Problem("copilot", "copilot_node_update_required")?.Action is null &&
+            Problem("copilot", "copilot_node_update_required")!.Summary.Contains("24.22.1", StringComparison.Ordinal) &&
+            Account("copilot", "copilot_node_update_required").Guidance == OfficialInstall.CopilotNodeRequirement,
+            "An unsupported Copilot Node runtime offers update guidance without signing in or changing other clients");
         Check(Problem("codex", "network_unavailable")?.Action == "retry" && Problem("claude", "connection_or_response_error")?.Action == "retry" &&
             Problem("codex", "schema_changed")?.Action == "check-updates" && Problem("codex", "rate_limited")?.Action is null,
             "Network, format, and cooldown problems choose matching actions");

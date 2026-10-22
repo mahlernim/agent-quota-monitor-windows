@@ -24,8 +24,10 @@ class FrozenRuntimeTests(unittest.TestCase):
             found = {'node.exe': 'C:/tools/node.exe', 'gh.exe': 'C:/tools/gh.exe', 'copilot.exe': 'C:/tools/copilot.exe'}
             with patch.object(sys, '_MEIPASS', str(root / 'bundle'), create=True), \
                  patch.dict(os.environ, {'LOCALAPPDATA': str(root / 'local')}, clear=False), \
-                 patch.object(copilot.shutil, 'which', side_effect=lambda name: found.get(name)):
+                 patch.object(copilot.shutil, 'which', side_effect=lambda name: found.get(name)), \
+                 patch.object(copilot, 'validate_node') as validate_node:
                 command = copilot.command()
+                validate_node.assert_called_once_with(found['node.exe'])
                 bridge_data.unlink()
                 with self.assertRaises(copilot.ReadError):
                     copilot.command()
