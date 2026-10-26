@@ -6,7 +6,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 [Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.8/agent-quota-monitor-windows-0.4.8-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.8/agent-quota-monitor-windows-0.4.8-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.8)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.9/agent-quota-monitor-windows-0.4.9-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.9/agent-quota-monitor-windows-0.4.9-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.9)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -43,7 +43,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.8/agent-quota-monitor-windows-0.4.8-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.9/agent-quota-monitor-windows-0.4.9-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
@@ -150,6 +150,7 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
 | GitHub Copilot isn't set up yet, or Copilot is set up | Setup is incomplete, or no GitHub account is linked | **Set up Copilot**, then **Connect** |
 | No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
+| The provider's secure connection could not be verified | Certificate validation failed | Check the PC clock and Windows certificate updates. The last successful reading is retained |
 | The monitor could not interpret the provider response | The response contains data the monitor does not recognize | **Check for updates** |
 | Reading again after the monitor restarted | An unreadable response saved before a restart or update is being read again | Wait. The next reading replaces it |
 | Reset since the last read (ring tooltip) | The window reset after the value was read | Wait for the next reading. The old value is hidden |

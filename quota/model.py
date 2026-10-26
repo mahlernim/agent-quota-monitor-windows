@@ -1,6 +1,7 @@
 import hashlib
 import math
 from datetime import datetime, timezone
+from .retry import MAX_TIMESTAMP, finite_number
 
 
 def identity(provider, subject):
@@ -11,7 +12,7 @@ def percent(value, scale=1):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     value *= scale
-    return value if math.isfinite(value) and 0 <= value <= 100 else None
+    return value if 0 <= value <= 100 and math.isfinite(value) else None
 
 
 def timestamp(value):
@@ -33,23 +34,44 @@ def bucket(key, label, remaining, seconds=None, reset=None):
 
 
 def codex(raw):
+    """Accept additive fields, but reject ambiguous identities and changed known shapes."""
+    if not isinstance(raw, dict):
+        raise ValueError('Invalid Codex usage object')
     groups = []
     rates = [('codex', 'Codex', raw.get('rate_limit'))]
-    if raw.get('code_review_rate_limit'):
+    if raw.get('code_review_rate_limit') is not None:
         rates.append(('review', 'Code review', raw['code_review_rate_limit']))
-    for i, item in enumerate(raw.get('additional_rate_limits') or []):
-        rates.append((str(item.get('limit_name', i)), item.get('limit_name', 'Additional limit'), item.get('rate_limit')))
+    additional = raw.get('additional_rate_limits')
+    if additional is None:
+        additional = []
+    if not isinstance(additional, list):
+        raise ValueError('Invalid Codex additional limits')
+    for item in additional:
+        if not isinstance(item, dict):
+            raise ValueError('Invalid Codex additional limit')
+        key = item.get('limit_name')
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError('Missing Codex limit identity')
+        rates.append((key, key, item.get('rate_limit')))
+    seen = set()
     for key, name, rate in rates:
-        if not isinstance(rate, dict):
+        if key in seen:
+            raise ValueError('Duplicate Codex limit identity')
+        seen.add(key)
+        if rate is None:
             continue
+        if not isinstance(rate, dict):
+            raise ValueError('Invalid Codex rate limit')
         buckets = []
         for field in ('primary_window', 'secondary_window'):
             w = rate.get(field)
-            if not isinstance(w, dict):
+            if w is None:
                 continue
+            if not isinstance(w, dict):
+                raise ValueError('Invalid Codex window')
             used = percent(w.get('used_percent'))
             seconds = w.get('limit_window_seconds')
-            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or seconds <= 0:
+            if not finite_number(seconds) or not 0 < seconds <= MAX_TIMESTAMP:
                 seconds = None
             label = {18000: 'Five-hour window', 604800: 'Weekly window'}.get(seconds, 'Reported window')
             buckets.append(bucket(key + '/' + field, label, None if used is None else 100-used, seconds, w.get('reset_at')))

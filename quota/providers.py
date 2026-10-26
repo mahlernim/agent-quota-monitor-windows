@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import ssl
 import subprocess
 import time
 import urllib.error
@@ -24,20 +25,44 @@ class ReadError(Exception):
         super().__init__(self.code)
 
 
-def request(url, headers=None, body=None):
+def codex_tls_context():
+    """Trust Windows roots without promoting its cached intermediates to roots."""
+    if os.name != 'nt':
+        context = ssl.create_default_context()
+        context.keylog_filename = None
+        return context
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    try:
+        roots = [ssl.DER_cert_to_PEM_cert(cert) for cert, encoding, trust in ssl.enum_certificates('ROOT')
+                 if encoding == 'x509_asn' and (trust is True or ssl.Purpose.SERVER_AUTH.oid in trust)]
+        if not roots:
+            raise ReadError('certificate_verification_failed')
+        context.load_verify_locations(cadata=''.join(roots))
+    except (OSError, ValueError):
+        raise ReadError('certificate_verification_failed') from None
+    return context
+
+
+def request(url, headers=None, body=None, *, tls_context=None):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={'Accept': 'application/json', 'Content-Type': 'application/json', **(headers or {})})
     # Disable redirects so credentials never follow a provider redirect.
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *args, **kwargs):
             return None
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    handlers = [urllib.request.ProxyHandler({}), NoRedirect()]
+    if tls_context is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=tls_context))
+    opener = urllib.request.build_opener(*handlers)
     try:
         with opener.open(req, timeout=12) as response:
             data = response.read(2 * 1024 * 1024 + 1)
             if len(data) > 2 * 1024 * 1024:
                 raise ReadError('response_too_large')
-            parsed = json.loads(data)
+            try:
+                parsed = json.loads(data)
+            except ValueError:
+                raise ReadError('schema_changed') from None
             if not isinstance(parsed, dict):
                 raise ReadError('schema_changed')
             return parsed
@@ -56,11 +81,15 @@ def request(url, headers=None, body=None):
                 wait = 0
         raise ReadError('sign_in_required' if err.code in (401, 403) else 'rate_limited' if err.code == 429 else 'provider_http_' + str(err.code), wait) from None
     except urllib.error.URLError as err:
+        if isinstance(err.reason, ssl.SSLCertVerificationError):
+            raise ReadError('certificate_verification_failed') from None
         # These failures happen before any request reaches the provider.
         if isinstance(err.reason, (socket.gaierror, ConnectionRefusedError)) or (
                 isinstance(err.reason, OSError) and getattr(err.reason, 'winerror', None) in UNREACHABLE):
             raise ReadError('network_unavailable') from None
         raise ReadError('connection_or_response_error') from None
+    except ssl.SSLCertVerificationError:
+        raise ReadError('certificate_verification_failed') from None
     except (OSError, ValueError):
         raise ReadError('connection_or_response_error') from None
 
@@ -134,11 +163,19 @@ def codex_account():
         fresh = load(path).get('tokens') or {}
         if fresh.get('account_id') != subject:
             raise ReadError('identity_changed')
+        if not isinstance(fresh.get('access_token'), str) or not fresh['access_token']:
+            raise ReadError('sign_in_required')
         raw = request('https://chatgpt.com/backend-api/wham/usage',
-                      {'Authorization': 'Bearer ' + fresh['access_token'], 'ChatGPT-Account-ID': subject})
+                      {'Authorization': 'Bearer ' + fresh['access_token'], 'ChatGPT-Account-ID': subject},
+                      tls_context=codex_tls_context())
         if raw.get('account_id') != subject:
             raise ReadError('identity_mismatch')
-        return model.codex(raw), raw.get('email', 'Codex account')
+        try:
+            groups = model.codex(raw)
+        except ValueError:
+            raise ReadError('schema_changed') from None
+        label = raw.get('email')
+        return groups, label if isinstance(label, str) and label else 'Codex account'
     result = account('codex', subject, 'Codex account', 'Official Codex session / usage endpoint', read)
     result['sessionRevision'] = path.stat().st_mtime_ns
     result['sessionRenewedAt'] = codex_renewed(d.get('last_refresh'))
