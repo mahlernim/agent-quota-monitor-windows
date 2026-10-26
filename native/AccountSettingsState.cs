@@ -104,6 +104,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             "The Antigravity CLI (agy) is not installed and the Antigravity desktop app is closed. Install the official CLI from Settings to read quota without the desktop app, or open the desktop app. Gemini CLI does not report Antigravity quota.",
         "network_unavailable" => "No network connection. The monitor retries every five minutes and again when the network returns.",
         "connection_or_response_error" => "The provider could not be reached or returned an unreadable response. Waiting to retry.",
+        "certificate_verification_failed" => "The provider's secure connection could not be verified. Check the PC clock and Windows certificate updates. The last successful quota is retained.",
         "schema_changed" => "The monitor could not interpret the provider response. Check for a monitor update in Settings.",
         "local_session_unavailable" => "Local session unavailable.",
         "independent_sign_in_needed" => "Official sign-in is needed.",
@@ -163,6 +164,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 "local_session_unavailable" when official => new("No readable session from the official client.", "sign-in", "Sign in"),
                 "network_unavailable" => new("No network connection.", "retry", "Retry"),
                 "connection_or_response_error" => new("The provider couldn't be reached.", "retry", "Retry"),
+                "certificate_verification_failed" => new("The provider's secure connection could not be verified."),
                 "schema_changed" => new("The monitor could not interpret the provider response.", "check-updates", "Check for updates"),
                 "rate_limited" => new("Provider rate limit. Waiting for the next read."),
                 _ => new(Guidance.Split(". ")[0].TrimEnd('.') + ".")

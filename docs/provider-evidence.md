@@ -6,6 +6,10 @@ These integrations were exercised on Windows during development. Internal provid
 
 Reads the official Codex session and its account-scoped `/wham/usage` response. Account identity must match. Window durations are interpreted explicitly rather than assuming primary means five hours. Official login owns credential renewal. The non-secret `last_refresh` value in `auth.json` is shown as the time the session was last renewed. The access token is never decoded, and no expiry is predicted, because `auth.json` has no separate expiry field and the token lifetime is not documented. On one Windows machine in September 2026, Codex CLI 0.120 could not load a `config.toml` that set a `service_tier` value only newer clients understand, so sign-in exited at once. Sign-in reports such early exits with possible fixes and still discards client output. The [app-server interface](https://learn.chatgpt.com/docs/app-server) is a possible future replacement for the internal HTTP reader.
 
+Codex HTTPS reads use server-authentication roots from the Windows `ROOT` store. Python's default loading also includes the `CA` intermediate cache, which can select an expired certificate path even when Windows and a roots-only OpenSSL context validate the current server chain. The reader requires certificate and hostname verification, does not change Windows stores, and fails closed when roots cannot be loaded. A certificate failure is reported separately from an unreadable quota response and retains the last successful reading. Other provider transports are unchanged.
+
+The Codex parser ignores additive metadata and unknown window fields. Missing or null optional quota sections are allowed. Known sections with changed shapes and duplicate or missing additional-limit identities are rejected as `schema_changed`, preserving the previous reading. Additional limits use their reported names rather than array positions, so reordering cannot move saved selections between limits. Unknown numeric values and durations remain unknown. No alternative field names, window durations, or account identity are inferred.
+
 ## Direct Claude
 
 ### Optional activation

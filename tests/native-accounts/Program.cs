@@ -741,6 +741,11 @@ internal static class Program
             Problem("codex", "schema_changed")?.Action == "check-updates" && Problem("codex", "rate_limited")?.Action is null,
             "Network, format, and cooldown problems choose matching actions");
         Check(Problem("codex", "") is null, "A healthy account has no banner");
+        Check(Problem("codex", "certificate_verification_failed")?.Action is null &&
+            Problem("codex", "certificate_verification_failed")!.Summary.Contains("secure connection", StringComparison.Ordinal) &&
+            Account("codex", "certificate_verification_failed").Guidance.Contains("PC clock", StringComparison.Ordinal) &&
+            Account("codex", "certificate_verification_failed").Guidance.Contains("last successful quota", StringComparison.Ordinal),
+            "Certificate failures explain secure connection validation and retained quota without offering sign-in");
         AccountStatus saved = Account("antigravity", "schema_changed", cli);
         AccountStatus retrying = saved with { RetryState = "startup_retry" };
         Check(saved.ReportsFormatChange && !saved.AwaitingStartupRetry, "A parse failure by the current reader suggests an update");
