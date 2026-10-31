@@ -68,8 +68,10 @@ A gray ring with a **stale** badge preserves the last value that could be read. 
 - **Antigravity CLI needs sign-in.** **Copy command**, then run `agy -p /usage` in a terminal.
 - **Codex didn't accept the session.** Open Codex, or use **Sign in**.
 - **Claude Code session expired.** Choose **Sign in** on the account banner or in Settings and complete the browser login. No message is needed, even when your five-hour quota is exhausted. Signing in does not reset your quota. The monitor resumes by itself.
+- **Claude Code needs sign-in.** Claude Code reports that it is signed out. Choose **Sign in**. The monitor reads again as soon as Claude Code saves the new session.
 - **Codex or Claude Code isn't installed.** Use **Install Codex** or **Install Claude Code**, then **Sign in**.
 - **Copilot isn't set up or linked.** Use **Set up Copilot**, then **Connect**.
+- **Copilot needs a security-updated Node.js runtime.** Use **Update Node.js** on the banner or in Settings. It shows the winget update for your Node.js package and runs it only after you confirm. If winget doesn't manage your Node.js, it opens the official download page instead. The monitor checks Copilot again within a minute after Node.js changes.
 - **No network connection.** Use **Retry**, or wait. The monitor retries every five minutes and again when Windows reconnects or wakes from sleep.
 - **The monitor could not interpret the provider response.** Use **Check for updates**. With automatic checks on, the monitor checks once by itself.
 - **Reading again after the monitor restarted.** An unreadable response saved before a restart or update is being read again. Wait for the next reading. If it fails again, the unreadable-response banner returns.

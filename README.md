@@ -147,8 +147,10 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | Codex didn't accept the saved session | The Codex session lapsed | Open Codex, or **Sign in** |
 | Claude Code is too old for CLI-managed reads | An older client is using the saved-session reader | Choose **Update Claude Code** and confirm the official update |
 | Your Claude Code session expired | The saved Claude Code session needs renewal | Update an outdated client first, or choose **Sign in** if the official login needs attention |
+| Claude Code needs sign-in | Claude Code reports that it is signed out, for example after it could not renew its session | **Sign in**. The monitor reads again as soon as Claude Code saves the new session |
 | Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
 | GitHub Copilot isn't set up yet, or Copilot is set up | Setup is incomplete, or no GitHub account is linked | **Set up Copilot**, then **Connect** |
+| Copilot needs a security-updated Node.js runtime | The installed Node.js is older than the patched minimum | **Update Node.js** and confirm the winget update. If winget doesn't manage your Node.js, update it the way it was installed |
 | No network connection | Requests couldn't reach the provider | **Retry**, or wait. The monitor also retries when Windows reconnects or wakes |
 | The provider's secure connection could not be verified | Certificate validation failed | Check the PC clock and Windows certificate updates. The last successful reading is retained |
 | The monitor could not interpret the provider response | The response contains data the monitor does not recognize | **Check for updates** |

@@ -515,6 +515,16 @@ public sealed class AccountsWindow : Window
             AutomationProperties.SetName(update, "Update Claude Code for " + account.Label);
             content.Children.Add(update);
         }
+        if (account.NodeUpdateRequired && !editing)
+        {
+            var update = Ui.Button("Update Node.js", UpdateNode);
+            update.Tag = "update-node:" + account.Id;
+            update.HorizontalAlignment = HorizontalAlignment.Left;
+            update.Margin = new Thickness(14, 4, 0, 2);
+            update.ToolTip = "Shows the official winget update first. Runs only after you confirm.";
+            AutomationProperties.SetName(update, "Update Node.js for " + account.Label);
+            content.Children.Add(update);
+        }
         if (expanded && !editing)
             content.Children.Add(new TextBlock { Text = DetailText(account), Tag = "detail-text:" + account.Id, TextWrapping = TextWrapping.Wrap,
                 FontSize = 12, Foreground = Ui.Muted, Margin = new Thickness(14, 4, 0, 2) });
@@ -729,6 +739,13 @@ public sealed class AccountsWindow : Window
         if (!_confirmInstall(this, update)) return;
         try { _startInstall(update); ShowSuccess("The Claude Code update opened in PowerShell. The monitor detects the updated client within a minute."); }
         catch (Exception) { ShowError("PowerShell couldn't be started. Run the update command shown in the confirmation yourself."); }
+    }
+
+    private void UpdateNode()
+    {
+        if (_closed || !_confirmInstall(this, OfficialInstall.NodeUpdate)) return;
+        try { _startInstall(OfficialInstall.NodeUpdate); ShowSuccess("The Node.js update opened in PowerShell. The monitor checks Copilot again within a minute after Node.js changes."); }
+        catch (Exception) { ShowError("PowerShell couldn't be started. Update Node.js yourself, then press Refresh."); }
     }
 
     private async Task ConnectCopilotAsync()

@@ -99,6 +99,45 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
             "Write-Host ''",
             "Write-Host 'Finished. Return to Agent Quota Monitor and choose Connect beside GitHub Copilot.' -ForegroundColor Green"));
 
+    internal const string NodeDownload = "https://nodejs.org/en/download";
+    /// <summary>winget packages that install Node.js. Each upgrade stays within the package's own release line.</summary>
+    internal static readonly string[] NodePackages = ["OpenJS.NodeJS.LTS", "OpenJS.NodeJS", "OpenJS.NodeJS.26", "OpenJS.NodeJS.24", "OpenJS.NodeJS.22"];
+
+    /// <summary>
+    /// Updates the Node.js installation that winget manages. Other installations open the official
+    /// download page, so a version manager or manual install is never replaced.
+    /// </summary>
+    internal static readonly OfficialInstall NodeUpdate = new("Update Node.js",
+        "winget upgrade --id <Node.js package> --exact --source winget",
+        "Update Node.js for GitHub Copilot monitoring?\n\nA PowerShell window will find the Node.js package that winget manages " +
+        "(" + string.Join(", ", NodePackages) + ") and run the official update for it:\n\n" +
+        "winget upgrade --id <package> --exact --source winget\n\n" +
+        "Each package stays within its own release line. Node.js may ask for administrator approval. Close programs that use Node.js first. " +
+        "If winget doesn't manage your Node.js, the window opens the official download page instead and changes nothing.\n\n" +
+        "The monitor checks Copilot again within a minute after Node.js changes. The update doesn't send a prompt or change your GitHub sign-in.",
+        string.Join("\n",
+            "$ErrorActionPreference = 'Stop'",
+            "function Update-SessionPath { $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') }",
+            "function Open-NodeDownload([string]$reason) {",
+            "  Start-Process '" + NodeDownload + "'",
+            "  throw \"$reason Update Node.js the way it was installed. The official download page opened in your browser.\"",
+            "}",
+            "if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) { Open-NodeDownload 'winget is not available.' }",
+            "$package = $null",
+            "foreach ($id in @('" + string.Join("', '", NodePackages) + "')) {",
+            "  winget list --id $id --exact --source winget --accept-source-agreements *> $null",
+            "  if ($LASTEXITCODE -eq 0) { $package = $id; break }",
+            "}",
+            "if (-not $package) { Open-NodeDownload \"winget doesn't manage this Node.js installation.\" }",
+            "Write-Host \"Updating $package with winget\" -ForegroundColor Cyan",
+            "winget upgrade --id $package --exact --source winget --accept-source-agreements",
+            // -1978335189 means no newer version is available in this package's release line.
+            "if ($LASTEXITCODE -and $LASTEXITCODE -ne -1978335189) { throw \"$package update did not finish. Check the output above.\" }",
+            "Update-SessionPath",
+            CopilotNodeCheck,
+            "Write-Host ''",
+            "Write-Host \"Node.js $nodeOutput meets the Copilot requirement. Agent Quota Monitor checks Copilot again within a minute.\" -ForegroundColor Green"));
+
     private static OfficialInstall Client(string name, string source, string location, string row, bool bypass = false)
     {
         string command = "irm " + source + " | iex";

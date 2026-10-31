@@ -1,4 +1,5 @@
 """Copilot SDK lifecycle and locally bound provider identity."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -30,6 +31,22 @@ def validate_node(node):
     except (OSError, ValueError, subprocess.SubprocessError):
         pass
     raise ReadError('copilot_node_update_required')
+
+
+def runtime_revision():
+    """Opaque Node.js runtime revision. A replaced runtime allows an immediate local recheck."""
+    from .providers import refresh_path
+    refresh_path()
+    node = shutil.which('node.exe') or shutil.which('node')
+    if not node:
+        return None
+    try:
+        path = Path(node).resolve()
+        stat = path.stat()
+    except OSError:
+        return None
+    # Only a digest leaves this module, so the executable path stays local.
+    return hashlib.sha256(f'{path}|{stat.st_mtime_ns}|{stat.st_size}'.encode()).hexdigest()[:16]
 
 
 def descriptor_vault():
@@ -135,8 +152,10 @@ def copilot_account():
         if raw['id'] != subject:
             raise ReadError('identity_changed')
         return model.copilot(raw), raw['login']
-    return account('copilot',str(subject),binding.get('login','GitHub account'),
-                   'Official Copilot SDK / existing GitHub CLI session',read)
+    result = account('copilot',str(subject),binding.get('login','GitHub account'),
+                     'Official Copilot SDK / existing GitHub CLI session',read)
+    result['runtimeRevision'] = runtime_revision()
+    return result
 
 
 def bind_current_account(stop=None):

@@ -58,7 +58,7 @@ Gemini CLI is a separate product. After June 18, 2026 it stopped serving Google 
 
 ## GitHub Copilot
 
-Uses the official Copilot SDK quota API through the installed client. `Setup-Copilot.ps1` configures the optional SDK runtime outside the repository. Existing GitHub authentication is required. Copilot model-specific billing or quotas must not be inferred from other providers.
+Uses the official Copilot SDK quota API through the installed client. `Setup-Copilot.ps1` configures the optional SDK runtime outside the repository. Existing GitHub authentication is required. Copilot model-specific billing or quotas must not be inferred from other providers. The Node.js version check runs locally before the SDK starts. An outdated runtime retries at the normal interval without escalating backoff, and discovery records an opaque digest of the selected `node.exe` path, modification time, and size. A changed digest allows an immediate recheck after an update. The path itself is not exposed through the quota API.
 
 ## Failure handling
 

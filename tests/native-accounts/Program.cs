@@ -415,6 +415,27 @@ internal static class Program
             await Call(window, "PollAsync");
             Check(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-claude:claude-update") is null,
                 "Polling removes the update action once the backend reports a supported replacement");
+            JsonObject nodeUpdate = JsonNode.Parse(Snapshot("copilot-node"))!.AsObject();
+            nodeUpdate["accounts"]![0]!["provider"] = "copilot"; nodeUpdate["accounts"]![0]!["error"] = "copilot_node_update_required";
+            handler.Status = nodeUpdate.ToJsonString();
+            await Call(window, "PollAsync");
+            var nodeButton = Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-node:copilot-node")!;
+            Check(nodeButton.Content.ToString() == "Update Node.js", "Settings offers Update Node.js for an unsupported Copilot runtime");
+            int beforeNodeUpdate = clientInstalls.Count, requestsBeforeNodeUpdate = handler.Requests;
+            confirmInstall = false;
+            Click(nodeButton);
+            Check(clientInstalls.Count == beforeNodeUpdate && handler.Requests == requestsBeforeNodeUpdate,
+                "Declining a Node.js update launches nothing and sends no backend request");
+            confirmInstall = true;
+            Click(nodeButton);
+            Check(clientInstalls.Count == beforeNodeUpdate + 1 && clientInstalls.Last() == OfficialInstall.NodeUpdate &&
+                handler.Requests == requestsBeforeNodeUpdate && Field<TextBlock>(window, "_message").Text.Contains("within a minute"),
+                "A confirmed Node.js update launches only the winget updater without signing in or refreshing quota");
+            nodeUpdate["accounts"]![0]!["error"] = "";
+            handler.Status = nodeUpdate.ToJsonString();
+            await Call(window, "PollAsync");
+            Check(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-node:copilot-node") is null,
+                "Polling removes Update Node.js once Copilot reads again");
             handler.Status = missing.ToJsonString();
             await Call(window, "PollAsync");
             await TestCopilot(window, handler, missing, clientInstalls);
@@ -592,6 +613,7 @@ internal static class Program
         Check(script.IndexOf(OfficialInstall.CopilotNodeCheck, StringComparison.Ordinal) < script.IndexOf("npm install", StringComparison.Ordinal),
             "Copilot setup validates the Node runtime before npm can download or execute the SDK");
         TestCopilotNodeRequirement();
+        TestNodeUpdateScript();
 
         JsonObject unlinked = JsonNode.Parse(status.ToJsonString())!.AsObject();
         unlinked["connections"]!["clients"]!["copilotReady"] = true;
@@ -643,6 +665,54 @@ internal static class Program
         using var process = Process.Start(start)!;
         if (!process.WaitForExit(15000)) { process.Kill(true); throw new Exception("Node prerequisite regression timed out."); }
         Check(process.ExitCode == 0, "Copilot setup accepts patched releases and rejects old, unsupported, malformed, and failed Node probes");
+    }
+
+    /// <summary>Runs the shipped Node.js update script against synthetic winget, node, and browser commands.</summary>
+    private static void TestNodeUpdateScript()
+    {
+        Check(OfficialInstall.NodeUpdate.Script.Contains(OfficialInstall.CopilotNodeCheck, StringComparison.Ordinal) &&
+            !OfficialInstall.NodeUpdate.StartInfo().ArgumentList.Contains("Bypass") && OfficialInstall.NodeUpdate.StartInfo().ArgumentList.Contains("-NoExit") &&
+            OfficialInstall.NodeUpdate.Confirmation.Contains("OpenJS.NodeJS.22", StringComparison.Ordinal) &&
+            OfficialInstall.NodeUpdate.Confirmation.Contains("administrator approval", StringComparison.Ordinal),
+            "The Node.js update shows its winget packages and verifies the Copilot requirement in a visible window");
+        string body = OfficialInstall.NodeUpdate.Script.Replace("\n", "\n  ");
+        string script = string.Join("\n",
+            "$ErrorActionPreference = 'Stop'",
+            "function global:winget.exe { }",
+            "function global:winget { $global:wingetCalls += ,($args -join ' '); if ($args[0] -eq 'list') { $global:LASTEXITCODE = $(if ($args[2] -eq $global:installed) { 0 } else { -1978335212 }) } else { $global:LASTEXITCODE = $global:upgradeExit; $global:nodeVersionOutput = $global:afterUpgrade } }",
+            "function global:node.exe { $global:LASTEXITCODE = 0; $global:nodeVersionOutput }",
+            "function global:Start-Process { $global:opened += ,($args -join ' ') }",
+            "function Run([string]$installed, [int]$upgradeExit, [string]$after) {",
+            "  $global:installed = $installed; $global:upgradeExit = $upgradeExit; $global:afterUpgrade = $after",
+            "  $global:nodeVersionOutput = 'v22.22.2'; $global:wingetCalls = @(); $global:opened = @(); $global:failure = $null",
+            "  try { & {", "  " + body, "  } } catch { $global:failure = $_.Exception.Message }",
+            "}",
+            "Run 'OpenJS.NodeJS.22' 0 'v22.23.4'",
+            "if ($failure -or $opened.Count -or ($wingetCalls | Where-Object { $_ -like 'upgrade*' }) -ne 'upgrade --id OpenJS.NodeJS.22 --exact --source winget --accept-source-agreements') { throw 'The installed version line was not upgraded.' }",
+            "Run 'OpenJS.NodeJS.LTS' -1978335189 'v26.13.0'",
+            "if ($failure) { throw 'A current runtime with no newer package was rejected.' }",
+            "Run 'OpenJS.NodeJS.24' 1 'v24.22.0'",
+            "if ($failure -notlike '*OpenJS.NodeJS.24 update did not finish*') { throw 'A failed winget upgrade was not reported.' }",
+            "Run 'OpenJS.NodeJS.22' -1978335189 'v22.22.2'",
+            "if ($failure -ne '" + OfficialInstall.CopilotNodeRequirement + "') { throw 'An unpatched runtime after updating was accepted.' }",
+            "Run 'nvm' 0 'v22.23.4'",
+            "if ($failure -notlike \"*winget doesn't manage*\" -or $opened -ne '" + OfficialInstall.NodeDownload + "' -or ($wingetCalls | Where-Object { $_ -like 'upgrade*' })) { throw 'An unmanaged runtime was changed.' }");
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        start.ArgumentList.Add("-NoProfile");
+        start.ArgumentList.Add("-NonInteractive");
+        start.ArgumentList.Add("-EncodedCommand");
+        start.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(script)));
+        using var process = Process.Start(start)!;
+        string error = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(30000)) { process.Kill(true); throw new Exception("Node update regression timed out."); }
+        Check(process.ExitCode == 0, "Node.js update upgrades only a winget-managed line, accepts a current runtime, and reports failures" +
+            (process.ExitCode == 0 ? "" : ": " + error.Split('\n')[0]));
     }
 
     private static async Task TestProviders(AccountsWindow window, SyntheticBackend handler)
@@ -733,10 +803,13 @@ internal static class Program
         Check(Problem("copilot", "copilot_setup_required")?.Action == "setup-copilot" && Problem("copilot", "copilot_not_connected")?.Action == "connect-copilot" &&
             !Problem("copilot", "copilot_setup_required")!.Summary.Contains("Setup-Copilot.ps1"),
             "Copilot banners separate missing setup from an unlinked account and never point to the source script");
-        Check(Problem("copilot", "copilot_node_update_required")?.Action is null &&
+        Check(Problem("copilot", "copilot_node_update_required")?.Action == "update-node" &&
+            Problem("copilot", "copilot_node_update_required")!.ActionLabel == "Update Node.js" &&
             Problem("copilot", "copilot_node_update_required")!.Summary.Contains("24.22.1", StringComparison.Ordinal) &&
-            Account("copilot", "copilot_node_update_required").Guidance == OfficialInstall.CopilotNodeRequirement,
-            "An unsupported Copilot Node runtime offers update guidance without signing in or changing other clients");
+            Account("copilot", "copilot_node_update_required").Guidance.StartsWith(OfficialInstall.CopilotNodeRequirement, StringComparison.Ordinal) &&
+            Account("copilot", "copilot_node_update_required").NodeUpdateRequired && !Account("copilot", "sign_in_required").NodeUpdateRequired &&
+            !Account("claude", "copilot_node_update_required").NodeUpdateRequired,
+            "An unsupported Copilot Node runtime offers Update Node.js without signing in or changing other clients");
         Check(Problem("codex", "network_unavailable")?.Action == "retry" && Problem("claude", "connection_or_response_error")?.Action == "retry" &&
             Problem("codex", "schema_changed")?.Action == "check-updates" && Problem("codex", "rate_limited")?.Action is null,
             "Network, format, and cooldown problems choose matching actions");
