@@ -1,10 +1,12 @@
 import copy
 import json
+from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 from quota import copilot, model, providers
-from quota.monitor import Monitor
+from quota.monitor import INTERVAL, Monitor
 
 
 def fixture():
@@ -63,6 +65,62 @@ class CopilotTests(unittest.TestCase):
                 copilot.read_snapshot()
             self.assertEqual(error.exception.code, 'copilot_node_update_required')
             launch.assert_not_called()
+
+    def test_runtime_revision_is_opaque_and_tracks_replacement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            node = Path(temp) / 'private-folder' / 'node.exe'
+            node.parent.mkdir()
+            node.write_bytes(b'v22.22.2')
+            with patch('quota.providers.refresh_path'), patch.object(copilot.shutil, 'which', return_value=str(node)):
+                before = copilot.runtime_revision()
+                self.assertRegex(before, r'^[0-9a-f]{16}$')
+                self.assertNotIn('private-folder', before)
+                self.assertEqual(copilot.runtime_revision(), before)
+                node.write_bytes(b'v22.23.4 replaced')
+                self.assertNotEqual(copilot.runtime_revision(), before)
+                node.unlink()
+                self.assertIsNone(copilot.runtime_revision())
+            with patch('quota.providers.refresh_path'), patch.object(copilot.shutil, 'which', return_value=None):
+                self.assertIsNone(copilot.runtime_revision())
+
+    def test_node_requirement_retries_locally_and_right_after_runtime_change(self):
+        revision = ['old-runtime']
+        with patch.object(copilot, 'descriptor_vault', return_value=Store({'id': 123, 'login': 'sample-user'})), \
+                patch.object(copilot, 'runtime_revision', side_effect=lambda: revision[0]), \
+                patch.object(copilot, 'read_snapshot', side_effect=providers.ReadError('copilot_node_update_required')) as read:
+            now = [1000]
+            m = Monitor(Store(), lambda: now[0])
+            for _ in range(6):
+                m.refresh_one(copilot.copilot_account())
+                row = m.rows[next(iter(m.rows))]
+                self.assertEqual(row['nextAttempt'], now[0] + INTERVAL)
+                now[0] = row['nextAttempt']
+            self.assertEqual((row['error'], row['failures']), ('copilot_node_update_required', 6))
+            # An unchanged runtime waits for the normal interval.
+            calls = read.call_count
+            now[0] = row['nextAttempt'] - 60
+            m.refresh_one(copilot.copilot_account())
+            self.assertEqual(read.call_count, calls)
+            # A replaced runtime is checked on the next discovery instead.
+            revision[0] = 'new-runtime'
+            read.side_effect = None
+            read.return_value = fixture()
+            m.refresh_one(copilot.copilot_account())
+            row = m.rows[next(iter(m.rows))]
+            self.assertEqual((read.call_count, row['status'], row['error']), (calls + 1, 'live', None))
+
+    def test_runtime_change_does_not_bypass_provider_errors(self):
+        revision = ['old-runtime']
+        with patch.object(copilot, 'descriptor_vault', return_value=Store({'id': 123, 'login': 'sample-user'})), \
+                patch.object(copilot, 'runtime_revision', side_effect=lambda: revision[0]), \
+                patch.object(copilot, 'read_snapshot', side_effect=providers.ReadError('rate_limited', 1000)) as read:
+            now = [1000]
+            m = Monitor(Store(), lambda: now[0])
+            m.refresh_one(copilot.copilot_account())
+            revision[0] = 'new-runtime'
+            now[0] += 60
+            m.refresh_one(copilot.copilot_account())
+            self.assertEqual(read.call_count, 1)
 
     def test_monthly_units_and_provider_reset(self):
         groups=model.copilot(fixture())

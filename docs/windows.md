@@ -6,9 +6,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 Requires Windows 10 or 11 on x64 and an eligible account with each provider you enable.
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.10/agent-quota-monitor-windows-0.4.10-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.11/agent-quota-monitor-windows-0.4.11-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.10/agent-quota-monitor-windows-0.4.10-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.11/agent-quota-monitor-windows-0.4.11-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -68,8 +68,10 @@ A gray ring with a **stale** badge preserves the last value that could be read. 
 - **Antigravity CLI needs sign-in.** **Copy command**, then run `agy -p /usage` in a terminal.
 - **Codex didn't accept the session.** Open Codex, or use **Sign in**.
 - **Claude Code session expired.** Choose **Sign in** on the account banner or in Settings and complete the browser login. No message is needed, even when your five-hour quota is exhausted. Signing in does not reset your quota. The monitor resumes by itself.
+- **Claude Code needs sign-in.** Claude Code reports that it is signed out. Choose **Sign in**. The monitor reads again as soon as Claude Code saves the new session.
 - **Codex or Claude Code isn't installed.** Use **Install Codex** or **Install Claude Code**, then **Sign in**.
 - **Copilot isn't set up or linked.** Use **Set up Copilot**, then **Connect**.
+- **Copilot needs a security-updated Node.js runtime.** Use **Update Node.js** on the banner or in Settings. It shows the winget update for your Node.js package and runs it only after you confirm. If winget doesn't manage your Node.js, it opens the official download page instead. The monitor checks Copilot again within a minute after Node.js changes.
 - **No network connection.** Use **Retry**, or wait. The monitor retries every five minutes and again when Windows reconnects or wakes from sleep.
 - **The monitor could not interpret the provider response.** Use **Check for updates**. With automatic checks on, the monitor checks once by itself.
 - **Reading again after the monitor restarted.** An unreadable response saved before a restart or update is being read again. Wait for the next reading. If it fails again, the unreadable-response banner returns.
@@ -126,6 +128,6 @@ Quota settings and cached snapshots are encrypted for your Windows user under `%
 
 Activation choices and attempt receipts are encrypted separately in `activation.dpapi` in that folder. Receipts contain stable account IDs, timestamps, outcomes, and numeric token counts. They do not contain response text or credentials. Updates preserve this file. Do not delete it to retry an uncertain prompt.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.10) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.11) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.

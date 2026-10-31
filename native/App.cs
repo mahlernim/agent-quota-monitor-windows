@@ -493,6 +493,11 @@ public sealed class App : Application
                 try { claudeUpdate.Start(); main.ShowNotice("The Claude Code update opened in PowerShell. The monitor detects the updated client within a minute."); }
                 catch (Exception) { main.ShowNotice("PowerShell couldn't be started. Run the update command shown in the confirmation yourself."); }
                 return;
+            case "update-node":
+                if (!account.NodeUpdateRequired || !OfficialInstall.NodeUpdate.Confirm(main)) return;
+                try { OfficialInstall.NodeUpdate.Start(); main.ShowNotice("The Node.js update opened in PowerShell. The monitor checks Copilot again within a minute after Node.js changes."); }
+                catch (Exception) { main.ShowNotice("PowerShell couldn't be started. Update Node.js yourself, then press Refresh."); }
+                return;
             case "connect-copilot":
                 await ActionPost("/api/connections/start", new { provider = "copilot", accountId = account.Id, verify = true },
                     "Linking the account the GitHub CLI is signed in to. Settings shows its progress.");
