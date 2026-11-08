@@ -41,6 +41,8 @@ The Windows validation workflow runs these checks for pull requests and pushes t
 
 Clean-machine, accessibility, mixed-DPI, and sleep/resume testing remains limited. Startup command checks do not replace a real Windows sign-in test.
 
+Main-window appearance checks cover compact countdown boundaries, missing and stale resets, glyph spacing inside the existing rings, and custom colors that leave floating windows, tray icons, and pace warnings unchanged. Synthetic Settings tests cover picker cancellation, serialized saves, save failures, and restoring defaults. HTTP tests verify color validation and persistence without changing pins or other preferences. These checks do not exercise a live provider's natural reset or the installed upgrade.
+
 Documentation images render the same native controls with synthetic sample data. Run the executable with `--screenshots-output` followed by an output directory to regenerate them. This does not start provider readers.
 
 The native account tests exercise ordering, draft conflicts, account controls, and separate operation and connection feedback through synthetic HTTP responses. Append `-- <output.png>` to their command to render a sample Settings window without connecting provider accounts.

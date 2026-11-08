@@ -57,6 +57,21 @@ internal static class PresentationChecks
             Check(Elements<FitText>(argonFloating).Any(t => t.Text == "Argon 7d"), "Pinned Argon has a distinct floating label");
         }
         Check(Read(reset: now.AddHours(2.5)).TimeRemaining == 50, "Half of a five-hour window remains");
+        Check(Read(reset: now.AddHours(2.5)).Countdown(now) == "2h 30m", "Hourly countdown uses hours and minutes");
+        Check(Read(duration: 604800, reset: now.AddDays(5).AddHours(12)).Countdown(now) == "5d 12h", "Weekly countdown uses days and hours");
+        Check(Read(reset: now.AddHours(24), duration: 604800).Countdown(now) == "1d 0h" &&
+            Read(reset: now.AddHours(1)).Countdown(now) == "1h 0m" &&
+            Read(reset: now.AddMinutes(45)).Countdown(now) == "45m" &&
+            Read(reset: now.AddSeconds(30)).Countdown(now) == "<1m", "Countdown boundaries stay compact without premature zero");
+        foreach (var unknown in new[] { Read(), Read(reset: now), Read(reset: now.AddHours(6)),
+            Read(status: "stale", reset: now.AddHours(2)), Read(remaining: null, reset: now.AddHours(2)),
+            Read(available: false, reset: now.AddHours(2)), Read(unlimited: true, reset: now.AddHours(2)),
+            Read(disabled: true, reset: now.AddHours(2)) })
+            Check(unknown.Countdown(now) == "", "Unknown, stale, unavailable, and invalid resets do not show a countdown");
+        var countdownItem = Read(reset: now.AddHours(2));
+        Check(countdownItem.Countdown(now.AddHours(3)) == "", "Expired countdown is hidden");
+        countdownItem.MarkDisconnected();
+        Check(countdownItem.Countdown(now) == "", "Disconnect clears the countdown");
         Check(Read(duration: 604800, reset: now.AddDays(3.5)).TimeRemaining == 50, "Half of a weekly window remains");
         Check(Read().TimeRemaining is null, "Unknown reset has no time ring");
         Check(Read(reset: now).TimeRemaining is null, "Reset boundary awaits provider confirmation");
@@ -127,6 +142,44 @@ internal static class PresentationChecks
         CheckArrange(Check);
         CheckPercentageFormatting(Check);
         CheckWeeklyExhaustion(Check);
+        CheckAppearance(Check);
+    }
+
+    private static void CheckAppearance(Action<bool, string> check)
+    {
+        var item = new QuotaItem { Key = "color", Provider = "codex", Code = "CX", Status = "live", Remaining = 10,
+            TimeRemaining = 90, CountdownReset = DateTimeOffset.UtcNow.AddDays(5).AddHours(12) };
+        RingAppearance.Set(new Dictionary<string, string> { ["codex"] = "#123456" });
+        check(RingAppearance.For(item) == "#123456" && item.Color == "#168f87" && item.NumberColor == "#c54444",
+            "Main color override preserves default floating/tray colors and red pace warning");
+        var main = new MainWindow(_ => {}, _ => {}, () => {}, () => {}, () => {}, () => {});
+        main.SetData(new[] { item }, item.Key, new HashSet<string>());
+        var floating = new FloatingWindow(() => {}, () => {});
+        floating.SetData(new[] { item });
+        check(main.Cards[item.Key].Donut.MainPresentation && !Elements<Donut>(floating).Single().MainPresentation,
+            "Only main-window rings opt into countdowns and custom colors");
+        var donut = main.Cards[item.Key].Donut;
+        donut.Measure(new Size(58, 58)); donut.Arrange(new Rect(0, 0, 58, 58)); donut.UpdateLayout();
+        var drawing = VisualTreeHelper.GetDrawing(donut);
+        IEnumerable<GlyphRunDrawing> Glyphs(Drawing value)
+        {
+            if (value is GlyphRunDrawing glyph) yield return glyph;
+            if (value is DrawingGroup group)
+                foreach (var child in group.Children)
+                    foreach (var run in Glyphs(child)) yield return run;
+        }
+        var text = Glyphs(drawing!).ToArray();
+        var ink = text.Select(run => run.GlyphRun.BuildGeometry().Bounds).ToArray();
+        check(ink.Length == 2 && ink[0].Bottom + 1 <= ink[1].Top && ink[1].Top - ink[0].Bottom <= 3,
+            "Countdown and percentage glyphs remain separated inside the compact ring");
+        foreach (var bounds in ink)
+        {
+            foreach (var corner in new[] { bounds.TopLeft, bounds.TopRight, bounds.BottomLeft, bounds.BottomRight })
+                check((corner - new Point(29, 29)).Length < 20, "Text stays inside the inner ring");
+        }
+        item.MarkDisconnected();
+        check(RingAppearance.For(item) == "#89929d", "Custom colors never mask a stale reading");
+        RingAppearance.Set(new Dictionary<string, string>());
     }
 
     private static void CheckWeeklyExhaustion(Action<bool, string> check)
@@ -156,6 +209,7 @@ internal static class PresentationChecks
             TrayController.BuildTooltip(blocked).Contains("Weekly limit reached"), "Weekly exhaustion explains zero availability in the ring and tray");
         check(blocked.Disabled && blocked.Remaining is null && blocked.TimeRemaining is null && !blocked.Unlimited &&
             blocked.ResetText.StartsWith("Weekly reset") && !blocked.Tooltip.Contains("time left"), "Derived zero preserves the disabled window without inventing five-hour timing");
+        check(blocked.Countdown(now) == "3d 0h", "Weekly-limited baseline shows the verified weekly reset countdown");
         using (var doc = JsonDocument.Parse(account.ToJsonString()))
             check(AccountStatus.From(doc.RootElement).QuotaDetails.Contains("0% available · Weekly limit reached") &&
                 AccountStatus.From(doc.RootElement).QuotaDetails.Contains("Weekly reset"), "Account details explain the same weekly restriction");

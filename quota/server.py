@@ -13,6 +13,12 @@ from .activation import Activation, Journal
 QUOTA_TYPES = ('codex', 'claude', 'antigravity-gemini', 'antigravity-argon', 'antigravity-claude-gpt', 'copilot')
 
 
+def valid_ring_colors(value):
+    return (isinstance(value, dict) and set(value) <= {'codex', 'claude', 'antigravity', 'copilot'}
+            and all(isinstance(color, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', color)
+                    for color in value.values()))
+
+
 def valid_quota_labels(value):
     """Display initials and names only. They never change identity, grouping, or colors."""
     if not isinstance(value, dict) or not set(value) <= set(QUOTA_TYPES):
@@ -90,7 +96,7 @@ def handler(monitor, port, connections=None, version='development', activation=N
             if self.path == '/api/desktop':
                 with monitor.lock:
                     prefs = monitor.settings_vault.load() if monitor.settings_vault else {}
-                keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop', 'quotaLabels')
+                keys = ('desktopSelection', 'desktopFloatingSelections', 'desktopFloating', 'desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop', 'quotaLabels', 'mainRingColors')
                 return self.send(200, json.dumps({key: prefs[key] for key in keys if key in prefs}, allow_nan=False).encode())
             return self.send(404, b'{}')
 
@@ -128,6 +134,7 @@ def handler(monitor, port, connections=None, version='development', activation=N
                     for key, value in data.items():
                         if key == 'desktopFloating' and isinstance(value, bool): continue
                         if key == 'quotaLabels' and valid_quota_labels(value): continue
+                        if key == 'mainRingColors' and valid_ring_colors(value): continue
                         if key in ('desktopOpacity', 'desktopFloatingScale', 'wpfFloatingLeft', 'wpfFloatingTop') and type(value) in (int, float):
                             import math
                             if math.isfinite(value) and (35 <= value <= 100 if key == 'desktopOpacity' else 75 <= value <= 200 if key == 'desktopFloatingScale' else -100000 <= value <= 100000): continue

@@ -361,6 +361,7 @@ public sealed class App : Application
                 if (QuotaItem.Number(p, "wpfFloatingTop") is double y) floating!.Top = y;
                 floating!.SetScale((QuotaItem.Number(p, "desktopFloatingScale") ?? 100) / 100);
                 QuotaNames.Apply(p);
+                RingAppearance.Apply(p);
                 preferencesLoaded = true;
                 if (p.TryGetProperty("desktopFloating", out var f) && f.ValueKind == JsonValueKind.True) { floating!.Opacity = opacity; floating.Show(); }
             }
