@@ -97,6 +97,8 @@ The official Antigravity CLI (`agy`) is the recommended source. It lets the moni
 - Gemini CLI is a different product and does not report Antigravity subscription quota.
 - API-key and custom-provider modes are not supported for subscription monitoring.
 
+When the CLI is installed, **Update CLI** in Settings opens the official `agy update` command after showing a confirmation. Finish active CLI work first. The update keeps your normal settings and plugins. When it finishes, press **Refresh**.
+
 The monitor displays one Antigravity source at a time. It prefers **CLI**, which works with the desktop app closed. If the CLI fails and the running desktop app supplies a fresh reading, only the desktop account is shown until the CLI recovers. If neither source can refresh, the CLI card keeps its last reading and error without adding an old desktop card. Each source retains its own account identity and saved pins. Provider cooldowns and hidden-account choices are respected.
 
 ### Accounts stay separate
@@ -115,7 +117,7 @@ Hover any ring for exact values, the reset time, pace, and, when something is wr
 
 An Antigravity window explicitly reported as **Disabled** keeps its ring and saved pin. If a fresh weekly reading in the same account and model group confirms 0% remaining, its disabled five-hour ring shows **0%** and its tooltip explains **0% available · Weekly limit reached**. Any countdown is labeled **Weekly reset**, with no five-hour pace ring. This describes baseline quota only. AI Credit overages may still allow use. Otherwise, Disabled shows no percentage or countdown. It returns to its normal display when the provider reports an active window.
 
-Gemini 4 Argon appears as a separate **Argon 7d** ring when reported by the Antigravity CLI. Its quota and reset stay separate from the other Gemini windows. You can pin it, select it for the tray, and customize its label. Argon window activation is not supported.
+Gemini 4 Argon appears as a separate **Argon 7d** ring when reported by the Antigravity CLI. Its quota and reset stay separate from the other Gemini windows. You can pin it, select it for the tray, customize its label, and separately opt into weekly window activation.
 
 ## Everyday use
 
@@ -199,7 +201,9 @@ Activation is off on a fresh install and when first introduced by an update. Lat
 
 Supports **Codex weekly**, **direct Claude five-hour and weekly**, **Antigravity Gemini and Claude/GPT five-hour and weekly**, and **Antigravity Argon weekly** windows. Antigravity groups have separate controls. One prompt can start both windows in its group, so AQM records both and avoids a second prompt. Argon has its own weekly selection and never shares a trigger with Gemini Flash. Codex and Argon do not get an invented five-hour window.
 
-AQM uses the signed-in official CLI with a fixed economical model. Codex uses GPT-6 Luna with low reasoning, Claude uses Haiku 5.5 with low effort, Antigravity Gemini uses Flash, Antigravity Argon uses Argon Low, and Antigravity Claude/GPT uses GPT-OSS. Claude requires a Pro or Max subscription with extra usage off. Codex requires a recent client with isolated ephemeral execution. Antigravity uses plan mode and requires a CLI without configured plugins or MCP servers. Keep official clients current. Prompts consume subscription allowance, including CLI context that can be much larger than the short reply. There is no paid/API fallback.
+AQM uses the signed-in official CLI with a fixed economical model. Codex uses GPT-6 Luna with low reasoning, Claude uses Haiku 5.5 with low effort, Antigravity Gemini uses Flash, Antigravity Argon uses Argon Low, and Antigravity Claude/GPT uses GPT-OSS. Claude requires a Pro or Max subscription with extra usage off. Codex requires a recent client with isolated ephemeral execution. Antigravity requires CLI 1.3.6 or newer and uses its own isolated profile and text-only agent in plan mode. Your normal plugins and settings stay unchanged. AQM verifies that its activation profile loads no plugins, MCP servers, or hooks and has credit overages off. Keep official clients current. Prompts consume subscription allowance, including CLI context. There is no paid/API fallback.
+
+Activation status identifies the failed check, such as identity verification, profile isolation, hooks, credit settings, or a CLI timeout. Failures after launch remain marked uncertain and are not automatically retried. Provider output and credential contents are never shown in these messages.
 
 Claude activation uses the extra-usage status reported by its quota source, including the official CLI. If that status is missing or extra usage is enabled, activation waits without sending a prompt. Settings shows the current reason. Your activation history is preserved.
 

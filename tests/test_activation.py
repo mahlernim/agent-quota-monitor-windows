@@ -489,7 +489,7 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(self.journal.data['history'], [])
         self.runner.not_launched = False
         self.tick(10)
-        self.assertIn('could not be verified', self.status())
+        self.assertIn('identity verification failed', self.status())
         self.assertEqual(self.runner.sends, 0)
         self.tick(290)
         self.assertEqual(self.runner.sends, 1)

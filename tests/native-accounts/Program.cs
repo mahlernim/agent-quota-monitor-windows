@@ -360,6 +360,21 @@ internal static class Program
             handler.Status = missing.ToJsonString();
             await Call(window, "PollAsync");
             Check(installCli.Visibility == Visibility.Collapsed, "The offer disappears once agy is installed");
+            Button updateCli = Field<Button>(window, "_updateCli");
+            Check(updateCli.Visibility == Visibility.Visible, "Installed agy exposes its update action");
+            confirmInstall = false;
+            Click(updateCli);
+            Check(clientInstalls.Count == 0, "Declining an agy update runs nothing");
+            confirmInstall = true;
+            int beforeAgyUpdate = handler.Requests;
+            Click(updateCli);
+            Check(clientInstalls.SequenceEqual(new[] { OfficialInstall.AntigravityUpdate }) && handler.Requests == beforeAgyUpdate,
+                "Confirmed agy update invokes only the official updater without provider requests");
+            Check(OfficialInstall.AntigravityUpdate.Script.Contains(OfficialInstall.AntigravityUpdateCommand) &&
+                OfficialInstall.AntigravityUpdate.Confirmation.Contains("agy update") &&
+                !OfficialInstall.AntigravityUpdate.Script.Contains("/usage") && !OfficialInstall.AntigravityUpdate.Script.Contains("USERPROFILE ="),
+                "Antigravity update preserves the normal profile and sends no prompts");
+            clientInstalls.Clear();
             var installButtons = Field<Dictionary<string, Button>>(window, "_clientInstallButtons");
             Check(installButtons.Values.All(button => button.Visibility == Visibility.Collapsed) && signInButtons["codex"].Visibility == Visibility.Visible,
                 "Installed clients keep Sign in and hide install buttons");
@@ -581,7 +596,7 @@ internal static class Program
         string scripts = Path.Combine(Path.GetTempPath(), "aqm-installer-scripts");
         Directory.CreateDirectory(scripts);
         foreach ((string name, OfficialInstall installer) in new[] { ("antigravity", OfficialInstall.Antigravity), ("claude", OfficialInstall.Claude),
-                     ("codex", OfficialInstall.Codex), ("copilot", OfficialInstall.Copilot),
+                     ("codex", OfficialInstall.Codex), ("copilot", OfficialInstall.Copilot), ("antigravity-update", OfficialInstall.AntigravityUpdate),
                      ("claude-update-npm", OfficialInstall.ClaudeUpdate("npm")!), ("claude-update-native", OfficialInstall.ClaudeUpdate("native")!),
                      ("claude-update-winget", OfficialInstall.ClaudeUpdate("winget")!) })
             File.WriteAllText(Path.Combine(scripts, name + ".ps1"), installer.Script);
