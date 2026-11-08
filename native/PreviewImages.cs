@@ -47,6 +47,24 @@ internal static class PreviewImages
         floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
         Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "floating-monitor.png"));
         using var previewHttp = new System.Net.Http.HttpClient { BaseAddress = new Uri("http://127.0.0.1:1") };
+        var activation = new ActivationPanel(previewHttp);
+        void ActivationPreview(bool on, string filename)
+        {
+            using var sample = JsonDocument.Parse(JsonSerializer.Serialize(new { activation = new {
+                storageError = false, preferences = new { enabled = on, accounts = new[] { "claude|5h", "agy|gemini|weekly" }, idleMinutes = 30, suggestions = false },
+                accounts = new[] {
+                    new { accountId = "claude|5h", stableAccountId = "claude-a", provider = "claude", label = "sample@example.test", displayLabel = "Claude · five-hour", supported = true, status = "Window is already running.", reason = "Synthetic quota reading" },
+                    new { accountId = "claude|weekly", stableAccountId = "claude-a", provider = "claude", label = "sample@example.test", displayLabel = "Claude · weekly", supported = true, status = "Waiting for the inactivity delay.", reason = "Synthetic quota reading" },
+                    new { accountId = "agy|gemini|weekly", stableAccountId = "agy-a", provider = "antigravity", label = "sample@example.test", displayLabel = "Antigravity Gemini · weekly", supported = true, status = "Waiting for the inactivity delay.", reason = "Synthetic isolated subscription runner" },
+                    new { accountId = "agy|argon|weekly", stableAccountId = "agy-a", provider = "antigravity", label = "sample@example.test", displayLabel = "Antigravity Argon · weekly", supported = true, status = "Window is already running.", reason = "Synthetic isolated subscription runner" }
+                } } }));
+            activation.Render(sample.RootElement);
+            var host = new System.Windows.Controls.Border { Background = Brushes.White, Padding = new Thickness(16), Child = activation };
+            Save(host, 450, on ? 350 : 115, Path.Combine(directory, filename));
+            host.Child = null;
+        }
+        ActivationPreview(false, "activation-off.png");
+        ActivationPreview(true, "activation-on.png");
         var appearance = new System.Windows.Controls.StackPanel();
         appearance.Children.Add(new System.Windows.Controls.TextBlock { Text = "Appearance", FontSize = 15, FontWeight = FontWeights.SemiBold });
         appearance.Children.Add(new AppearancePanel(previewHttp, () => {}, () => false));

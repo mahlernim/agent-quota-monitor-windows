@@ -506,30 +506,46 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(self.attempts()[key], prior)
         self.assertEqual(self.journal.data['history'], history)
 
-    def test_three_hour_suggestion_snooze_dismissal_and_restart(self):
-        self.mature(35)
+    def test_legacy_preferences_use_fixed_delay_without_reminders_or_lost_selections(self):
+        key = self.monitor.rows[0]['id']
+        self.journal.data['preferences'].update(idleMinutes=120, suggestions=True, accounts=[key])
+        self.mature(36)
         self.assertIsNone(self.engine.snapshot()['suggestion'])
-        self.tick()
-        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
-        self.engine.configure({'dismiss':'shown'}); self.tick()
-        self.assertIsNone(self.engine.snapshot()['suggestion'])
-        self.engine.configure({'dismiss':'later'})
-        self.assertEqual(self.journal.data['preferences']['snoozeUntil'], self.now+7*86400)
-        self.engine = self.new_engine(); self.mature(36)
-        self.assertIsNone(self.engine.snapshot()['suggestion'])
-        self.tick(7*86400); self.mature(36)
-        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
-        self.engine.configure({'dismiss':'never'})
+        self.assertEqual(self.runner.sends, 0)
+        prefs = self.journal.data['preferences']
+        self.assertEqual(prefs['idleMinutes'], 30)
+        self.assertFalse(prefs['suggestions'])
+        self.assertFalse(prefs['enabled'])
+        self.assertEqual(prefs['accounts'], [key])
+        self.engine.configure({'suggestions': True})
+        self.assertFalse(self.journal.data['preferences']['suggestions'])
         self.engine = self.new_engine(); self.mature(36)
         self.assertIsNone(self.engine.snapshot()['suggestion'])
         self.assertEqual(self.runner.sends, 0)
-        self.engine.configure({'suggestions':True})
-        self.tick()
-        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
-        self.assertFalse(self.journal.data['preferences']['enabled'])
+
+    def test_legacy_enabled_delay_migrates_without_losing_attempt_history(self):
+        self.enable(); self.mature()
+        attempts = copy.deepcopy(self.journal.data['attempts'])
+        history = copy.deepcopy(self.journal.data['history'])
+        self.journal.data['preferences'].update(idleMinutes=60, suggestions=True)
+        self.engine = self.new_engine(); self.tick()
+        self.assertEqual(self.journal.data['preferences']['idleMinutes'], 30)
+        self.assertTrue(self.journal.data['preferences']['enabled'])
+        self.assertEqual(self.journal.data['attempts'], attempts)
+        self.assertEqual(self.journal.data['history'], history)
+        self.assertEqual(self.runner.sends, 1)
+
+    def test_legacy_preference_save_failure_cannot_dispatch(self):
+        self.enable(); self.mature(5)
+        self.journal.data['preferences'].update(idleMinutes=120, suggestions=True)
+        prior = copy.deepcopy(self.journal.data)
+        self.journal.fail = True
+        with self.assertRaises(OSError): self.tick()
+        self.assertEqual(self.runner.sends, 0)
+        self.assertEqual(self.journal.data, prior)
 
     def test_invalid_preferences_never_change_existing_settings(self):
-        for bad in ({'enabled':'yes'}, {'accounts':['unknown']}, {'idleMinutes':0}, {'dismiss':'retry'}, {'model':'expensive'}):
+        for bad in ({'enabled':'yes'}, {'accounts':['unknown']}, {'idleMinutes':0}, {'idleMinutes':60}, {'idleMinutes':120}, {'dismiss':'retry'}, {'model':'expensive'}):
             with self.assertRaises(ValueError): self.engine.configure(bad)
             self.assertEqual(self.journal.data['preferences'], DEFAULTS)
 

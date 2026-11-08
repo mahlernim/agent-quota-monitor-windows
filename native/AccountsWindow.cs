@@ -33,7 +33,7 @@ public sealed class AccountsWindow : Window
     private readonly UpdateService? _updates;
     private readonly HttpClient _http;
     private readonly ActivationPanel _activation;
-    private readonly Expander _activationSection = new() { Header = "Quota window activation", Margin = new Thickness(0, 8, 0, 8) };
+    private readonly StackPanel _activationSection = new() { Margin = new Thickness(0, 8, 0, 8) };
     private readonly Action _changed;
     private readonly Func<bool> _backendReady;
     private readonly Dictionary<string, CheckBox> _providerChecks = [];
@@ -200,7 +200,8 @@ public sealed class AccountsWindow : Window
             UpdateStatus();
         }
         body.Children.Add(Hint("Found a bug or have an idea?", UpdateService.Repository + "/issues", "Report it on GitHub"));
-        _activationSection.Content = _activation;
+        _activationSection.Children.Add(Heading("Quota window activation"));
+        _activationSection.Children.Add(_activation);
         body.Children.Add(_activationSection);
         body.Children.Add(new Separator { Margin = new Thickness(0, 4, 0, 6) });
         body.Children.Add(Heading("Monitored providers"));
@@ -366,7 +367,6 @@ public sealed class AccountsWindow : Window
 
     internal void ShowActivation()
     {
-        _activationSection.IsExpanded = true;
         _activationSection.BringIntoView();
     }
 
