@@ -33,6 +33,7 @@ internal static class Program
             try
             {
                 TestState();
+                await TestAppearance();
                 await TestActivation();
                 await TestWindow(args.Length == 1 ? args[0] : null);
                 Console.WriteLine($"Passed {_checks} native account checks. Provider requests 0. Settings writes 0.");
@@ -49,6 +50,39 @@ internal static class Program
     {
         if (!value) throw new InvalidOperationException(name);
         ++_checks;
+    }
+    private static async Task TestAppearance()
+    {
+        using var backend = new SyntheticBackend();
+        using var http = new HttpClient(backend) { BaseAddress = new Uri("http://127.0.0.1:1") };
+        int changed = 0;
+        string? choice = "#112233";
+        var panel = new AppearancePanel(http, () => changed++, () => true, _ => choice);
+        await Call(panel, "ChooseAsync", "codex");
+        Check(RingAppearance.Copy()["codex"] == choice && changed == 1 && backend.LastBody!.Contains("mainRingColors"),
+            "Color picker saves a provider override and refreshes the main monitor");
+        backend.PostStatus = HttpStatusCode.ServiceUnavailable;
+        choice = "#445566";
+        await Call(panel, "ChooseAsync", "codex");
+        Check(RingAppearance.Copy()["codex"] == "#112233" && changed == 1, "Failed color saves keep the confirmed appearance");
+        Check(Field<TextBlock>(panel, "message").Text.Contains("couldn't"), "Color save errors are visible");
+        var pending = new TaskCompletionSource<HttpResponseMessage>();
+        backend.NextPost = pending.Task;
+        var first = Call(panel, "ChooseAsync", "claude");
+        int requests = backend.Requests;
+        await Call(panel, "ChooseAsync", "copilot");
+        Check(backend.Requests == requests && !Field<Button>(panel, "restore").IsEnabled, "Pending color saves serialize all changes");
+        pending.SetResult(SyntheticBackend.Json("{}")); await first;
+        choice = null; requests = backend.Requests;
+        await Call(panel, "ChooseAsync", "copilot");
+        Check(backend.Requests == requests, "Cancelling the picker leaves preferences unchanged");
+        backend.PostStatus = HttpStatusCode.OK;
+        await Call(panel, "SaveAsync", new Dictionary<string, string>());
+        Check(RingAppearance.Copy().Count == 0 && backend.LastBody == "{\"mainRingColors\":{}}", "Restore defaults removes all color overrides");
+        using var stored = JsonDocument.Parse("{\"mainRingColors\":{\"codex\":\"#ABCDEF\",\"claude\":\"red\",\"unknown\":\"#123456\"}}");
+        RingAppearance.Apply(stored.RootElement);
+        Check(RingAppearance.Copy().Count == 1 && RingAppearance.Copy()["codex"] == "#ABCDEF", "Reload validates stored colors without accepting unknown providers");
+        RingAppearance.Set(new Dictionary<string, string>());
     }
     private static async Task TestActivation()
     {

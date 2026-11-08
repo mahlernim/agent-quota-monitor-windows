@@ -41,6 +41,16 @@ public sealed class QuotaItem
     public string Tooltip { get => WeeklyLimitReached ? weeklyTooltip : tooltip; set => tooltip = value; }
     public double? Remaining { get; init; }
     public double? TimeRemaining { get; set; }
+    public DateTimeOffset? CountdownReset { get; init; }
+    public string Countdown(DateTimeOffset now)
+    {
+        if (Stale || (Disabled && !WeeklyLimitReached) || Unlimited || CountdownReset is not DateTimeOffset reset) return "";
+        var left = reset - now;
+        if (left <= TimeSpan.Zero) return "";
+        if (left.TotalDays >= 1) return $"{(int)left.TotalDays}d {left.Hours}h";
+        if (left.TotalHours >= 1) return $"{(int)left.TotalHours}h {left.Minutes}m";
+        return left.TotalMinutes >= 1 ? $"{(int)left.TotalMinutes}m" : "<1m";
+    }
     public bool Unlimited { get; init; }
     public bool Disabled { get; init; }
     // Effective baseline availability is separate from the provider's disabled/null reading.
@@ -104,7 +114,8 @@ public sealed class QuotaItem
             var duration = Number(b, "windowSeconds");
             var window = duration == 18000 ? "5h" : duration == 604800 ? "7d" : Text(b, "windowKind") == "monthly" ? "Month" : Text(b, "label");
             var unlimited = !disabled && b.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True;
-            double? time = null; var resetText = disabled ? "Window disabled by provider" : "Reset unknown";
+            double? time = null; DateTimeOffset? countdownReset = null;
+            var resetText = disabled ? "Window disabled by provider" : "Reset unknown";
             if (!disabled && DateTimeOffset.TryParse(Text(b, "resetsAt"), out var reset))
             {
                 var left = reset - observedAt;
@@ -117,6 +128,9 @@ public sealed class QuotaItem
                 }
                 if (status == "live" && remaining.HasValue && duration is 18000 or 604800 && left.TotalSeconds > 0 && left.TotalSeconds <= duration &&
                     !(b.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.False)) time = left.TotalSeconds / duration * 100;
+                if (status == "live" && remaining.HasValue && !unlimited && left.TotalSeconds > 0 &&
+                    left.TotalSeconds <= (duration is > 0 ? duration.Value : Text(b, "windowKind") == "monthly" ? 32 * 86400 : 0) &&
+                    !(b.TryGetProperty("available", out var countdownAvailable) && countdownAvailable.ValueKind == JsonValueKind.False)) countdownReset = reset;
             }
             var aid = Text(a, "id"); var gid = Text(g, "id"); var bid = Text(b, "id");
             var quotaText = disabled ? "Disabled" : unlimited ? "Unlimited" : remaining.HasValue ? Percent(remaining.Value) + " remaining" : "Unknown";
@@ -126,6 +140,7 @@ public sealed class QuotaItem
             result.Add(new QuotaItem { Key = MakeKey(aid, gid, bid), AccountId = aid, GroupId = gid, BucketId = bid,
                 Provider = provider, Code = code, Type = QuotaNames.TypeFor(provider, group), Account = Text(a, "label"), Group = group, Window = window,
                 Status = status, Remaining = remaining, Unlimited = unlimited, Disabled = disabled, TimeRemaining = time, ResetText = resetText,
+                CountdownReset = weeklyReset ?? countdownReset,
                 weeklyResetText = weeklyText,
                 weeklyTooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · 0% available · Weekly limit reached\n{status.ToUpperInvariant()} · {weeklyText}\nBaseline quota only · AI Credit overages may allow continued use{note}",
                 Tooltip = $"{provider} · {Text(a, "label")}\n{group} · {window} · {quotaText}\n{status.ToUpperInvariant()} · {resetText}{pace}{note}" });

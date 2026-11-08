@@ -275,6 +275,8 @@ public sealed class AccountsWindow : Window
         body.Children.Add(Heading("Quota names"));
         body.Children.Add(Hint("Initials appear in the tray. Names appear on rings and in the floating monitor when they fit."));
         body.Children.Add(BuildNames());
+        body.Children.Add(new Expander { Header = "Appearance", Margin = new Thickness(0, 10, 0, 4),
+            Content = new AppearancePanel(_http, _changed, _backendReady) });
 
         var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         root.Children.Add(scroll);

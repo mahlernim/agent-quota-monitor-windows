@@ -6,7 +6,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 [Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.12/agent-quota-monitor-windows-0.4.12-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.12/agent-quota-monitor-windows-0.4.12-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.12)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.13/agent-quota-monitor-windows-0.4.13-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.13/agent-quota-monitor-windows-0.4.13-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.13)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -43,7 +43,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.12/agent-quota-monitor-windows-0.4.12-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.13/agent-quota-monitor-windows-0.4.13-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
@@ -110,6 +110,10 @@ Accounts are matched by stable provider identity, never by email label, so two a
 ## Read a quota ring
 
 The thick outer ring is quota remaining, drawn in the provider's color. The thin gray ring inside it is time remaining in the current window. It appears only when the reset time is known.
+
+In the main window, a compact blue-gray countdown sits just below the percentage inside each ring. It shows days and hours, hours and minutes, or minutes below one hour. Less than one minute appears as **<1m**. Unknown, expired, or stale resets have no countdown. Hover for the exact reset time. Floating windows keep their percentage-only display.
+
+Under **Settings → Appearance**, choose a main-window ring color for each provider. An Antigravity color applies to all its model groups. **Restore defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
 
 The percentage turns **amber** when quota remaining falls below half of time remaining, and **red** below one quarter. For example, with 80% of the window left, amber starts under 40% quota and red under 20%. Without timing data there is no pace warning.
 

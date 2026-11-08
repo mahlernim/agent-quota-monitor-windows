@@ -55,6 +55,28 @@ class NativeRequestTests(unittest.TestCase):
         with self.post('/api/providers', {'enabled': []}) as response:
             self.assertEqual(response.status, 200)
 
+    def test_ring_colors_persist_without_changing_pins_or_other_preferences(self):
+        pins = [{'accountId': 'a', 'groupId': 'g', 'bucketId': 'b'}]
+        with self.post('/api/desktop', {'desktopFloatingSelections': pins, 'mainRingColors': {'codex': '#123ABC'}}):
+            pass
+        self.stop_server()
+        self.start_server(Monitor(Store(), settings_vault=self.settings))
+        with urllib.request.urlopen(self.url + '/api/desktop') as response:
+            saved = json.load(response)
+        self.assertEqual(saved['mainRingColors'], {'codex': '#123ABC'})
+        self.assertEqual(saved['desktopFloatingSelections'], pins)
+        for colors in ({'codex': 'red'}, {'codex': '#fff'}, {'codex': '#12345678'},
+                       {'codex': '#123456\n'}, {'codex': None}, {'unknown': '#123456'}, [], None):
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                self.post('/api/desktop', {'mainRingColors': colors})
+            self.assertEqual(caught.exception.code, 400)
+            self.assertEqual(self.settings.load()['mainRingColors'], {'codex': '#123ABC'})
+        with self.post('/api/desktop', {'mainRingColors': {}}):
+            pass
+        self.assertEqual(self.settings.load()['mainRingColors'], {})
+        self.assertEqual(self.settings.load()['desktopFloatingSelections'], pins)
+        self.assertEqual(self.settings.load()['unrelated'], 'preserved')
+
     def test_refresh_reports_pending_before_worker_starts_and_coalesces_clicks(self):
         workers = []
         def queue_worker(*, target, daemon):

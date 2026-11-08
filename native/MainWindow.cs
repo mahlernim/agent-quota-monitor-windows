@@ -340,7 +340,7 @@ public sealed class MainWindow : Window
         border.Child = overlay;
         // The whole card selects the tray quota. The pin sits above it with its own click.
         var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
-        var donut = new Donut { Width = 58, Height = 58, HorizontalAlignment = HorizontalAlignment.Center };
+        var donut = new Donut { Width = 58, Height = 58, MainPresentation = true, HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(donut);
         var label = new FitText { Width = CardWidth - 8, Height = 16, FontSize = 11, Margin = new Thickness(0, 2, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(label);
@@ -400,6 +400,7 @@ public sealed class MainWindow : Window
         card.Select.ToolTip = item.Tooltip + "\nOuter ring quota · Gray inner ring time\nClick to show in the tray · Drag to reorder · Right-click for more";
         AutomationProperties.SetName(card.Select, item.Label + " " + item.Account + (selected ? ", shown in tray" : "") + (item.Stale ? ", stale" : ""));
         card.Donut.Item = item;
+        card.Donut.InvalidateVisual();
         card.Label.Set(item.Label, item.ShortLabel);
         card.Label.Foreground = item.Stale ? Ui.Muted : Ui.Text;
         card.Tray.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;

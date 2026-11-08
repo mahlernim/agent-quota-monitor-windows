@@ -6,9 +6,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 Requires Windows 10 or 11 on x64 and an eligible account with each provider you enable.
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.12/agent-quota-monitor-windows-0.4.12-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.13/agent-quota-monitor-windows-0.4.13-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.12/agent-quota-monitor-windows-0.4.12-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.13/agent-quota-monitor-windows-0.4.13-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -55,6 +55,10 @@ Accounts remain separate by verified identity, even when email labels match. Dir
 - **Close** or **Esc** hides the main window to the tray. **Esc** also closes Settings. **Quit** exits and stops the quota reader if this app started it.
 
 The thick outer ring shows quota remaining in the provider's color. The thin gray inner ring shows time remaining when the reset time is known. Percentage text turns amber when quota remaining falls below half of time remaining, and red below one quarter.
+
+The main window also shows a compact blue-gray countdown just below the percentage inside each ring. It uses days and hours, hours and minutes, or minutes below one hour. Less than one minute appears as **<1m**. Unknown, expired, or stale resets have no countdown. Hover for the exact reset time. Floating windows keep their percentage-only display.
+
+Under **Settings → Appearance**, choose a main-window ring color for each provider. An Antigravity color applies to all its model groups. **Restore defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
 
 Rings show short names such as **Codex 5h**. The default tray initials are CX for Codex, CL for Claude, AG for Antigravity Gemini, AC for Antigravity Claude and GPT, and CP for Copilot. Change both under **Quota names** in Settings. Names never change colors or account grouping.
 
@@ -128,6 +132,6 @@ Quota settings and cached snapshots are encrypted for your Windows user under `%
 
 Activation choices and attempt receipts are encrypted separately in `activation.dpapi` in that folder. Receipts contain stable account IDs, timestamps, outcomes, and numeric token counts. They do not contain response text or credentials. Updates preserve this file. Do not delete it to retry an uncertain prompt.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.12) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.13) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.
