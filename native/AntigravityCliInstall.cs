@@ -14,6 +14,21 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
     internal static readonly OfficialInstall Antigravity = new("Install Antigravity CLI", AntigravityCliInstall.Command,
         AntigravityCliInstall.Confirmation, AntigravityCliInstall.Script);
 
+    internal const string AntigravityUpdateCommand = "& $agyPath update";
+    internal static readonly OfficialInstall AntigravityUpdate = new("Update Antigravity CLI", "agy update",
+        "Update Antigravity CLI?\n\nA PowerShell window will run the official agy update command.\n\n" +
+        "Finish active Antigravity CLI work first. Your normal CLI settings and plugins stay in place. " +
+        "This does not send a model prompt or start sign-in. When it finishes, press Refresh in AQM.",
+        string.Join("\n", "$ErrorActionPreference = 'Stop'",
+            "$agyCommand = Get-Command agy.exe -CommandType Application -ErrorAction SilentlyContinue",
+            "$agyPath = if ($agyCommand) { $agyCommand.Source } else { Join-Path $env:LOCALAPPDATA 'agy\\bin\\agy.exe' }",
+            "if (-not (Test-Path -LiteralPath $agyPath -PathType Leaf)) { throw 'Antigravity CLI was not found. Install CLI first.' }",
+            AntigravityUpdateCommand,
+            "if ($LASTEXITCODE) { throw 'Antigravity CLI update failed. Check the output above.' }",
+            "& $agyPath --version",
+            "if ($LASTEXITCODE) { throw 'The updated Antigravity CLI version could not be checked.' }",
+            "Write-Host 'Update finished. Return to AQM and press Refresh.' -ForegroundColor Green"));
+
     /// <summary>Anthropic's official native Claude Code installer.</summary>
     internal static readonly OfficialInstall Claude = Client("Claude Code", "https://claude.ai/install.ps1",
         "It installs Claude Code for your Windows account in %USERPROFILE%\\.local\\bin. " +

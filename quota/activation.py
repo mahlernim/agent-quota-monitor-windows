@@ -36,6 +36,7 @@ def timestamp(value):
 
 from .activation_windows import classify, target, targets
 from .activation_runners import NotLaunched
+from .activation_errors import error_code, message
 
 
 class Journal:
@@ -156,6 +157,7 @@ class Activation:
         self.error = False
         self.busy = False
         self.preflight_failures = {}
+        self.preflight_errors = {}
         self.barriers = {}
         self.view = dict(preferences=copy.deepcopy(DEFAULTS), accounts=[], suggestion=None)
 
@@ -290,12 +292,14 @@ class Activation:
                     # evidence explains the next delay or blocker.
                     status = {'reserved':'A prompt may have been sent. No automatic retry.', 'sent':'Prompt sent. Waiting for two fresh countdown readings.',
                               'uncertain':'Delivery is uncertain. No automatic retry.'}.get(attempt['state'], status)
+                    if attempt['state'] == 'uncertain' and attempt.get('errorCode'):
+                        status = message(attempt['errorCode']) + ' Delivery is uncertain. No automatic retry.'
                     eligible = eligible and self._released(attempt, obs.get('since', 0))
                 eligible = eligible and not self._group_pending(data, row, key)
                 if eligible and not prefs['enabled'] and prefs['suggestions'] and not prefs['dismissed'] and now>=prefs['snoozeUntil'] and waited>=10800 and key not in data['suggested']:
                     suggestion = dict(accountId=key, label=row.get('label',row['provider'])+' · '+row['activationLabel'], message='This quota window is waiting to start. AQM can send a short prompt so its reset countdown begins earlier. This uses subscription allowance.')
-                if key in self.preflight_failures:
-                    status = 'Subscription identity could not be verified. No prompt sent.'
+                if key in self.preflight_failures and obs['state'] == 'inactive':
+                    status = message(self.preflight_errors.get(key)) + ' No prompt sent.'
                 if (eligible and prefs['enabled'] and key in prefs['accounts'] and waited>=prefs['idleMinutes']*60 and candidate is None and now>=self.preflight_failures.get(key,0)):
                     if self._recent(data, row, now)<5:
                         candidate = row
@@ -361,8 +365,10 @@ class Activation:
         try:
             executable = runner.prepare(row)
             self.preflight_failures.pop(key, None)
-        except Exception:
+            self.preflight_errors.pop(key, None)
+        except Exception as error:
             self.preflight_failures[key] = self.clock()+300
+            self.preflight_errors[key] = error_code(error)
             return
         if self.stop.is_set():
             return
@@ -413,21 +419,23 @@ class Activation:
             return
         with self.lock:
             self.busy=True
-        state, usage = 'uncertain', {}
+        state, usage, failure_code = 'uncertain', {}, None
         try:
             # No inference fallback and no resend, including after a timeout.
             usage = runner.send(executable)
             state = 'sent'
-        except NotLaunched:
+        except NotLaunched as error:
             # The runner proved that no process started, so nothing was delivered.
             state = None
-        except Exception:
-            pass
+            failure_code = getattr(error, 'code', 'identity')
+        except Exception as error:
+            failure_code = error_code(error, 'delivery')
         finally:
             with self.lock:
                 self.busy=False
         if state is None:
             self.preflight_failures[key] = self.clock()+300
+            self.preflight_errors[key] = failure_code
             self._release(attempt['id'], priors)
             return
         with self.journal.transaction() as data:
@@ -435,9 +443,13 @@ class Activation:
                 for reserved_key in reserved:
                     if data['attempts'][reserved_key]['state'] == 'reserved':
                         data['attempts'][reserved_key].update(state=state,usage=usage)
+                        if failure_code:
+                            data['attempts'][reserved_key]['errorCode'] = failure_code
                 for receipt in data['history']:
                     if receipt.get('id') == attempt['id'] and receipt.get('state') == 'reserved':
                         receipt.update(state=state,usage=usage)
+                        if failure_code:
+                            receipt['errorCode'] = failure_code
                 self.journal.save(data)
 
     def _release(self, batch, priors):

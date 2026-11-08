@@ -231,13 +231,14 @@ class ProviderRunnerTests(unittest.TestCase):
         runner = AntigravityRunner()
         with patch.object(runner, 'identity', return_value='revision'), \
                 patch('quota.activation_runners.antigravity_cli.command', return_value=['synthetic.exe']), \
-                patch('quota.activation_runners.workspace', return_value='empty'), \
-                patch('quota.activation_runners.claude_cli.run', side_effect=[(0, 'No imported plugins.'), (0, 'No MCP servers configured.')]):
+                patch('quota.antigravity_activation.profile', return_value=('isolated-home', 'empty')), \
+                patch('quota.antigravity_activation.preflight'):
             prepared = runner.prepare(dict(activationGroup='gemini-argon'))
-        self.assertEqual(prepared, ('synthetic.exe', 'gemini-4-argon-low', 'revision', 'empty'))
+        self.assertEqual(prepared, ('synthetic.exe', 'gemini-4-argon-low', 'revision', 'empty', 'isolated-home'))
         for code, output in ((0, dict(status='SUCCESS', usage=dict(input_tokens=12, output_tokens=2))),
                              (1, dict(status='ERROR'))):
             with self.subTest(code=code), \
+                    patch('quota.antigravity_activation.validate'), \
                     patch('quota.activation_runners.antigravity_cli.check_auth_mode'), \
                     patch('quota.activation_runners.antigravity_cli.credential', return_value=('synthetic', 'revision')), \
                     patch('quota.activation_runners.claude_cli.run', return_value=(code, json.dumps(dict(event='result', result=output)))) as run:
@@ -278,18 +279,20 @@ class ProviderRunnerTests(unittest.TestCase):
         run.assert_not_called()
         for revision in ('other', None):
             credential = patch('quota.activation_runners.antigravity_cli.credential',return_value=('synthetic',revision)) if revision else                 patch('quota.activation_runners.antigravity_cli.credential',side_effect=OSError('locked'))
-            with patch('quota.activation_runners.antigravity_cli.check_auth_mode'), credential, patch('quota.activation_runners.claude_cli.run') as run:
-                with self.assertRaises(NotLaunched): AntigravityRunner().send(('synthetic.exe','gpt-oss-120b-medium','revision','empty'))
+            with patch('quota.antigravity_activation.validate'), patch('quota.activation_runners.antigravity_cli.check_auth_mode'), credential, patch('quota.activation_runners.claude_cli.run') as run:
+                with self.assertRaises(NotLaunched): AntigravityRunner().send(('synthetic.exe','gpt-oss-120b-medium','revision','empty','isolated-home'))
             run.assert_not_called()
 
     def test_antigravity_exact_group_model_plan_mode_and_uncertain_tool_result(self):
         output = json.dumps(dict(event='result',result=dict(status='SUCCESS',usage=dict(input_tokens=12))))
-        with patch('quota.activation_runners.antigravity_cli.check_auth_mode'), patch('quota.activation_runners.antigravity_cli.credential',return_value=('synthetic','revision')), patch('quota.activation_runners.claude_cli.run',return_value=(0,output)) as run:
-            self.assertEqual(AntigravityRunner().send(('synthetic.exe','gpt-oss-120b-medium','revision','empty')),dict(input_tokens=12))
+        with patch('quota.antigravity_activation.validate'), patch('quota.activation_runners.antigravity_cli.check_auth_mode'), patch('quota.activation_runners.antigravity_cli.credential',return_value=('synthetic','revision')), patch('quota.activation_runners.claude_cli.run',return_value=(0,output)) as run:
+            self.assertEqual(AntigravityRunner().send(('synthetic.exe','gpt-oss-120b-medium','revision','empty','isolated-home')),dict(input_tokens=12))
         args = run.call_args.args[1]
         self.assertIn('plan',args)
         self.assertIn('gpt-oss-120b-medium',args)
         self.assertNotIn('--dangerously-skip-permissions',args)
+        self.assertEqual(args[args.index('--agent')+1], 'aqm-activation')
+        self.assertEqual(run.call_args.kwargs['env']['USERPROFILE'], 'isolated-home')
 
 
 if __name__ == '__main__': unittest.main()

@@ -74,6 +74,11 @@ public sealed class AccountsWindow : Window
         ToolTip = "Install the official Antigravity CLI (agy) so quota can be read without the desktop app."
     });
     private readonly Func<Window, bool> _confirmCliInstall;
+    private readonly Button _updateCli = Ui.Apply(new Button
+    {
+        Content = "Update CLI", Tag = "update-antigravity-cli", Margin = new Thickness(0, 1, 6, 1), Visibility = Visibility.Collapsed,
+        ToolTip = "Run the official agy update command after confirmation."
+    });
     private readonly Action _startCliInstall;
     private readonly Func<Window, OfficialInstall, bool> _confirmInstall;
     private readonly Action<OfficialInstall> _startInstall;
@@ -235,6 +240,9 @@ public sealed class AccountsWindow : Window
                 _installCli.Click += (_, _) => InstallCli();
                 DockPanel.SetDock(_installCli, Dock.Right);
                 row.Children.Add(_installCli);
+                _updateCli.Click += (_, _) => InstallClient(OfficialInstall.AntigravityUpdate, "When it finishes, press Refresh in the main window.");
+                DockPanel.SetDock(_updateCli, Dock.Right);
+                row.Children.Add(_updateCli);
             }
             body.Children.Add(row);
         }
@@ -398,6 +406,7 @@ public sealed class AccountsWindow : Window
             // Offer the install only when the reader positively reports that agy is missing.
             _installCli.Visibility = clients.TryGetProperty("antigravityCli", out JsonElement cli) && cli.ValueKind == JsonValueKind.False
                 ? Visibility.Visible : Visibility.Collapsed;
+            _updateCli.Visibility = cli.ValueKind == JsonValueKind.True ? Visibility.Visible : Visibility.Collapsed;
         }
 
         _job.Text = "";

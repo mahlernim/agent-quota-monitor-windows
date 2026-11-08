@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 from . import antigravity_cli, claude_cli, connections, model, providers
+from .activation_errors import ActivationFailure, error_code
 
 PROMPT = 'Reply only OK. Do not use tools, read files, access URLs, or delegate.'
 MODELS = {'gemini': 'gemini-3.8-flash-low', 'claude-gpt': 'gpt-oss-120b-medium',
@@ -93,7 +94,7 @@ class CodexRunner:
 class AntigravityRunner:
     def capability(self):
         antigravity_cli.command()
-        return True, 'A short Flash, Argon Low, or GPT-OSS subscription prompt for the selected group in plan mode. CLI context also uses allowance.'
+        return True, 'A short Flash, Argon Low, or GPT-OSS subscription prompt using an isolated text-only CLI profile. Normal plugins and settings stay unchanged.'
 
     @staticmethod
     def identity(row):
@@ -105,32 +106,47 @@ class AntigravityRunner:
         return revision
 
     def prepare(self, row):
-        revision = self.identity(row)
-        executable = antigravity_cli.command()[0]
-        cwd = workspace()
-        env = environment()
-        for args, expected in ((['plugins', 'list'], 'No imported plugins.'),
-                               (['mcp', 'list'], 'No MCP servers configured.')):
-            code, output = claude_cli.run(executable, args, timeout=20, env=env, cwd=cwd)
-            if code or output.strip() != expected:
-                raise ValueError('Activation requires a CLI without configured plugins or MCP servers')
-        return executable, MODELS[row['activationGroup']], revision, cwd
+        from . import antigravity_activation as isolated
+        stage = 'identity'
+        try:
+            revision = self.identity(row)
+            stage = 'client'
+            executable = antigravity_cli.command()[0]
+            stage = 'profile'
+            home, cwd = isolated.profile()
+            stage = 'probe'
+            isolated.preflight(executable, home, cwd)
+            return executable, MODELS[row['activationGroup']], revision, cwd, home
+        except Exception as error:
+            raise ActivationFailure(error_code(error, stage)) from error
 
     def send(self, prepared):
-        executable, selected, revision, cwd = prepared
+        from . import antigravity_activation as isolated
+        executable, selected, revision, cwd, home = prepared
+        stage = 'profile'
         try:
+            isolated.validate(home, cwd)
+            stage = 'identity'
             antigravity_cli.check_auth_mode()
             current = antigravity_cli.credential()[1]
         except Exception as error:
-            raise NotLaunched('Antigravity identity unavailable') from error
+            failure = NotLaunched('Antigravity pre-launch check failed')
+            failure.code = error_code(error, stage)
+            raise failure from error
         if current != revision:
-            raise NotLaunched('Antigravity identity changed')
-        args = ['-p', PROMPT, '--model', selected, '--mode', 'plan', '--disable-slash-commands',
+            failure = NotLaunched('Antigravity identity changed')
+            failure.code = 'identity'
+            raise failure
+        args = ['--agent', isolated.AGENT_NAME, '-p', PROMPT, '--model', selected, '--mode', 'plan', '--disable-slash-commands',
                 '--output-format', 'stream-json', '--print-timeout', '60s']
-        code, text = claude_cli.run(executable, args, timeout=75, env=environment(), cwd=cwd)
-        events = [json.loads(line) for line in text.splitlines() if line.strip()]
+        code, text = claude_cli.run(executable, args, timeout=75, env=isolated.child_environment(home), cwd=cwd)
+        try:
+            events = [json.loads(line) for line in text.splitlines() if line.strip()]
+        except ValueError as error:
+            raise ActivationFailure('delivery') from error
         results = [e['result'] for e in events if e.get('event') == 'result']
-        if (code or len(results) != 1 or results[0].get('status') != 'SUCCESS' or
-                any(e.get('step_update', {}).get('step_type') == 'tool' for e in events)):
-            raise ValueError('Uncertain Antigravity delivery')
+        if any(e.get('step_update', {}).get('step_type') in ('tool', 'subagent') for e in events):
+            raise ActivationFailure('tools')
+        if code or len(results) != 1 or results[0].get('status') != 'SUCCESS':
+            raise ActivationFailure('delivery')
         return counters(results[0])
