@@ -17,6 +17,7 @@ VERSION_RETRY_SECONDS = 300
 VERSION_PROBE_BUDGET_SECONDS = 10
 CLIENT_FIELDS = ('clientVersion', 'clientState', 'clientUpdateMethod', 'clientMinimumVersion')
 SOURCE = 'Official Claude Code CLI /usage'
+AUTH_AMBIGUOUS = frozenset(('quota_not_reported', 'claude_cli_failed', 'schema_changed'))
 _versions = {}
 _version_lock = threading.Lock()
 
@@ -246,7 +247,18 @@ def cli_account(executable, home):
 
     def read():
         check_identity()
-        groups = usage(executable)
+        try:
+            groups = usage(executable)
+        except ReadError as err:
+            # A failed renewal inside /usage can report no quota or fail outright.
+            # Report a session the CLI has dropped as sign-in, not as missing quota.
+            if err.code in AUTH_AMBIGUOUS:
+                try:
+                    auth_status(executable)
+                except ReadError as status:
+                    if status.code == 'sign_in_required':
+                        raise status from None
+            raise
         check_identity()
         return groups, original['emailAddress']
 

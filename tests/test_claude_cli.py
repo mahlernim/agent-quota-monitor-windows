@@ -163,6 +163,55 @@ class AccountTests(unittest.TestCase):
                 self.assertEqual(auth.call_count, 2)
                 self.assertEqual(os.environ[name], 'synthetic-secret')
 
+    def test_session_dropped_during_usage_is_reported_as_sign_in(self):
+        signed_out = providers.ReadError('sign_in_required')
+        for code in sorted(cli.AUTH_AMBIGUOUS):
+            with self.subTest(code=code), \
+                    patch.object(cli, 'auth_status', side_effect=[STATUS, signed_out]) as auth, \
+                    patch.object(cli, 'usage', side_effect=providers.ReadError(code)):
+                account = cli.cli_account('claude.exe', self.home)
+                with self.assertRaises(providers.ReadError) as caught:
+                    account['read']()
+                self.assertEqual(caught.exception.code, 'sign_in_required')
+                self.assertEqual(auth.call_count, 2)
+
+    def test_usage_failure_keeps_its_code_while_signed_in(self):
+        cases = (('quota_not_reported', STATUS, 2), ('claude_cli_failed', providers.ReadError('claude_cli_timeout'), 2),
+                 ('claude_cli_timeout', None, 1), ('response_too_large', None, 1))
+        for code, recheck, calls in cases:
+            side_effect = [STATUS] if recheck is None else [STATUS, recheck]
+            with self.subTest(code=code), \
+                    patch.object(cli, 'auth_status', side_effect=side_effect) as auth, \
+                    patch.object(cli, 'usage', side_effect=providers.ReadError(code)):
+                account = cli.cli_account('claude.exe', self.home)
+                with self.assertRaises(providers.ReadError) as caught:
+                    account['read']()
+                self.assertEqual(caught.exception.code, code)
+                self.assertEqual(auth.call_count, calls)
+
+    def test_dropped_session_retries_when_cli_renews_it(self):
+        class Vault:
+            def load(self): return {}
+        now = [1000]
+        monitor = Monitor(Vault(), clock=lambda: now[0])
+        path = self.home / '.claude/.credentials.json'
+        path.parent.mkdir()
+        path.write_text('not parsed by the monitor')
+        with patch.object(cli, 'auth_status', side_effect=[STATUS, providers.ReadError('sign_in_required')]), \
+                patch.object(cli, 'usage', side_effect=providers.ReadError('quota_not_reported')):
+            monitor.refresh_one(cli.cli_account('claude.exe', self.home))
+        row = next(iter(monitor.rows.values()))
+        self.assertEqual(row['error'], 'sign_in_required')
+        # Signing in rewrites the CLI session, which allows a read before the backoff ends.
+        now[0] += 60
+        path.write_text('CLI signed in again')
+        os.utime(path, ns=(path.stat().st_mtime_ns + 10**9,) * 2)
+        with patch.object(cli, 'auth_status', return_value=STATUS), \
+                patch.object(cli, 'usage', return_value=cli.parse_usage(stream(events()))):
+            monitor.refresh_one(cli.cli_account('claude.exe', self.home))
+        row = next(iter(monitor.rows.values()))
+        self.assertEqual((row['status'], row['error']), ('live', None))
+
     def test_failure_keeps_stale_values_and_backoff(self):
         class Vault:
             def load(self): return {}

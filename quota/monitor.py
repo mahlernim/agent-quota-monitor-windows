@@ -8,9 +8,11 @@ from .retry import MAX_TIMESTAMP, deadline, delay_seconds, finite_number
 INTERVAL = 300
 SUPPORTED_PROVIDERS = ('codex', 'claude', 'antigravity', 'copilot')
 # Failures that never reached the provider. They retry at the normal interval.
-LOCAL_FAILURES = frozenset(('network_unavailable', 'session_expired'))
+LOCAL_FAILURES = frozenset(('network_unavailable', 'session_expired', 'copilot_node_update_required'))
 # Errors that end when the official client changes its session file.
 SESSION_ERRORS = frozenset(('sign_in_required', 'session_expired'))
+# Errors that end when a required local runtime is replaced.
+RUNTIME_ERRORS = frozenset(('copilot_node_update_required',))
 # Connection failures that a resumed network can clear. Provider cooldowns still apply.
 WAKE_ERRORS = frozenset(('network_unavailable', 'connection_or_response_error'))
 RING_FIELDS = {'accountId', 'groupId', 'bucketId'}
@@ -234,7 +236,8 @@ class Monitor:
                 self.rows[key] = old
             return
         renewed = old.get('error') in SESSION_ERRORS and not old.get('providerCooldown') and account.get('sessionRevision') != old.get('sessionRevision')
-        if not renewed and not migrated and now < old.get('nextAttempt', 0):
+        updated = old.get('error') in RUNTIME_ERRORS and account.get('runtimeRevision') != old.get('runtimeRevision')
+        if not renewed and not updated and not migrated and now < old.get('nextAttempt', 0):
             with self.lock:
                 self.rows[key] = old
             return

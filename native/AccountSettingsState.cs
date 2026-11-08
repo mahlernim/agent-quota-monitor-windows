@@ -45,6 +45,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
     internal bool ReportsFormatChange => Error == "schema_changed" && !AwaitingStartupRetry;
 
     internal bool ClaudeUpdateAvailable => Provider == "claude" && ClientState == "outdated";
+    internal bool NodeUpdateRequired => Provider == "copilot" && Error == "copilot_node_update_required";
     internal string ClaudeUpdateAction => OfficialInstall.ClaudeUpdate(ClientUpdateMethod) is null ? "claude-update-help" : "update-claude";
     private string ClaudeMinimum => ClientMinimumVersion.Length > 0 ? ClientMinimumVersion : "2.1.281";
     internal string ClientDetails => Provider != "claude" || ClientState.Length == 0 ? "" :
@@ -112,7 +113,8 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
         "identity_changed" => "Account changed. Waiting for discovery.",
         "quota_not_reported" => "No quota was reported.",
         "copilot_setup_required" => "Copilot needs a one-time setup. Choose Set up Copilot. It installs the official GitHub tools and SDK after you confirm.",
-        "copilot_node_update_required" => OfficialInstall.CopilotNodeRequirement,
+        "copilot_node_update_required" => OfficialInstall.CopilotNodeRequirement + " Update Node.js runs the official winget update after you confirm. " +
+            "The monitor checks again within a minute after Node.js changes.",
         "copilot_not_connected" => "Copilot is set up. Choose Connect to link the account the GitHub CLI is signed in to, or Sign in to choose another account.",
         "copilot_auth_source_unsupported" => "The existing github.com GitHub CLI sign-in is required.",
         "copilot_read_timeout" => "Copilot quota read timed out.",
@@ -152,7 +154,8 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
                 "sign_in_required" when IsAntigravityDesktop => new("The Antigravity desktop session was rejected.", "open-desktop", "Open desktop app"),
                 "session_expired" when Provider == "claude" => new("Your Claude Code session expired. Sign in to renew it. No message is needed.", "sign-in", "Sign in"),
                 "copilot_setup_required" => new("GitHub Copilot isn't set up yet.", "setup-copilot", "Set up Copilot"),
-                "copilot_node_update_required" => new(OfficialInstall.CopilotNodeRequirement),
+                "copilot_node_update_required" => new("Copilot needs a security-updated Node.js runtime, 22.23.4, 24.22.1, 26.12.1, or newer in the same line.",
+                    "update-node", "Update Node.js"),
                 "copilot_not_connected" => new("Copilot is set up. Link your GitHub account.", "connect-copilot", "Connect"),
                 "client_not_installed" when Provider == "codex" => new("Codex isn't installed.", "install-codex", "Install Codex"),
                 "client_not_installed" when Provider == "claude" => new("Claude Code isn't installed. The Claude desktop app alone isn't enough.", "install-claude", "Install Claude Code"),
