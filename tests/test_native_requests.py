@@ -37,6 +37,34 @@ class NativeRequestTests(unittest.TestCase):
             headers={'Origin': origin or self.url, 'X-Quota-Request': 'refresh', 'Content-Type': content_type})
         return urllib.request.urlopen(request)
 
+    def test_cli_update_routes_are_separate_and_guarded(self):
+        from quota.cli_updates import CliUpdates
+        from test_cli_updates import Store as UpdateStore
+        service = CliUpdates(self.monitor, UpdateStore(),
+            resolver=lambda p: dict(state='unchecked', installed='1.0.0', method='npm', channel='latest', identity='synthetic'),
+            fetch=lambda *args: '1.1.0', clock=lambda: 1000000)
+        self.monitor.enabled = {'codex'}
+        service.check()
+        self.server.RequestHandlerClass = handler(self.monitor, self.server.server_port, cli_updates=service)
+        with self.post('/api/cli-updates/prepare', {'provider': 'codex'}) as response:
+            self.assertEqual(json.load(response)['method'], 'npm')
+        with patch.object(service, 'request', return_value=True) as request:
+            with self.post('/api/cli-updates/check', {}) as response:
+                self.assertTrue(json.load(response)['started'])
+            request.assert_called_once()
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.post('/api/cli-updates/check', {}, origin='https://example.test')
+            self.assertEqual(error.exception.code, 403)
+            self.assertEqual(request.call_count, 1)
+        self.monitor.enabled = set()
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.post('/api/cli-updates/prepare', {'provider': 'codex'})
+        self.assertEqual(error.exception.code, 409)
+        with patch.object(service, 'request') as request:
+            with urllib.request.urlopen(self.url + '/api/status') as response:
+                self.assertEqual(json.load(response)['cliUpdates']['tools'], [])
+            request.assert_not_called()
+
     def test_native_pins_and_preferences_survive_restart(self):
         preferences = {'desktopFloatingSelections': [{'accountId': 'a', 'groupId': 'g', 'bucketId': 'b'}],
                        'desktopFloating': True, 'desktopOpacity': 70}

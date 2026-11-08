@@ -4,6 +4,7 @@
     <UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../native/CliUpdatesPanel.cs" Link="CliUpdatesPanel.cs" />
     <Compile Include="../../native/AccountsWindow.cs" Link="AccountsWindow.cs" />
     <Compile Include="../../native/AppearancePanel.cs" Link="AppearancePanel.cs" />
     <Compile Include="../../native/RingAppearance.cs" Link="RingAppearance.cs" />

@@ -83,7 +83,7 @@ Use Claude Code 2.1.281 or a newer 2.x version for quota reads through its built
 
 The monitor uses the default Claude Code subscription login. API keys, alternate endpoints, and custom configuration directories set in environment variables do not redirect its reads. Your environment and client settings stay unchanged.
 
-The monitor chooses the newest supported Claude Code it finds among known installation locations. Settings shows the selected version and reading source. If only an older client is available, **Update Claude Code** offers the official update for that installation. The command runs only after you confirm. When it finishes, the monitor detects the updated client and switches readers automatically.
+The monitor chooses the newest supported Claude Code it finds among known installation locations. Settings shows the selected version and reading source. If only an older client is available, **Review CLI updates** opens the shared version checks. A verified newer release offers the official update for that installation, after confirmation. When it finishes, the monitor detects the updated client and switches readers automatically.
 
 Older clients, or clients whose version cannot be checked, retain the saved-session reader. Settings explains why and shows its expiry. A failed version check is retried after five minutes. Update an outdated client before repeating sign-in. If the official client itself reports that you are signed out, use **Sign in**. Signing in does not reset quota.
 
@@ -97,7 +97,7 @@ The official Antigravity CLI (`agy`) is the recommended source. It lets the moni
 - Gemini CLI is a different product and does not report Antigravity subscription quota.
 - API-key and custom-provider modes are not supported for subscription monitoring.
 
-When the CLI is installed, **Update CLI** in Settings opens the official `agy update` command after showing a confirmation. Finish active CLI work first. The update keeps your normal settings and plugins. When it finishes, press **Refresh**.
+For enabled Antigravity monitoring, **Settings → CLI updates** checks for newer CLI releases. **Update** runs the official `agy update` command after confirmation for the standard native installation. Finish active CLI work first. The update keeps your normal settings and plugins. After it finishes, check CLI updates again to verify the version.
 
 The monitor displays one Antigravity source at a time. It prefers **CLI**, which works with the desktop app closed. If the CLI fails and the running desktop app supplies a fresh reading, only the desktop account is shown until the CLI recovers. If neither source can refresh, the CLI card keeps its last reading and error without adding an old desktop card. Each source retains its own account identity and saved pins. Provider cooldowns and hidden-account choices are respected.
 
@@ -151,7 +151,7 @@ A gray ring with a **stale** badge shows the last value the monitor could read. 
 | The Antigravity CLI isn't installed and the desktop app is closed | No Antigravity source is running | **Install CLI**, or open the desktop app |
 | The Antigravity CLI needs sign-in | The CLI session lapsed | **Copy command**, then run `agy -p /usage` in a terminal |
 | Codex didn't accept the saved session | The Codex session lapsed | Open Codex, or **Sign in** |
-| Claude Code is too old for CLI-managed reads | An older client is using the saved-session reader | Choose **Update Claude Code** and confirm the official update |
+| Claude Code is too old for CLI-managed reads | An older client is using the saved-session reader | Choose **Review CLI updates**, check for a newer version, and confirm the update |
 | Your Claude Code session expired | The saved Claude Code session needs renewal | Update an outdated client first, or choose **Sign in** if the official login needs attention |
 | Claude Code needs sign-in | Claude Code reports that it is signed out, for example after it could not renew its session | **Sign in**. The monitor reads again as soon as Claude Code saves the new session |
 | Codex or Claude Code isn't installed | No official client was found | **Install Codex** or **Install Claude Code** |
@@ -170,6 +170,16 @@ If a source becomes unavailable, its cached reading becomes stale. When discover
 ## Start with Windows
 
 Settings has an optional **Start with Windows (in the tray)** switch. It is off by default and needs no administrator rights. For a portable copy, turn it off before moving the folder, then turn it on again from the new location.
+
+## CLI updates
+
+**Settings → CLI updates** checks Codex CLI, Claude Code, Antigravity CLI, and Copilot CLI for enabled monitored providers. Automatic release checks run every 24 hours while AQM is running. The schedule survives restarts. **Check for updates** checks sooner, with at least a minute between requests and longer waits when the source asks for them. Quota **Refresh** does not check CLI releases.
+
+A verified newer release shows **Update** beside the installed and available versions. Review the command and confirm before it runs in a visible PowerShell window. Finish active CLI work first. After it finishes, check again to verify the installed version. AQM never upgrades a CLI automatically.
+
+Known native, npm, and WinGet installations use their matching official update path. Unknown installations offer **Update instructions**. WinGet packages can arrive after the vendor release, so its command may report that no package update is available yet. Prerelease or unrecognized versions show **Check unavailable** instead of assuming they are current. Claude's user-level stable or latest release preference is respected. Existing minimum-version and Node.js repair guidance remains available when monitoring requires it.
+
+Hover over a successfully checked version to see when it was checked. Failed checks show **Check unavailable**. Disabled providers are neither checked nor offered an update.
 
 ## Updates
 
@@ -223,7 +233,7 @@ Official clients retain authentication. There is no paid/API fallback, and quota
 - Settings and cached quota are encrypted for your Windows account under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry.
 - Activation preferences and attempt receipts are encrypted separately in `activation.dpapi` in that same folder. Receipts retain stable account IDs, timestamps, outcomes, and numeric token counts, never prompt responses or credentials.
 - The quota reader talks to the app over loopback only. It is meant for a trusted personal computer and does not isolate access from other local programs.
-- There is no telemetry. Update checks use GitHub's public releases API without credentials.
+- There is no telemetry. AQM update checks use GitHub's public releases API. CLI release checks use public npm metadata and Google's official Antigravity release manifest, without provider credentials.
 
 Some provider interfaces are internal and can change without notice. The monitor shows only the quota windows a source reports. Missing data is never treated as unlimited.
 

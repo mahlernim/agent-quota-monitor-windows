@@ -27,7 +27,7 @@ With Claude Code 2.1.281 or a newer 2.x version, the monitor uses its built-in `
 
 The default Claude Code subscription login is used. Environment variables for API keys, alternate endpoints, and custom configuration directories do not redirect the monitor's reads. Your environment and client settings stay unchanged.
 
-The monitor chooses the newest supported client in known installation locations. Settings shows its version and source. An outdated client offers **Update Claude Code**, with the official update command shown before confirmation. The monitor detects the updated client while running and switches readers automatically.
+The monitor chooses the newest supported client in known installation locations. Settings shows its version and source. An outdated client offers **Review CLI updates**. The shared controls check for a newer release and show the official update command before confirmation. The monitor detects the updated client while running and switches readers automatically.
 
 Older clients or failed version checks retain the saved-session reader. Settings explains the fallback and shows the session expiry. Failed version probes retry after five minutes. Update an outdated client before repeating sign-in. If the official client itself needs a login, choose **Sign in**. No message or available quota is needed, and signing in does not reset quota.
 
@@ -104,6 +104,17 @@ Official clients retain authentication. There is no paid/API fallback, and quota
 
 Enable **Start with Windows (in the tray)** in Settings to launch at sign-in. It is off by default and needs no administrator rights. For a portable copy, disable this setting before moving or deleting the folder, then enable it again from the new location.
 
+## CLI updates
+
+**Settings → CLI updates** checks Codex CLI, Claude Code, Antigravity CLI, and Copilot CLI for enabled monitored providers. Automatic release checks run every 24 hours while AQM is running. The schedule survives restarts. **Check for updates** checks sooner, with at least a minute between requests and longer waits when the source asks for them. Quota **Refresh** does not check CLI releases.
+
+A verified newer release shows **Update** beside the installed and available versions. Review the command and confirm before it runs in a visible PowerShell window. Finish active CLI work first. After it finishes, check again to verify the installed version. AQM never upgrades a CLI automatically.
+
+Known native, npm, and WinGet installations use their matching official update path. Unknown installations offer **Update instructions**. WinGet packages can arrive after the vendor release, so its command may report that no package update is available yet. Prerelease or unrecognized versions show **Check unavailable** instead of assuming they are current. Claude's user-level stable or latest release preference is respected. Existing minimum-version and Node.js repair guidance remains available when monitoring requires it.
+
+Hover over a successfully checked version to see when it was checked. Failed checks show **Check unavailable**. Disabled providers are neither checked nor offered an update.
+
+
 ## Update or uninstall
 
 The monitor checks GitHub's public releases API without credentials, shortly after launch and then at most every 3 hours. You can disable automatic checks, or use **Check now** in Settings.
@@ -130,7 +141,7 @@ Uninstall the installed version through Windows Installed apps. This removes app
 
 ## Privacy and local data
 
-Authentication stays with the official clients. Depending on the source, the monitor invokes a quota-only client command or reads an existing session for a quota request. It does not maintain a separate login, refresh tokens itself, or store raw credentials in its own data. Official clients may renew their sessions when invoked. Tokens, cookies, and authorization headers are excluded from monitor logs and copied support details. Quota checks send no model prompts. Optional activation sends a short subscription prompt only after explicit opt-in. It has no paid/API fallback. There is no telemetry.
+Authentication stays with the official clients. Depending on the source, the monitor invokes a quota-only client command or reads an existing session for a quota request. It does not maintain a separate login, refresh tokens itself, or store raw credentials in its own data. Official clients may renew their sessions when invoked. Tokens, cookies, and authorization headers are excluded from monitor logs and copied support details. Quota checks send no model prompts. Optional activation sends a short subscription prompt only after explicit opt-in. It has no paid/API fallback. There is no telemetry. CLI release checks read public npm metadata and Google's official Antigravity release manifest without provider credentials.
 
 Quota settings and cached snapshots are encrypted for your Windows user under `%LOCALAPPDATA%\QuotaDashboard`. Non-secret update preferences are stored in your user registry. The quota reader communicates with the app over loopback only. It is intended for a trusted personal computer and does not isolate access from other local processes.
 

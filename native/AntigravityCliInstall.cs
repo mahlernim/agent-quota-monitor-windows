@@ -18,7 +18,7 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
     internal static readonly OfficialInstall AntigravityUpdate = new("Update Antigravity CLI", "agy update",
         "Update Antigravity CLI?\n\nA PowerShell window will run the official agy update command.\n\n" +
         "Finish active Antigravity CLI work first. Your normal CLI settings and plugins stay in place. " +
-        "This does not send a model prompt or start sign-in. When it finishes, press Refresh in AQM.",
+        "This does not send a model prompt or start sign-in. When it finishes, check CLI updates again in AQM.",
         string.Join("\n", "$ErrorActionPreference = 'Stop'",
             "$agyCommand = Get-Command agy.exe -CommandType Application -ErrorAction SilentlyContinue",
             "$agyPath = if ($agyCommand) { $agyCommand.Source } else { Join-Path $env:LOCALAPPDATA 'agy\\bin\\agy.exe' }",
@@ -27,7 +27,7 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
             "if ($LASTEXITCODE) { throw 'Antigravity CLI update failed. Check the output above.' }",
             "& $agyPath --version",
             "if ($LASTEXITCODE) { throw 'The updated Antigravity CLI version could not be checked.' }",
-            "Write-Host 'Update finished. Return to AQM and press Refresh.' -ForegroundColor Green"));
+            "Write-Host 'Update command finished. Check CLI updates in AQM to verify the installed version.' -ForegroundColor Green"));
 
     /// <summary>Anthropic's official native Claude Code installer.</summary>
     internal static readonly OfficialInstall Claude = Client("Claude Code", "https://claude.ai/install.ps1",
@@ -61,6 +61,39 @@ internal sealed record OfficialInstall(string Title, string Command, string Conf
     /// <summary>OpenAI's official standalone Codex installer. OpenAI documents running it with a process-only execution policy bypass.</summary>
     internal static readonly OfficialInstall Codex = Client("Codex", "https://chatgpt.com/codex/install.ps1",
         "It installs Codex for your Windows account in %LOCALAPPDATA%\\Programs\\OpenAI\\Codex and adds it to your PATH.", "OpenAI Codex", true);
+
+    internal static string CliUpdateHelp(string provider) => provider switch
+    {
+        "codex" => "https://developers.openai.com/codex/cli/",
+        "claude" => ClaudeUpdateHelp,
+        "antigravity" => "https://antigravity.google/docs/cli",
+        _ => "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli"
+    };
+
+    internal static OfficialInstall? CliUpdate(string provider, string method, string channel)
+    {
+        if (channel is not ("latest" or "stable")) return null;
+        if (provider == "antigravity" && method == "native") return AntigravityUpdate;
+        if (provider == "codex" && method == "native")
+            return Codex with { Title = "Update Codex CLI", Confirmation = "Update the standalone Codex CLI using the official installer?\n\nFinish active CLI work first.\n\n" + Codex.Confirmation };
+        if (provider == "claude" && method == "winget" && channel == "stable") return null;
+        if (provider == "claude" && method is "native" or "winget") return ClaudeUpdate(method);
+        string? command = (provider, method) switch
+        {
+            ("codex", "npm") => "npm install -g --prefix (Join-Path $env:APPDATA 'npm') @openai/codex@latest",
+            ("claude", "npm") => "npm install -g --prefix (Join-Path $env:APPDATA 'npm') @anthropic-ai/claude-code@" + channel,
+            ("copilot", "npm") => "npm install -g --prefix (Join-Path $env:APPDATA 'npm') @github/copilot@latest",
+            ("copilot", "winget") => "winget upgrade --id GitHub.Copilot --exact --source winget",
+            _ => null
+        };
+        if (command is null) return null;
+        return new OfficialInstall("Update CLI", command,
+            "Run this official update command?\n\n" + command + "\n\nFinish active CLI work first. No model prompt or sign-in is sent. " +
+            "Package manager releases can lag behind the vendor release. Check again after the command finishes.",
+            string.Join("\n", "$ErrorActionPreference = 'Stop'", command,
+                "if ($LASTEXITCODE) { throw 'Update did not complete. Read the output above.' }",
+                "Write-Host 'Command finished. Check CLI updates in AQM to verify the installed version.'"));
+    }
 
     internal const string CopilotSdk = "@github/copilot-sdk@1.0.14";
     internal const string CopilotNodeRequirement = "Copilot needs a security-updated Node.js runtime. Install Node.js 24.22.1 or newer 24.x, " +
