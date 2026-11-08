@@ -506,21 +506,57 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(self.attempts()[key], prior)
         self.assertEqual(self.journal.data['history'], history)
 
-    def test_legacy_preferences_use_fixed_delay_without_reminders_or_lost_selections(self):
+    def test_three_hour_suggestion_snooze_dismissal_and_restart(self):
+        self.mature(35)
+        self.assertIsNone(self.engine.snapshot()['suggestion'])
+        self.tick()
+        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
+        self.engine.configure({'dismiss':'shown'}); self.tick()
+        self.assertIsNone(self.engine.snapshot()['suggestion'])
+        self.engine.configure({'dismiss':'later'})
+        self.assertEqual(self.journal.data['preferences']['snoozeUntil'], self.now+7*86400)
+        self.engine = self.new_engine(); self.mature(36)
+        self.assertIsNone(self.engine.snapshot()['suggestion'])
+        self.tick(7*86400); self.mature(36)
+        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
+        self.engine.configure({'dismiss':'never'})
+        self.engine = self.new_engine(); self.mature(36)
+        self.assertIsNone(self.engine.snapshot()['suggestion'])
+        self.assertEqual(self.runner.sends, 0)
+        self.engine.configure({'suggestions':True})
+        self.tick()
+        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
+        self.assertFalse(self.journal.data['preferences']['enabled'])
+
+    def test_legacy_preferences_use_fixed_delay_without_lost_reminders_or_selections(self):
         key = self.monitor.rows[0]['id']
         self.journal.data['preferences'].update(idleMinutes=120, suggestions=True, accounts=[key])
         self.mature(36)
-        self.assertIsNone(self.engine.snapshot()['suggestion'])
+        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
         self.assertEqual(self.runner.sends, 0)
         prefs = self.journal.data['preferences']
         self.assertEqual(prefs['idleMinutes'], 30)
-        self.assertFalse(prefs['suggestions'])
+        self.assertTrue(prefs['suggestions'])
         self.assertFalse(prefs['enabled'])
         self.assertEqual(prefs['accounts'], [key])
-        self.engine.configure({'suggestions': True})
-        self.assertFalse(self.journal.data['preferences']['suggestions'])
         self.engine = self.new_engine(); self.mature(36)
-        self.assertIsNone(self.engine.snapshot()['suggestion'])
+        self.assertIsNotNone(self.engine.snapshot()['suggestion'])
+        self.assertEqual(self.runner.sends, 0)
+
+    def test_migration_and_activation_toggles_preserve_reminder_opt_out_and_snooze(self):
+        for reminder in ({'suggestions': False}, {'dismissed': True}, {'snoozeUntil': self.now + 86400}):
+            with self.subTest(reminder=reminder):
+                self.journal = MemoryJournal()
+                self.journal.data['preferences'].update(idleMinutes=120, **reminder)
+                self.engine = self.new_engine()
+                self.mature(36)
+                self.assertIsNone(self.engine.snapshot()['suggestion'])
+                self.engine.configure({'enabled': True, 'idleMinutes': 30})
+                self.engine.configure({'enabled': False, 'idleMinutes': 30})
+                for key, value in reminder.items():
+                    self.assertEqual(self.journal.data['preferences'][key], value)
+                self.tick()
+                self.assertIsNone(self.engine.snapshot()['suggestion'])
         self.assertEqual(self.runner.sends, 0)
 
     def test_legacy_enabled_delay_migrates_without_losing_attempt_history(self):

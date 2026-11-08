@@ -13,7 +13,7 @@ import uuid
 from . import claude_cli, model, providers
 from .vault import crypt
 
-DEFAULTS = dict(enabled=False, accounts=[], idleMinutes=30, suggestions=False,
+DEFAULTS = dict(enabled=False, accounts=[], idleMinutes=30, suggestions=True,
                 snoozeUntil=0, dismissed=False)
 MAX_GAP = 660
 # Confirmation accepts a deadline within this many seconds of the expected end.
@@ -187,7 +187,7 @@ class Activation:
             prefs = data['preferences']
             reset_suggestions = payload.get('suggestions') is True and not prefs['suggestions']
             prefs.update({k: v for k, v in payload.items() if k != 'dismiss'})
-            prefs.update(idleMinutes=30, suggestions=False)
+            prefs.update(idleMinutes=30)
             action = payload.get('dismiss')
             if action == 'later':
                 prefs['snoozeUntil'] = self.clock()+7*86400
@@ -263,8 +263,8 @@ class Activation:
         candidate = None
         with self.journal.transaction() as data:
             prefs = data['preferences']
-            dirty = prefs['idleMinutes'] != 30 or prefs['suggestions']
-            prefs.update(idleMinutes=30, suggestions=False)
+            dirty = prefs['idleMinutes'] != 30
+            prefs.update(idleMinutes=30)
             dirty = self._expire(data, now) or dirty
             summaries = []
             suggestion = None
@@ -299,6 +299,8 @@ class Activation:
                         status = message(attempt['errorCode']) + ' Delivery is uncertain. No automatic retry.'
                     eligible = eligible and self._released(attempt, obs.get('since', 0))
                 eligible = eligible and not self._group_pending(data, row, key)
+                if eligible and not prefs['enabled'] and prefs['suggestions'] and not prefs['dismissed'] and now>=prefs['snoozeUntil'] and waited>=10800 and key not in data['suggested']:
+                    suggestion = dict(accountId=key, label=row.get('label',row['provider'])+' · '+row['activationLabel'], message='This quota window is waiting to start. AQM can send a short prompt so its reset countdown begins earlier. This uses subscription allowance.')
                 if key in self.preflight_failures and obs['state'] == 'inactive':
                     status = message(self.preflight_errors.get(key)) + ' No prompt sent.'
                 if (eligible and prefs['enabled'] and key in prefs['accounts'] and waited>=prefs['idleMinutes']*60 and candidate is None and now>=self.preflight_failures.get(key,0)):

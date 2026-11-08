@@ -121,7 +121,7 @@ internal sealed class ActivationPanel : StackPanel
         feedback.Text = "Saving…"; feedback.Visibility = Visibility.Visible;
         bool nextEnabled = enabled.IsChecked == true;
         var nextSelections = selectionChange ? selections.Where(s => s.Value.IsChecked == true).Select(s => s.Key).ToHashSet() : confirmedSelections;
-        var payload = new Dictionary<string, object> { ["enabled"] = nextEnabled, ["idleMinutes"] = 30, ["suggestions"] = false };
+        var payload = new Dictionary<string, object> { ["enabled"] = nextEnabled, ["idleMinutes"] = 30 };
         // Turning the feature off retains selections, including temporarily undiscovered accounts.
         if (selectionChange) payload["accounts"] = nextSelections.ToArray();
         try

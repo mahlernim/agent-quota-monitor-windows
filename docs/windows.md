@@ -88,7 +88,9 @@ If a source becomes unavailable, its cached reading becomes stale. When discover
 
 In **Settings → Quota window activation**, turn on **Automatically start idle quota windows**, then choose the account windows to activate. Choices appear only while it is on, and changes save immediately. Turning it off keeps your selections for next time.
 
-AQM waits for **30 minutes of observed inactivity** before sending a short subscription prompt. This uses allowance, including CLI context. The wait is fixed, and there are no activation reminders. AQM must remain running. Sleep or gaps in fresh readings restart the wait.
+AQM waits for **30 minutes of observed inactivity** before sending a short subscription prompt. This uses allowance, including CLI context. The wait is fixed. AQM must remain running. Sleep or gaps in fresh readings restart the wait.
+
+While activation is off, a quiet reminder may appear in the visible main window after three hours of eligible inactivity. **Configure activation** opens Settings without enabling anything. **Later** snoozes for a week, and **Don't show again** stops future reminders. There is no reminder checkbox in Settings. Existing reminder opt-outs and snoozes are preserved. Reminders never send prompts or open windows.
 
 Activation is off by default. Existing on/off choices, account selections, and attempt history are preserved across updates. Earlier 60- or 120-minute waits become 30 minutes. New accounts and windows remain unselected.
 

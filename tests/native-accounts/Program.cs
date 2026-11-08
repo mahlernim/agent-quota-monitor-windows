@@ -135,8 +135,8 @@ internal static class Program
         var saved = JsonNode.Parse(backend.LastBody!)!;
         Check(backend.LastPath == "/api/activation" && saved["enabled"]!.GetValue<bool>() &&
             saved["accounts"]!.AsArray().Count == 1 && saved["accounts"]![0]!.GetValue<string>() == "claude-a" &&
-            saved["idleMinutes"]!.GetValue<int>() == 30 && !saved["suggestions"]!.GetValue<bool>(),
-            "Only explicitly selected windows are saved with the fixed delay and no reminders");
+            saved["idleMinutes"]!.GetValue<int>() == 30 && saved["suggestions"] is null && saved["dismiss"] is null,
+            "Immediate saves use the fixed delay without changing reminder preferences or dismissals");
         backend.PostStatus = HttpStatusCode.ServiceUnavailable;
         Field<CheckBox>(panel,"enabled").IsChecked = false;
         await Call(panel,"Save", false);
