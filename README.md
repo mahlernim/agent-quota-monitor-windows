@@ -113,7 +113,7 @@ The thick outer ring is quota remaining, drawn in the provider's color. The thin
 
 In the main window, a compact blue-gray countdown sits just below the percentage inside each ring. It shows days and hours, hours and minutes, or minutes below one hour. Less than one minute appears as **<1m**. Unknown, expired, or stale resets have no countdown. Hover for the exact reset time. Floating windows keep their percentage-only display.
 
-Under **Settings → Quota appearance**, choose a main-window ring color for each provider. An Antigravity color applies to all its model groups. **Reset colors to defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
+Under **Settings → Quota appearance**, choose a main-window ring color for each quota type. Antigravity Gemini, Gemini 4 Argon, and Claude and GPT each have their own color picker. An existing shared Antigravity color is retained for all three groups until you edit them separately. **Reset colors to defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
 
 The percentage turns **amber** when quota remaining falls below half of time remaining, and **red** below one quarter. For example, with 80% of the window left, amber starts under 40% quota and red under 20%. Without timing data there is no pace warning.
 

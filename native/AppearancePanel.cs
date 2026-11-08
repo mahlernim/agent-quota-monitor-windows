@@ -25,16 +25,14 @@ internal sealed class AppearancePanel : StackPanel
         Action<string, Button>? placeButton = null)
     {
         this.http = http; this.changed = changed; this.ready = ready; this.pick = pick ?? PickColor;
-        var names = new Dictionary<string, string> { ["codex"] = "OpenAI Codex", ["claude"] = "Anthropic Claude",
-            ["antigravity"] = "Google Antigravity", ["copilot"] = "GitHub Copilot" };
+        var names = QuotaNames.TypeLabels;
         foreach (var pair in names)
         {
             var button = Ui.Button("Choose color", () => _ = ChooseAsync(pair.Key));
             AutomationProperties.SetName(button, pair.Value + " ring color");
             button.Tag = "ring-color:" + pair.Key;
             buttons[pair.Key] = button;
-            button.ToolTip = pair.Key == "antigravity" ? "Choose one main-window color for all Antigravity groups. Default colors vary by group."
-                : "Choose the main-window ring color for " + pair.Value + ". Saves immediately.";
+            button.ToolTip = "Choose the main-window ring color for " + pair.Value + ". Saves immediately.";
             if (placeButton is null) Children.Add(button);
             else placeButton(pair.Key, button);
         }
@@ -103,15 +101,8 @@ internal sealed class AppearancePanel : StackPanel
             var content = new StackPanel { Orientation = Orientation.Horizontal };
             var swatch = new Border { Width = 14, Height = 14, Background = Ui.Hex(color), BorderBrush = Ui.Hairline,
                 BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 7, 0) };
-            if (pair.Key == "antigravity" && !saved.ContainsKey(pair.Key))
-            {
-                var segments = new System.Windows.Controls.Primitives.UniformGrid { Columns = 3 };
-                foreach (var code in new[] { "GM", "AR", "CG" })
-                    segments.Children.Add(new Border { Background = Ui.Hex(new QuotaItem { Code = code }.IdentityColor) });
-                swatch.Child = segments;
-            }
             content.Children.Add(swatch);
-            content.Children.Add(new TextBlock { Text = pair.Key == "antigravity" && !saved.ContainsKey(pair.Key) ? "Defaults" : color.ToUpperInvariant() });
+            content.Children.Add(new TextBlock { Text = color.ToUpperInvariant() });
             pair.Value.Content = content;
         }
     }

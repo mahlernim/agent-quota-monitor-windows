@@ -125,6 +125,35 @@ internal static class Program
         using var stored = JsonDocument.Parse("{\"mainRingColors\":{\"codex\":\"#ABCDEF\",\"claude\":\"red\",\"unknown\":\"#123456\"}}");
         RingAppearance.Apply(stored.RootElement);
         Check(RingAppearance.Copy().Count == 1 && RingAppearance.Copy()["codex"] == "#ABCDEF", "Reload validates stored colors without accepting unknown providers");
+        using var legacy = JsonDocument.Parse("""{"mainRingColors":{"antigravity":"#112233","antigravity-argon":"#445566"}}""");
+        RingAppearance.Apply(legacy.RootElement);
+        Check(RingAppearance.Copy().Count == 3 && !RingAppearance.Copy().ContainsKey("antigravity") &&
+            RingAppearance.Copy()["antigravity-gemini"] == "#112233" && RingAppearance.Copy()["antigravity-argon"] == "#445566",
+            "Legacy shared colors expand to all groups while explicit group colors win");
+        choice = "#778899";
+        await Call(panel, "ChooseAsync", "antigravity-gemini");
+        using var savedGroups = JsonDocument.Parse(backend.LastBody!);
+        var overrides = savedGroups.RootElement.GetProperty("mainRingColors");
+        Check(overrides.GetProperty("antigravity-gemini").GetString() == "#778899" &&
+            overrides.GetProperty("antigravity-argon").GetString() == "#445566" &&
+            overrides.GetProperty("antigravity-claude-gpt").GetString() == "#112233" && !overrides.TryGetProperty("antigravity", out _),
+            "Editing one group migrates legacy preferences without recoloring its siblings");
+        RingAppearance.Apply(savedGroups.RootElement);
+        foreach (var (code, expected) in new[] { ("GM", "#778899"), ("AR", "#445566"), ("CG", "#112233") })
+        {
+            var item = new QuotaItem { Provider = "antigravity", Code = code, Status = "live", Remaining = 10, TimeRemaining = 90 };
+            Check(RingAppearance.For(item) == expected && item.Color == RingAppearance.Defaults[item.Type] && item.NumberColor == "#c54444",
+                "Each group keeps its override after reload without changing floating colors or pace warnings");
+            var stale = new QuotaItem { Provider = "antigravity", Code = code, Status = "stale" };
+            Check(RingAppearance.For(stale) == "#89929d", "Group overrides never mask stale quota");
+        }
+        Check(Field<Dictionary<string, Button>>(panel, "buttons").Count == 6, "Every quota type has a separate color picker");
+        await Call(panel, "SaveAsync", new Dictionary<string, string>());
+        foreach (var code in new[] { "GM", "AR", "CG" })
+        {
+            var item = new QuotaItem { Provider = "antigravity", Code = code, Status = "live" };
+            Check(RingAppearance.For(item) == item.IdentityColor, "Reset restores each group's original color");
+        }
         RingAppearance.Set(new Dictionary<string, string>());
     }
     private static async Task TestActivation()

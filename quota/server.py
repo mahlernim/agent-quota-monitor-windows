@@ -15,7 +15,7 @@ QUOTA_TYPES = ('codex', 'claude', 'antigravity-gemini', 'antigravity-argon', 'an
 
 
 def valid_ring_colors(value):
-    return (isinstance(value, dict) and set(value) <= {'codex', 'claude', 'antigravity', 'copilot'}
+    return (isinstance(value, dict) and set(value) <= set(QUOTA_TYPES) | {'antigravity'}
             and all(isinstance(color, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', color)
                     for color in value.values()))
 

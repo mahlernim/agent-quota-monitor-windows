@@ -83,6 +83,23 @@ class NativeRequestTests(unittest.TestCase):
         with self.post('/api/providers', {'enabled': []}) as response:
             self.assertEqual(response.status, 200)
 
+    def test_antigravity_group_colors_persist_and_allow_legacy_preferences(self):
+        with self.post('/api/desktop', {'mainRingColors': {'antigravity': '#123456'}}):
+            pass
+        groups = {'antigravity-gemini': '#123456', 'antigravity-argon': '#ABCDEF', 'antigravity-claude-gpt': '#654321'}
+        with self.post('/api/desktop', {'mainRingColors': groups}):
+            pass
+        self.stop_server()
+        self.start_server(Monitor(Store(), settings_vault=self.settings))
+        with urllib.request.urlopen(self.url + '/api/desktop') as response:
+            self.assertEqual(json.load(response)['mainRingColors'], groups)
+        for invalid in ({'antigravity-argon': 'red'}, {'antigravity-other': '#123456'}):
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                self.post('/api/desktop', {'mainRingColors': invalid})
+            self.assertEqual(caught.exception.code, 400)
+            self.assertEqual(self.settings.load()['mainRingColors'], groups)
+        self.assertEqual(self.settings.load()['unrelated'], 'preserved')
+
     def test_ring_colors_persist_without_changing_pins_or_other_preferences(self):
         pins = [{'accountId': 'a', 'groupId': 'g', 'bucketId': 'b'}]
         with self.post('/api/desktop', {'desktopFloatingSelections': pins, 'mainRingColors': {'codex': '#123ABC'}}):
