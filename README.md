@@ -113,7 +113,7 @@ The thick outer ring is quota remaining, drawn in the provider's color. The thin
 
 In the main window, a compact blue-gray countdown sits just below the percentage inside each ring. It shows days and hours, hours and minutes, or minutes below one hour. Less than one minute appears as **<1m**. Unknown, expired, or stale resets have no countdown. Hover for the exact reset time. Floating windows keep their percentage-only display.
 
-Under **Settings → Appearance**, choose a main-window ring color for each provider. An Antigravity color applies to all its model groups. **Restore defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
+Under **Settings → Quota appearance**, choose a main-window ring color for each provider. An Antigravity color applies to all its model groups. **Reset colors to defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
 
 The percentage turns **amber** when quota remaining falls below half of time remaining, and **red** below one quarter. For example, with 80% of the window left, amber starts under 40% quota and red under 20%. Without timing data there is no pace warning.
 
@@ -136,7 +136,7 @@ Gemini 4 Argon appears as a separate **Argon 7d** ring when reported by the Anti
 
 ### Names on rings
 
-Rings show short names such as **Codex 5h** or **Gemini 7d**. The default tray initials are CX for Codex, CL for Claude, AG for Antigravity Gemini, AC for Antigravity Claude and GPT, and CP for Copilot. Change both under **Quota names** in Settings. Long names are narrowed to fit, and the floating monitor falls back to initials when a name doesn't fit. Names never change colors or which account a ring belongs to.
+Rings show short names such as **Codex 5h** or **Gemini 7d**. The default tray initials are CX for Codex, CL for Claude, AG for Antigravity Gemini, AC for Antigravity Claude and GPT, and CP for Copilot. Change both under **Quota appearance** in Settings. Long names are narrowed to fit, and the floating monitor falls back to initials when a name doesn't fit. Names never change colors or which account a ring belongs to.
 
 ### Settings
 
