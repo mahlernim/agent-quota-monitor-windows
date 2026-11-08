@@ -313,24 +313,10 @@ public sealed class AccountsWindow : Window
             index++;
         }
         var panel = new StackPanel();
-        var colors = new AppearancePanel(_http, _changed, _backendReady, placeButton: (provider, button) =>
-        {
-            var matching = QuotaNames.Types.Select((type, row) => (type, row)).Where(entry =>
-                entry.type == provider || entry.type.StartsWith(provider + "-", StringComparison.Ordinal)).ToArray();
-            FrameworkElement picker = button;
-            if (matching.Length > 1)
-            {
-                var group = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-                group.Children.Add(button);
-                group.Children.Add(new TextBlock { Text = "All Antigravity", Foreground = Ui.Muted, FontSize = 11,
-                    HorizontalAlignment = HorizontalAlignment.Center });
-                picker = group;
-            }
-            Cell(picker, matching[0].row + 1, 3);
-            Grid.SetRowSpan(picker, matching.Length);
-        });
+        var colors = new AppearancePanel(_http, _changed, _backendReady, placeButton: (type, button) =>
+            Cell(button, Array.IndexOf(QuotaNames.Types, type) + 1, 3));
         panel.Children.Add(grid);
-        panel.Children.Add(Hint("Save names after editing. Colors save immediately. Antigravity shares one custom color across its groups."));
+        panel.Children.Add(Hint("Save names after editing. Colors save immediately. Each Antigravity model group has its own color."));
         var actions = new WrapPanel();
         var save = Ui.Button("Save names", () => _ = SaveNamesAsync());
         save.Margin = new Thickness(0, 1, 4, 1);

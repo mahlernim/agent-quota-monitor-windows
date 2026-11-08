@@ -9,7 +9,8 @@ internal static class RingAppearance
 {
     internal static readonly IReadOnlyDictionary<string, string> Defaults = new Dictionary<string, string>
     {
-        ["codex"] = "#168f87", ["claude"] = "#c46843", ["antigravity"] = "#287bc1", ["copilot"] = "#488b74"
+        ["codex"] = "#168f87", ["claude"] = "#c46843", ["antigravity-gemini"] = "#287bc1",
+        ["antigravity-argon"] = "#7b61b5", ["antigravity-claude-gpt"] = "#99734b", ["copilot"] = "#488b74"
     };
     private static Dictionary<string, string> colors = new();
     internal static Dictionary<string, string> Copy() => new(colors);
@@ -17,6 +18,11 @@ internal static class RingAppearance
     internal static void Set(IReadOnlyDictionary<string, string> value)
     {
         var next = new Dictionary<string, string>();
+        // Expand the old shared override on read. Explicit group colors take precedence,
+        // and the next save writes only the separate group keys.
+        if (value.TryGetValue("antigravity", out var legacy) && Valid(legacy))
+            foreach (string type in new[] { "antigravity-gemini", "antigravity-argon", "antigravity-claude-gpt" })
+                next[type] = legacy;
         foreach (var pair in value)
             if (Defaults.ContainsKey(pair.Key) && Valid(pair.Value)) next[pair.Key] = pair.Value;
         colors = next;
@@ -30,5 +36,5 @@ internal static class RingAppearance
         Set(next);
     }
     internal static string For(QuotaItem item) => item.Stale || item.Disabled ? item.Color
-        : colors.TryGetValue(item.Provider, out var color) ? color : item.Color;
+        : colors.TryGetValue(item.Provider == "antigravity" ? item.Type : item.Provider, out var color) ? color : item.Color;
 }
