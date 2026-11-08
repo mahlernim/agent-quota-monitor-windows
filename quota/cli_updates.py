@@ -47,8 +47,8 @@ def latest(provider, channel):
 def discover(provider):
     """Resolve known client paths. Only a bounded --version process is permitted."""
     from .connections import client_command
-    local = Path(os.environ.get('LOCALAPPDATA', str(Path.home())))
-    roaming = Path(os.environ.get('APPDATA', str(Path.home())))
+    local = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))).resolve()
+    roaming = Path(os.environ.get('APPDATA', str(Path.home()))).resolve()
     method, channel = 'manual', 'latest'
     if provider == 'claude':
         from .claude_cli import client_info
