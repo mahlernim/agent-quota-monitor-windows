@@ -22,7 +22,7 @@ Before a reservation, AQM checks the CLI version, isolated plugin and MCP lists,
 
 The isolation controls follow [Windows maintainer guidance](https://github.com/google-antigravity/antigravity-cli/issues/1261) and [text-only and credit-isolation guidance](https://github.com/google-antigravity/antigravity-cli/issues/1080). A local CLI 1.4.0 preflight on November 8, 2026 passed with six plugins installed in the normal profile, no plugins/MCP/hooks in the isolated profile, and unchanged normal configuration hashes and credential revision. Subsequent installed validation passed through the normal inactivity delay and confirmed live activation, as described below.
 
-The worker samples the existing monitor snapshot every ten seconds without causing extra quota reads. Distinct successful provider read timestamps advance evidence. Repeated cache snapshots do not. The same source and account must continuously report inactivity for the selected 30, 60, or 120 minutes, with at least two reads. Gaps longer than eleven minutes, failures, source changes, sleep gaps, or clock discontinuities break the streak. Restarting rebuilds evidence.
+The worker samples the existing monitor snapshot every ten seconds without causing extra quota reads. Distinct successful provider read timestamps advance evidence. Repeated cache snapshots do not. The same source and account must continuously report inactivity for the fixed 30 minutes, with at least two reads. Gaps longer than eleven minutes, failures, source changes, sleep gaps, or clock discontinuities break the streak. Restarting rebuilds evidence.
 
 Direct Claude inactivity requires exact zero usage and an explicitly reported null reset, with extra usage explicitly off. Codex and Antigravity require exact full quota and a deadline approximately one full window ahead of the provider read. Across distinct reads at least 30 seconds apart, that deadline must move with elapsed time within a 15-second tolerance. A fixed future deadline means running, even at full quota. The full-duration comparison allows 60 seconds for read latency. Numeric percentages are never rounded into eligibility.
 
@@ -44,11 +44,15 @@ Antigravity requires the official CLI quota source with a verified Google subjec
 
 Runners remove API-key and alternate-provider environment overrides from their child processes. They do not change official settings or use a fallback model. CLI context can use thousands of tokens despite a short reply. Activation uses allowance and does not promise negligible cost.
 
-## Settings and suggestions
+## Settings
 
-Preferences and receipts live in Windows-user-encrypted activation.dpapi alongside the monitor data. Receipts contain no response text or credentials. Choose individual account windows in Settings and save. Failed saves leave the previous preferences active. Current window state or blockers take precedence over completed activation messages. Previous receipts remain in the encrypted journal and status API. Pending or uncertain delivery still displays its no-retry status.
+Preferences and receipts live in Windows-user-encrypted activation.dpapi alongside the monitor data. Receipts contain no response text or credentials. The on/off switch saves immediately. Account/window choices are grouped by stable account identity and appear only while enabled. New windows remain unselected. Turning the feature off preserves selections, including temporarily undiscovered accounts. Failed saves restore the confirmed controls and explain that the previous choices remain active.
 
-After three hours of eligible inactivity while activation is off, AQM can show one quiet suggestion in the visible main window. It does not open a window or send an OS notification. Configure opens Settings without opting in. Later snoozes for a week. Don't show again persists until suggestions are explicitly re-enabled. The app must be running to observe and act.
+The inactivity delay is fixed at 30 minutes. Journal validation accepts legacy 60- and 120-minute values so existing encrypted histories remain readable. The worker normalizes those delays to 30 minutes before dispatch, saving the journal first. A failed migration save prevents dispatch. On/off choices, selections, receipts, and reminder preferences are retained. Immediate activation saves do not modify reminder opt-outs, dismissals, or snoozes.
+
+While activation is off, three hours of eligible inactivity can produce one quiet suggestion in the visible main window. Configure activation opens Settings without enabling activation. Later snoozes for one week, and Don't show again persists. Displayed suggestions are recorded to avoid repetition across restarts. The reminder has no checkbox in Settings, never opens a window or sends an OS notification, and never dispatches a prompt. Existing disabled reminders remain disabled.
+
+The panel shows concise status for selected or unavailable windows. Additional runner explanations are available through tooltips and accessible help text. Current blockers take precedence over completed activation messages. Pending or uncertain delivery keeps its no-retry status visible. The app must be running to observe and act.
 
 ## Verification
 

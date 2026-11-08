@@ -16,31 +16,29 @@ internal sealed class AppearancePanel : StackPanel
     private readonly Func<bool> ready;
     private readonly Func<string, string?> pick;
     private readonly Dictionary<string, Button> buttons = new();
-    private readonly TextBlock message = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 4, 0, 0) };
+    private readonly TextBlock message = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
     private readonly Button restore;
     private bool saving;
+    internal Button ResetButton => restore;
 
-    internal AppearancePanel(HttpClient http, Action changed, Func<bool> ready, Func<string, string?>? pick = null)
+    internal AppearancePanel(HttpClient http, Action changed, Func<bool> ready, Func<string, string?>? pick = null,
+        Action<string, Button>? placeButton = null)
     {
         this.http = http; this.changed = changed; this.ready = ready; this.pick = pick ?? PickColor;
-        Children.Add(new TextBlock { Text = "Main-window ring colors. Floating windows, tray icons, and pace warnings keep their existing colors.",
-            TextWrapping = TextWrapping.Wrap, Foreground = Ui.Muted, FontSize = 12, Margin = new Thickness(0, 4, 0, 6) });
         var names = new Dictionary<string, string> { ["codex"] = "OpenAI Codex", ["claude"] = "Anthropic Claude",
             ["antigravity"] = "Google Antigravity", ["copilot"] = "GitHub Copilot" };
         foreach (var pair in names)
         {
-            var row = new DockPanel { Margin = new Thickness(0, 2, 0, 2) };
             var button = Ui.Button("Choose color", () => _ = ChooseAsync(pair.Key));
             AutomationProperties.SetName(button, pair.Value + " ring color");
             button.Tag = "ring-color:" + pair.Key;
             buttons[pair.Key] = button;
-            DockPanel.SetDock(button, Dock.Right); row.Children.Add(button);
-            row.Children.Add(new TextBlock { Text = pair.Value, VerticalAlignment = VerticalAlignment.Center });
-            Children.Add(row);
+            button.ToolTip = pair.Key == "antigravity" ? "Choose one main-window color for all Antigravity groups. Default colors vary by group."
+                : "Choose the main-window ring color for " + pair.Value + ". Saves immediately.";
+            if (placeButton is null) Children.Add(button);
+            else placeButton(pair.Key, button);
         }
-        Children.Add(new TextBlock { Text = "An Antigravity override applies to all its model groups. Restore defaults brings back their individual colors.",
-            TextWrapping = TextWrapping.Wrap, Foreground = Ui.Muted, FontSize = 12, Margin = new Thickness(0, 4, 0, 4) });
-        restore = Ui.Button("Restore defaults", () => _ = SaveAsync(new Dictionary<string, string>()));
+        restore = Ui.Button("Reset colors to defaults", () => _ = SaveAsync(new Dictionary<string, string>()));
         restore.Tag = "restore-ring-colors";
         restore.HorizontalAlignment = HorizontalAlignment.Left;
         Children.Add(restore); Children.Add(message);
@@ -83,6 +81,7 @@ internal sealed class AppearancePanel : StackPanel
             RingAppearance.Set(next);
             UpdateSwatches();
             message.Foreground = Ui.Muted; message.Text = "Ring colors saved.";
+            message.Visibility = Visibility.Visible;
             changed();
         }
         catch (Exception) { ShowError(); }
@@ -94,7 +93,7 @@ internal sealed class AppearancePanel : StackPanel
         }
     }
 
-    private void ShowError() { message.Foreground = Brushes.Firebrick; message.Text = "Ring colors couldn't be saved. Check the quota reader connection and try again."; }
+    private void ShowError() { message.Foreground = Brushes.Firebrick; message.Text = "Ring colors couldn't be saved. Check the quota reader connection and try again."; message.Visibility = Visibility.Visible; }
     private void UpdateSwatches()
     {
         var saved = RingAppearance.Copy();
@@ -102,9 +101,17 @@ internal sealed class AppearancePanel : StackPanel
         {
             var color = saved.TryGetValue(pair.Key, out var custom) ? custom : RingAppearance.Defaults[pair.Key];
             var content = new StackPanel { Orientation = Orientation.Horizontal };
-            content.Children.Add(new Border { Width = 14, Height = 14, Background = Ui.Hex(color), BorderBrush = Ui.Hairline,
-                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 7, 0) });
-            content.Children.Add(new TextBlock { Text = color.ToUpperInvariant() });
+            var swatch = new Border { Width = 14, Height = 14, Background = Ui.Hex(color), BorderBrush = Ui.Hairline,
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 7, 0) };
+            if (pair.Key == "antigravity" && !saved.ContainsKey(pair.Key))
+            {
+                var segments = new System.Windows.Controls.Primitives.UniformGrid { Columns = 3 };
+                foreach (var code in new[] { "GM", "AR", "CG" })
+                    segments.Children.Add(new Border { Background = Ui.Hex(new QuotaItem { Code = code }.IdentityColor) });
+                swatch.Child = segments;
+            }
+            content.Children.Add(swatch);
+            content.Children.Add(new TextBlock { Text = pair.Key == "antigravity" && !saved.ContainsKey(pair.Key) ? "Defaults" : color.ToUpperInvariant() });
             pair.Value.Content = content;
         }
     }

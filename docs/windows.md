@@ -58,9 +58,9 @@ The thick outer ring shows quota remaining in the provider's color. The thin gra
 
 The main window also shows a compact blue-gray countdown just below the percentage inside each ring. It uses days and hours, hours and minutes, or minutes below one hour. Less than one minute appears as **<1m**. Unknown, expired, or stale resets have no countdown. Hover for the exact reset time. Floating windows keep their percentage-only display.
 
-Under **Settings → Appearance**, choose a main-window ring color for each provider. An Antigravity color applies to all its model groups. **Restore defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
+Under **Settings → Quota appearance**, choose a main-window ring color for each provider. An Antigravity color applies to all its model groups. **Reset colors to defaults** brings back the original colors, including Antigravity's individual model-group colors. Colors save immediately and persist across restarts. Floating windows, tray icons, stale gray rings, and amber/red pace warnings keep their existing colors.
 
-Rings show short names such as **Codex 5h**. The default tray initials are CX for Codex, CL for Claude, AG for Antigravity Gemini, AC for Antigravity Claude and GPT, and CP for Copilot. Change both under **Quota names** in Settings. Names never change colors or account grouping.
+Rings show short names such as **Codex 5h**. The default tray initials are CX for Codex, CL for Claude, AG for Antigravity Gemini, AC for Antigravity Claude and GPT, and CP for Copilot. Change both under **Quota appearance** in Settings. Names never change colors or account grouping.
 
 In Settings, each account takes one row. **Details** shows the last and next read, session times, and the reading source. The copy icon copies support details without credentials or your account label.
 
@@ -86,15 +86,19 @@ If a source becomes unavailable, its cached reading becomes stale. When discover
 
 ## Optional quota window activation
 
-Activation stays off on fresh installs and on the update that first adds it. In **Settings → Quota window activation**, explicitly choose each account and window, enable automatic activation, and click **Save activation settings**. Later updates preserve choices and attempt records. Newly discovered accounts and newly supported windows remain off.
+In **Settings → Quota window activation**, turn on **Automatically start idle quota windows**, then choose the account windows to activate. Choices appear only while it is on, and changes save immediately. Turning it off keeps your selections for next time.
 
-Choose Codex weekly, direct Claude five-hour or weekly, Antigravity Gemini or Claude/GPT five-hour or weekly, and Antigravity Argon weekly independently. Argon has a separate selection and trigger from Gemini Flash, with no five-hour window inferred. New windows remain unselected after an update. A short subscription prompt starts an eligible countdown after 30 minutes of consecutive fresh inactive readings. The delay can be 60 or 120 minutes. If both windows in a group are idle, one prompt can start both and is recorded once.
+AQM waits for **30 minutes of observed inactivity** before sending a short subscription prompt. This uses allowance, including CLI context. The wait is fixed. AQM must remain running. Sleep or gaps in fresh readings restart the wait.
 
-Fixed running countdowns never need activation, even at full quota. Codex and Antigravity inactivity requires full quota and a deadline that moves with time across fresh provider reads. Unknown or stale data and exhausted allowance prevent activation. The app waits for two new countdown readings after a prompt and never retries uncertain delivery. A prompt that is never confirmed before its window would have ended is recorded as expired, and a new inactivity period is required. Durable reservations prevent duplicates across restarts and updates. The limit is five prompts per account and quota group per 24 hours.
+While activation is off, a quiet reminder may appear in the visible main window after three hours of eligible inactivity. **Configure activation** opens Settings without enabling anything. **Later** snoozes for a week, and **Don't show again** stops future reminders. There is no reminder checkbox in Settings. Existing reminder opt-outs and snoozes are preserved. Reminders never send prompts or open windows.
 
-The official clients supply subscription authentication. Codex uses GPT-6 Luna with low reasoning, read-only ephemeral execution, and ignored user configuration. Claude uses Haiku 5.5 with low effort, tools and hooks disabled and requires extra usage off. Antigravity uses Flash for Gemini, Argon Low for Argon, and GPT-OSS for Claude/GPT, in plan mode without automatic permission approval. Configured Antigravity CLI plugins or MCP servers pause activation. Keep clients current. Even a short prompt can consume substantial CLI context. See [activation behavior](window-activation.md) for details.
+Activation is off by default. Existing on/off choices, account selections, and attempt history are preserved across updates. Earlier 60- or 120-minute waits become 30 minutes. New accounts and windows remain unselected.
 
-After three hours of observed inactivity, a supported account can receive a quiet suggestion in the main window. **Configure activation** opens Settings without enabling anything. **Later** snoozes for one week. **Don't show again** persists. Suggestions can also be disabled in Settings. Sleep or stale readings restart the observation delay. The app must remain running to observe and activate windows.
+Supported choices include Codex weekly, direct Claude five-hour and weekly, Antigravity Gemini and Claude/GPT five-hour and weekly, and Antigravity Argon weekly. One prompt may start both windows in a group. Antigravity groups remain separate.
+
+Selected windows show a short status. Hover a choice for more detail if it is unavailable or waiting. Running windows, stale readings, unknown resets, and exhausted allowance do not trigger activation. An uncertain delivery is never automatically retried. Turning activation off stops future prompts but cannot undo one already sent.
+
+Official clients retain authentication. There is no paid/API fallback, and quota monitoring remains prompt-free. See [activation behavior](window-activation.md) for supported models, eligibility checks, and duplicate prevention.
 
 ## Start with Windows
 
