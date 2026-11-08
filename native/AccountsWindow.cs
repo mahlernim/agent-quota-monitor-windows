@@ -67,6 +67,7 @@ public sealed class AccountsWindow : Window
     private string? _activeJobId;
     private string _accountsSignature = string.Empty;
     private Point? _dragStart;
+    internal FrameworkElement QuotaAppearanceSection { get; private set; } = null!;
 
     private readonly Button _installCli = Ui.Apply(new Button
     {
@@ -272,11 +273,12 @@ public sealed class AccountsWindow : Window
         body.Children.Add(_accounts);
 
         body.Children.Add(new Separator { Margin = new Thickness(0, 8, 0, 6) });
-        body.Children.Add(Heading("Quota names"));
-        body.Children.Add(Hint("Initials appear in the tray. Names appear on rings and in the floating monitor when they fit."));
-        body.Children.Add(BuildNames());
-        body.Children.Add(new Expander { Header = "Appearance", Margin = new Thickness(0, 10, 0, 4),
-            Content = new AppearancePanel(_http, _changed, _backendReady) });
+        var appearance = new StackPanel { Background = Background };
+        appearance.Children.Add(Heading("Quota appearance"));
+        appearance.Children.Add(Hint("Initials appear in the tray. Names label rings and floating windows. Colors apply only to main-window rings."));
+        appearance.Children.Add(BuildNames());
+        QuotaAppearanceSection = appearance;
+        body.Children.Add(appearance);
 
         var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         root.Children.Add(scroll);
@@ -286,37 +288,57 @@ public sealed class AccountsWindow : Window
     private UIElement BuildNames()
     {
         var grid = new Grid { Margin = new Thickness(0, 2, 0, 4) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.15, GridUnitType.Star), MinWidth = 125 });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(68) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 100 });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
         void Cell(UIElement element, int row, int column) { Grid.SetRow(element, row); Grid.SetColumn(element, column); grid.Children.Add(element); }
         grid.RowDefinitions.Add(new RowDefinition());
         Cell(new TextBlock { Text = "Quota", Foreground = Ui.Muted, FontSize = 11 }, 0, 0);
-        Cell(new TextBlock { Text = "Initials", Foreground = Ui.Muted, FontSize = 11 }, 0, 1);
-        Cell(new TextBlock { Text = "Name", Foreground = Ui.Muted, FontSize = 11 }, 0, 2);
+        Cell(new TextBlock { Text = "Tray initials", Foreground = Ui.Muted, FontSize = 11 }, 0, 1);
+        Cell(new TextBlock { Text = "Ring name", Foreground = Ui.Muted, FontSize = 11 }, 0, 2);
+        Cell(new TextBlock { Text = "Ring color", Foreground = Ui.Muted, FontSize = 11 }, 0, 3);
         int index = 1;
         foreach (string type in QuotaNames.Types)
         {
             grid.RowDefinitions.Add(new RowDefinition());
             QuotaName name = QuotaNames.For(type);
             var initials = new TextBox { Text = name.Initials, MaxLength = QuotaNames.MaxInitials, Width = 50, Margin = new Thickness(0, 2, 8, 2), Padding = new Thickness(3, 2, 3, 2) };
-            var full = new TextBox { Text = name.Name, MaxLength = QuotaNames.MaxName, Width = 160, Margin = new Thickness(0, 2, 0, 2), Padding = new Thickness(3, 2, 3, 2) };
+            var full = new TextBox { Text = name.Name, MaxLength = QuotaNames.MaxName, Margin = new Thickness(0, 2, 8, 2), Padding = new Thickness(3, 2, 3, 2), VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(initials, "Initials for " + QuotaNames.TypeLabels[type]);
             AutomationProperties.SetName(full, "Name for " + QuotaNames.TypeLabels[type]);
             _initialsFields[type] = initials;
             _nameFields[type] = full;
-            Cell(new TextBlock { Text = QuotaNames.TypeLabels[type], VerticalAlignment = VerticalAlignment.Center }, index, 0);
+            Cell(new TextBlock { Text = QuotaNames.TypeLabels[type], VerticalAlignment = VerticalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0) }, index, 0);
             Cell(initials, index, 1);
             Cell(full, index, 2);
             index++;
         }
         var panel = new StackPanel();
+        var colors = new AppearancePanel(_http, _changed, _backendReady, placeButton: (provider, button) =>
+        {
+            var matching = QuotaNames.Types.Select((type, row) => (type, row)).Where(entry =>
+                entry.type == provider || entry.type.StartsWith(provider + "-", StringComparison.Ordinal)).ToArray();
+            FrameworkElement picker = button;
+            if (matching.Length > 1)
+            {
+                var group = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                group.Children.Add(button);
+                group.Children.Add(new TextBlock { Text = "All Antigravity", Foreground = Ui.Muted, FontSize = 11,
+                    HorizontalAlignment = HorizontalAlignment.Center });
+                picker = group;
+            }
+            Cell(picker, matching[0].row + 1, 3);
+            Grid.SetRowSpan(picker, matching.Length);
+        });
         panel.Children.Add(grid);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(Hint("Save names after editing. Colors save immediately. Antigravity shares one custom color across its groups."));
+        var actions = new WrapPanel();
         var save = Ui.Button("Save names", () => _ = SaveNamesAsync());
         save.Margin = new Thickness(0, 1, 4, 1);
         actions.Children.Add(save);
-        actions.Children.Add(Ui.Button("Reset to defaults", () =>
+        actions.Children.Add(Ui.Button("Reset names to defaults", () =>
         {
             foreach (string type in QuotaNames.Types)
             {
@@ -325,7 +347,11 @@ public sealed class AccountsWindow : Window
             }
             _ = SaveNamesAsync();
         }));
+        colors.Children.Remove(colors.ResetButton);
+        actions.Children.Add(colors.ResetButton);
         panel.Children.Add(actions);
+        panel.Children.Add(colors);
+        panel.Children.Add(Hint("Reset colors restores original group colors. Floating windows, tray icons, and status colors stay unchanged."));
         return panel;
     }
 

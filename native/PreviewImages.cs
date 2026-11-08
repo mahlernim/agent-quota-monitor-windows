@@ -47,11 +47,10 @@ internal static class PreviewImages
         floating.SetData(rows.FindAll(q => pins.Contains(q.Key)));
         Save((FrameworkElement)floating.Content, 242, 68, Path.Combine(directory, "floating-monitor.png"));
         using var previewHttp = new System.Net.Http.HttpClient { BaseAddress = new Uri("http://127.0.0.1:1") };
-        var appearance = new System.Windows.Controls.StackPanel();
-        appearance.Children.Add(new System.Windows.Controls.TextBlock { Text = "Appearance", FontSize = 15, FontWeight = FontWeights.SemiBold });
-        appearance.Children.Add(new AppearancePanel(previewHttp, () => {}, () => false));
-        Save(new System.Windows.Controls.Border { Background = Brushes.White, Padding = new Thickness(16), Child = appearance },
-            480, 310, Path.Combine(directory, "appearance-settings.png"));
+        new System.Windows.Interop.WindowInteropHelper(main).EnsureHandle();
+        var settings = new AccountsWindow(main, previewHttp, () => {}, backendReady: () => false);
+        Save(settings.QuotaAppearanceSection, 588, 340, Path.Combine(directory, "appearance-settings.png"));
+        Save(settings.QuotaAppearanceSection, 448, 390, Path.Combine(directory, "appearance-settings-narrow.png"));
         // Include the provider's disabled state in visual QA without changing live settings.
         rows[6] = new QuotaItem { Key = "CG5h", AccountId = "antigravity", GroupId = "Claude and GPT models",
             Provider = "antigravity", Account = "sample@example.test", Code = "CG", Group = "Claude and GPT models",
