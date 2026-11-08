@@ -33,6 +33,7 @@ public sealed class AccountsWindow : Window
     private readonly UpdateService? _updates;
     private readonly HttpClient _http;
     private readonly ActivationPanel _activation;
+    private readonly CliUpdatesPanel _cliUpdates;
     private readonly Expander _activationSection = new() { Header = "Quota window activation", Margin = new Thickness(0, 8, 0, 8) };
     private readonly Action _changed;
     private readonly Func<bool> _backendReady;
@@ -74,11 +75,6 @@ public sealed class AccountsWindow : Window
         ToolTip = "Install the official Antigravity CLI (agy) so quota can be read without the desktop app."
     });
     private readonly Func<Window, bool> _confirmCliInstall;
-    private readonly Button _updateCli = Ui.Apply(new Button
-    {
-        Content = "Update CLI", Tag = "update-antigravity-cli", Margin = new Thickness(0, 1, 6, 1), Visibility = Visibility.Collapsed,
-        ToolTip = "Run the official agy update command after confirmation."
-    });
     private readonly Action _startCliInstall;
     private readonly Func<Window, OfficialInstall, bool> _confirmInstall;
     private readonly Action<OfficialInstall> _startInstall;
@@ -102,9 +98,11 @@ public sealed class AccountsWindow : Window
         _updates = updates;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
-        _activation = new ActivationPanel(_http);
-        _changed = changed ?? throw new ArgumentNullException(nameof(changed));
         _backendReady = backendReady ?? (() => true);
+        _activation = new ActivationPanel(_http);
+        _cliUpdates = new CliUpdatesPanel(_http, install => _confirmInstall(this, install), _startInstall, _openLink,
+            provider => !_closed && _backendReady() && _providerChecks.TryGetValue(provider, out var check) && check.IsChecked == true && _confirmedProviders.Contains(provider));
+        _changed = changed ?? throw new ArgumentNullException(nameof(changed));
         Title = "Settings and accounts";
         Icon = owner.Icon;
         Width = 640;
@@ -240,12 +238,10 @@ public sealed class AccountsWindow : Window
                 _installCli.Click += (_, _) => InstallCli();
                 DockPanel.SetDock(_installCli, Dock.Right);
                 row.Children.Add(_installCli);
-                _updateCli.Click += (_, _) => InstallClient(OfficialInstall.AntigravityUpdate, "When it finishes, press Refresh in the main window.");
-                DockPanel.SetDock(_updateCli, Dock.Right);
-                row.Children.Add(_updateCli);
             }
             body.Children.Add(row);
         }
+        body.Children.Add(new Expander { Header = "CLI updates", Content = _cliUpdates, IsExpanded = true, Margin = new Thickness(0, 6, 0, 6) });
         body.Children.Add(Hint("Claude: the monitor reads the sign-in saved by Claude Code, the command-line tool. The Claude desktop app or website alone isn't enough.",
             Readme + "anthropic-claude"));
         body.Children.Add(Hint("Antigravity: the CLI (agy) reads quota while the desktop app is closed. Open desktop app doesn't sign in the CLI.",
@@ -388,6 +384,7 @@ public sealed class AccountsWindow : Window
             _providersLoaded = true;
         }
 
+        _cliUpdates.Render(status);
         JsonElement connections = default;
         bool hasConnections = status.TryGetProperty("connections", out connections);
         if (hasConnections && connections.TryGetProperty("clients", out JsonElement clients))
@@ -408,7 +405,6 @@ public sealed class AccountsWindow : Window
             // Offer the install only when the reader positively reports that agy is missing.
             _installCli.Visibility = clients.TryGetProperty("antigravityCli", out JsonElement cli) && cli.ValueKind == JsonValueKind.False
                 ? Visibility.Visible : Visibility.Collapsed;
-            _updateCli.Visibility = cli.ValueKind == JsonValueKind.True ? Visibility.Visible : Visibility.Collapsed;
         }
 
         _job.Text = "";
@@ -517,12 +513,11 @@ public sealed class AccountsWindow : Window
             content.Children.Add(new TextBlock { Text = account.Guidance, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Ui.WarningText, Margin = new Thickness(14, 2, 0, 0) });
         if (account.ClaudeUpdateAvailable && !editing)
         {
-            var update = Ui.Button("Update Claude Code", () => UpdateClaude(account));
+            var update = Ui.Button("Review CLI updates", ShowCliUpdates);
             update.Tag = "update-claude:" + account.Id;
             update.HorizontalAlignment = HorizontalAlignment.Left;
             update.Margin = new Thickness(14, 4, 0, 2);
-            update.ToolTip = account.ClaudeUpdateAction == "claude-update-help" ? "Open the official update instructions for this installation."
-                : "Shows the official update command first. Runs only after you confirm.";
+            update.ToolTip = "Review installed and available CLI versions.";
             AutomationProperties.SetName(update, "Update Claude Code for " + account.Label);
             content.Children.Add(update);
         }
@@ -737,19 +732,10 @@ public sealed class AccountsWindow : Window
         catch (Exception) { ShowError("PowerShell couldn't be started. Run the install command shown in the confirmation yourself."); }
     }
 
-    private void UpdateClaude(AccountStatus account)
+    internal void ShowCliUpdates()
     {
-        if (_closed || !account.ClaudeUpdateAvailable) return;
-        var update = OfficialInstall.ClaudeUpdate(account.ClientUpdateMethod);
-        if (update is null)
-        {
-            try { _openLink(OfficialInstall.ClaudeUpdateHelp); ShowSuccess("Official Claude Code update instructions opened in your browser."); }
-            catch (Exception) { ShowError("The browser couldn't be started. See code.claude.com/docs/en/setup for update instructions."); }
-            return;
-        }
-        if (!_confirmInstall(this, update)) return;
-        try { _startInstall(update); ShowSuccess("The Claude Code update opened in PowerShell. The monitor detects the updated client within a minute."); }
-        catch (Exception) { ShowError("PowerShell couldn't be started. Run the update command shown in the confirmation yourself."); }
+        if (_cliUpdates.Parent is Expander section) section.IsExpanded = true;
+        _cliUpdates.BringIntoView();
     }
 
     private void UpdateNode()

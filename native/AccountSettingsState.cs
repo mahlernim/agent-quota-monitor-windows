@@ -60,7 +60,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
     private string ClientGuidance => Provider != "claude" ? "" : ClientState switch
     {
         "outdated" => $"Claude Code {ClientVersion} is older than {ClaudeMinimum}. Update Claude Code for CLI-managed quota reads and session renewal. " +
-            (ClaudeUpdateAction == "claude-update-help" ? "Update Claude Code opens the official instructions for this installation." : "The update command runs only after you confirm."),
+            "Review CLI updates opens the shared version checks. Updates run only after you confirm.",
         "unverified" => "The Claude Code version could not be checked. The monitor uses the saved session and retries the version check after five minutes.",
         "unsupported" => $"Claude Code {ClientVersion} is outside the supported range for CLI quota reads. The monitor uses the saved session. " +
             $"Supported versions are {ClaudeMinimum} or newer 2.x.",
@@ -139,7 +139,7 @@ internal sealed record AccountStatus(string Id, string Provider, string Label, s
             if (AwaitingStartupRetry) return new("Reading again after the monitor restarted.");
             if (ClaudeUpdateAvailable && Error is "" or "session_expired" or "sign_in_required" or "local_session_unavailable")
                 return new(Error == "session_expired" ? "Your saved Claude Code session expired. Update Claude Code for CLI-managed renewal."
-                    : $"Claude Code {ClientVersion} needs an update for CLI-managed quota reads.", ClaudeUpdateAction, "Update Claude Code");
+                    : $"Claude Code {ClientVersion} needs an update for CLI-managed quota reads.", ClaudeUpdateAction, "Review CLI updates");
             if (Provider == "claude" && Error.Length == 0 && ClientState is "unverified" or "unsupported")
                 return new(ClientState == "unverified" ? "Claude Code version could not be checked. Using the saved session."
                     : $"Claude Code {ClientVersion} is unsupported for CLI quota reads. Using the saved session.");

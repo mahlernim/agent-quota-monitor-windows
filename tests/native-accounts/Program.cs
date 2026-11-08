@@ -35,6 +35,7 @@ internal static class Program
                 TestState();
                 await TestAppearance();
                 await TestActivation();
+                await TestCliUpdates();
                 await TestWindow(args.Length == 1 ? args[0] : null);
                 Console.WriteLine($"Passed {_checks} native account checks. Provider requests 0. Settings writes 0.");
                 exit = 0;
@@ -44,6 +45,48 @@ internal static class Program
         }));
         app.Run();
         return exit;
+    }
+
+    private static async Task TestCliUpdates()
+    {
+        using var backend = new SyntheticBackend();
+        using var http = new HttpClient(backend) { BaseAddress = new Uri("http://127.0.0.1:8765") };
+        bool enabled = true, confirm = false;
+        int installs = 0;
+        var panel = new CliUpdatesPanel(http, _ => confirm, _ => installs++, _ => { }, _ => enabled);
+        using var snapshot = JsonDocument.Parse("""
+            {"cliUpdates":{"busy":false,"tools":[{"provider":"codex","state":"available","installed":"1.2.3","latest":"1.3.0","method":"npm","channel":"latest"}]}}
+            """);
+        panel.Render(snapshot.RootElement);
+        var update = Tagged<Button>(panel, "cli-update:codex")!;
+        Check(update is not null, "Verified new releases offer a shared update button");
+        backend.NextPost = Task.FromResult(SyntheticBackend.Json("""{"provider":"codex","method":"npm","channel":"latest"}"""));
+        await Call(panel, "Update", "codex", update!);
+        Check(installs == 0, "Declining a CLI update never launches it");
+        confirm = true;
+        backend.PrepareResult = """{"provider":"codex","method":"npm","channel":"latest"}""";
+        await Call(panel, "Update", "codex", update!);
+        Check(installs == 1, "A confirmed update revalidates the provider and installation before launching");
+        int requests = backend.Requests;
+        enabled = false;
+        await Call(panel, "Update", "codex", update!);
+        panel.Render(snapshot.RootElement);
+        Check(installs == 1 && backend.Requests == requests && Tagged<Button>(panel, "cli-update:codex") is null,
+            "Disabled providers hide update buttons and cannot launch retained actions");
+        enabled = true;
+        var cancelled = new CliUpdatesPanel(http, _ => { enabled = false; return true; }, _ => installs++, _ => { }, _ => enabled);
+        cancelled.Render(snapshot.RootElement);
+        await Call(cancelled, "Update", "codex", Tagged<Button>(cancelled, "cli-update:codex")!);
+        Check(installs == 1, "Disabling a provider during confirmation prevents the update launch");
+        enabled = true;
+        await Call(panel, "Check");
+        Check(backend.LastPath == "/api/cli-updates/check", "Manual CLI checks use their own endpoint, never quota refresh");
+        using var current = JsonDocument.Parse("""{"cliUpdates":{"busy":false,"tools":[{"provider":"codex","state":"current","installed":"1.3.0"}]}}""");
+        panel.Render(current.RootElement);
+        Check(Tagged<Button>(panel, "cli-update:codex") is null, "Up-to-date clients have no Update button");
+        foreach (string provider in new[] { "codex", "claude", "antigravity", "copilot" })
+            Check(OfficialInstall.CliUpdate(provider, "arbitrary", "latest") is null, "Unknown installation methods cannot build commands");
+        Check(OfficialInstall.CliUpdate("claude", "npm", "stable")!.Command.Contains("@stable"), "Claude npm updates retain the stable channel");
     }
 
     private static void Check(bool value, string name)
@@ -257,7 +300,7 @@ internal static class Program
         AccountStatus outdated = Parse(ClaudeSnapshot().ToJsonString())[0];
         Check(outdated.ClientVersion == "2.1.280" && outdated.ClientMinimumVersion == "2.1.281" &&
             outdated.ClientState == "outdated" && outdated.ClientUpdateMethod == "npm" && outdated.Problem?.Action == "update-claude" &&
-            outdated.Problem.ActionLabel == "Update Claude Code" && outdated.Guidance.Contains("Update Claude Code") &&
+            outdated.Problem.ActionLabel == "Review CLI updates" && outdated.Guidance.Contains("Update Claude Code") &&
             !outdated.Guidance.Contains("Choose Sign in"), "An expired legacy session with a verified old client offers a source-specific update");
         Check((outdated with { Error = "" }).Problem?.Action == "update-claude" &&
             (outdated with { Error = "rate_limited" }).Problem?.Action is null &&
@@ -394,16 +437,6 @@ internal static class Program
             handler.Status = missing.ToJsonString();
             await Call(window, "PollAsync");
             Check(installCli.Visibility == Visibility.Collapsed, "The offer disappears once agy is installed");
-            Button updateCli = Field<Button>(window, "_updateCli");
-            Check(updateCli.Visibility == Visibility.Visible, "Installed agy exposes its update action");
-            confirmInstall = false;
-            Click(updateCli);
-            Check(clientInstalls.Count == 0, "Declining an agy update runs nothing");
-            confirmInstall = true;
-            int beforeAgyUpdate = handler.Requests;
-            Click(updateCli);
-            Check(clientInstalls.SequenceEqual(new[] { OfficialInstall.AntigravityUpdate }) && handler.Requests == beforeAgyUpdate,
-                "Confirmed agy update invokes only the official updater without provider requests");
             Check(OfficialInstall.AntigravityUpdate.Script.Contains(OfficialInstall.AntigravityUpdateCommand) &&
                 OfficialInstall.AntigravityUpdate.Confirmation.Contains("agy update") &&
                 !OfficialInstall.AntigravityUpdate.Script.Contains("/usage") && !OfficialInstall.AntigravityUpdate.Script.Contains("USERPROFILE ="),
@@ -438,17 +471,10 @@ internal static class Program
             handler.Status = claudeUpdate.ToJsonString();
             await Call(window, "PollAsync");
             var claudeUpdateButton = Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-claude:claude-update")!;
-            Check(claudeUpdateButton.Content.ToString() == "Update Claude Code", "Settings offers Update Claude Code for a verified old client");
-            int beforeClaudeUpdate = clientInstalls.Count, requestsBeforeClaudeUpdate = handler.Requests;
-            confirmInstall = false;
+            Check(claudeUpdateButton.Content.ToString() == "Review CLI updates", "Old Claude clients lead to the shared CLI update controls");
+            int beforeClaudeUpdate = clientInstalls.Count;
             Click(claudeUpdateButton);
-            Check(clientInstalls.Count == beforeClaudeUpdate && handler.Requests == requestsBeforeClaudeUpdate,
-                "Declining a Claude update launches nothing and sends no backend request");
-            confirmInstall = true;
-            Click(claudeUpdateButton);
-            Check(clientInstalls.Count == beforeClaudeUpdate + 1 && clientInstalls.Last() == OfficialInstall.ClaudeUpdate("npm") &&
-                handler.Requests == requestsBeforeClaudeUpdate && Field<TextBlock>(window, "_message").Text.Contains("within a minute"),
-                "A confirmed Claude update launches only its matching updater without signing in or refreshing quota");
+            Check(clientInstalls.Count == beforeClaudeUpdate, "Reviewing CLI updates does not launch an updater");
             Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "details:claude-update")!);
             string claudeDetails = Tagged<TextBlock>(Field<StackPanel>(window, "_accounts"), "detail-text:claude-update")!.Text;
             Check(claudeDetails.Contains("Claude Code session") && claudeDetails.Contains("2.1.280") && claudeDetails.Contains("2.1.281 or newer 2.x"),
@@ -457,8 +483,7 @@ internal static class Program
             handler.Status = claudeUpdate.ToJsonString();
             await Call(window, "PollAsync");
             Click(Tagged<Button>(Field<StackPanel>(window, "_accounts"), "update-claude:claude-update")!);
-            Check(openedLinks.SequenceEqual(new[] { OfficialInstall.ClaudeUpdateHelp }) && clientInstalls.Count == beforeClaudeUpdate + 1,
-                "An unknown installation opens only the fixed official update guide");
+            Check(clientInstalls.Count == beforeClaudeUpdate, "Unknown installations also lead to shared CLI update controls");
             claudeUpdate["accounts"]![0]!["clientState"] = "supported";
             handler.Status = claudeUpdate.ToJsonString();
             await Call(window, "PollAsync");
@@ -605,6 +630,12 @@ internal static class Program
                 oldClaude["status"] = "stale"; oldClaude["error"] = "session_expired";
                 oldClaude["clientVersion"] = "2.1.280"; oldClaude["clientState"] = "outdated";
                 oldClaude["clientUpdateMethod"] = "npm"; oldClaude["clientMinimumVersion"] = "2.1.281";
+                preview["cliUpdates"] = JsonNode.Parse("""
+                    {"busy":false,"tools":[
+                      {"provider":"codex","state":"available","installed":"1.2.0","latest":"1.3.0","method":"native","channel":"latest"},
+                      {"provider":"claude","state":"current","installed":"2.1.300"},
+                      {"provider":"copilot","state":"failed"}]}
+                    """);
                 handler.Status = preview.ToJsonString();
                 await Call(window, "PollAsync");
                 using var activationSample = JsonDocument.Parse("""
@@ -900,6 +931,7 @@ internal static class Program
 
 internal sealed class SyntheticBackend : HttpMessageHandler
 {
+    internal string? PrepareResult { get; set; }
     internal int Requests { get; private set; }
     internal string Status { get; set; } = "{}";
     internal HttpStatusCode GetStatus { get; set; } = HttpStatusCode.OK;
@@ -925,6 +957,7 @@ internal sealed class SyntheticBackend : HttpMessageHandler
         LastBody = await request.Content!.ReadAsStringAsync(cancellationToken);
         PostBodies.Add(LastBody);
         if (NextPost is not null) { Task<HttpResponseMessage> pending = NextPost; NextPost = null; return await pending; }
+        if (LastPath == "/api/cli-updates/prepare" && PrepareResult is not null) return Json(PrepareResult);
         if (LastPath == "/api/accounts/layout")
         {
             LastLayout = LastBody;

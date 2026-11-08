@@ -72,3 +72,13 @@ Release checklist:
 5. From the previous installed version, use **Install update** once the release is public.
 
 Include Windows version, app version, provider names, and sanitized error categories in issues. Never include credentials, authorization codes, private provider files, or personal quota screenshots. See [provider interfaces](provider-evidence.md) and [third-party notices](../THIRD-PARTY-NOTICES.md).
+
+## CLI release checks
+
+`quota/cli_updates.py` owns the independent 24-hour release-check schedule in `cli-updates.dpapi`. The minute worker discovers local versions only for enabled providers. Remote attempts reserve their next check before network I/O, including failures. Manual checks coalesce and respect a one-minute floor plus Retry-After. The status endpoint performs no checks. Provider switches are checked again before network requests and before an update handoff. Installation fingerprints prevent an offer from being reused for a different binary or release channel.
+
+Release checks read bounded HTTPS public metadata with redirects rejected. Codex, Claude Code and Copilot use their official npm package dist-tags. Antigravity uses the Windows x64 manifest referenced by its [official installer](https://antigravity.google/cli/install.ps1). Only stable three-part versions are compared. Unknown versions and prereleases fail closed. Claude's user-level `autoUpdatesChannel` selects the stable or latest dist-tag. Enterprise or project-level release policies are not resolved by AQM and remain the official updater's responsibility. WinGet remains responsible for package availability, which can lag vendor metadata.
+
+The native panel uses the existing visible PowerShell confirmation flow with fixed commands. It revalidates the provider and installation after confirmation. Unknown installation methods open fixed official documentation links. Updater exit alone is not treated as successful installation. A subsequent local version check verifies the result. No live CLI installation or upgrade is exercised by automated tests.
+
+Reference update paths are documented by [OpenAI](https://developers.openai.com/codex/cli/), [Anthropic](https://code.claude.com/docs/en/setup#update-claude-code), and [GitHub](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli). Tests use synthetic clocks, stores, public metadata and launch callbacks. They cover daily persistence, cooldowns, disabled providers, failures, changed binaries, request coalescing, and confirmation cancellation without provider prompts or real installers.

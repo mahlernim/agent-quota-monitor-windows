@@ -483,16 +483,8 @@ public sealed class App : Application
         {
             case "update-claude" or "claude-update-help":
                 if (!account.ClaudeUpdateAvailable) return;
-                var claudeUpdate = OfficialInstall.ClaudeUpdate(account.ClientUpdateMethod);
-                if (claudeUpdate is null)
-                {
-                    try { Process.Start(new ProcessStartInfo(OfficialInstall.ClaudeUpdateHelp) { UseShellExecute = true }); }
-                    catch (Exception) { main.ShowNotice("The browser couldn't be started. See code.claude.com/docs/en/setup for update instructions."); }
-                    return;
-                }
-                if (!claudeUpdate.Confirm(main)) return;
-                try { claudeUpdate.Start(); main.ShowNotice("The Claude Code update opened in PowerShell. The monitor detects the updated client within a minute."); }
-                catch (Exception) { main.ShowNotice("PowerShell couldn't be started. Run the update command shown in the confirmation yourself."); }
+                ShowAccounts();
+                accounts?.ShowCliUpdates();
                 return;
             case "update-node":
                 if (!account.NodeUpdateRequired || !OfficialInstall.NodeUpdate.Confirm(main)) return;

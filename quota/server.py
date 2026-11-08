@@ -8,6 +8,7 @@ import threading
 from .monitor import Monitor, poll_monitor
 from .vault import Vault
 from .connections import Connections
+from .cli_updates import CliUpdates
 from .activation import Activation, Journal
 
 QUOTA_TYPES = ('codex', 'claude', 'antigravity-gemini', 'antigravity-argon', 'antigravity-claude-gpt', 'copilot')
@@ -39,7 +40,7 @@ def app_version(value):
     return value if isinstance(value, str) and re.fullmatch(r'[0-9A-Za-z.+-]{1,64}', value) else 'development'
 
 
-def handler(monitor, port, connections=None, version='development', activation=None):
+def handler(monitor, port, connections=None, version='development', activation=None, cli_updates=None):
     expected = f'127.0.0.1:{port}'
     refresh_state = dict(id=0, state='idle')
     refresh_guard = threading.Lock()
@@ -90,6 +91,8 @@ def handler(monitor, port, connections=None, version='development', activation=N
                 data['backend'] = dict(name='agent-quota-monitor', protocolVersion=1, processId=os.getpid(), appVersion=version)
                 if connections:
                     data['connections'] = connections.snapshot()
+                if cli_updates:
+                    data['cliUpdates'] = cli_updates.snapshot()
                 if activation:
                     data['activation'] = activation.snapshot()
                 return self.send(200, json.dumps(data, allow_nan=False).encode())
@@ -103,6 +106,24 @@ def handler(monitor, port, connections=None, version='development', activation=N
         def do_POST(self):
             if not self.safe(True):
                 return self.send(403, b'{}')
+            if self.path in ('/api/cli-updates/check', '/api/cli-updates/prepare'):
+                if not cli_updates:
+                    return self.send(503, b'{}')
+                try:
+                    size = int(self.headers.get('Content-Length', '0'))
+                    if not 0 < size <= 1024 or self.headers.get_content_type() != 'application/json':
+                        raise ValueError()
+                    self.connection.settimeout(5)
+                    payload = json.loads(self.rfile.read(size))
+                    if not isinstance(payload, dict):
+                        raise ValueError()
+                    result = ({'started': cli_updates.request()} if self.path.endswith('/check')
+                              else cli_updates.prepare(payload.get('provider')))
+                    return self.send(200, json.dumps(result).encode())
+                except (ValueError, TypeError):
+                    return self.send(409, b'{"error":"Check for updates again before updating"}')
+                except Exception:
+                    return self.send(503, b'{"error":"CLI update check unavailable"}')
             if self.path == '/api/activation':
                 if not activation:
                     return self.send(503, b'{}')
@@ -228,10 +249,12 @@ def main():
     monitor = Monitor(Vault(), desired_google=desired, settings_vault=settings)
     connections = Connections(monitor)
     activation = Activation(monitor, Journal(Path(os.environ['LOCALAPPDATA']) / 'QuotaDashboard' / 'activation.dpapi'))
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections, app_version(args.app_version), activation))
+    cli_updates = CliUpdates(monitor, Vault(Path(os.environ['LOCALAPPDATA']) / 'QuotaDashboard' / 'cli-updates.dpapi'))
+    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(monitor, args.port, connections, app_version(args.app_version), activation, cli_updates))
     stop = threading.Event()
     threading.Thread(target=poll_monitor, args=(monitor, stop), daemon=True).start()
     threading.Thread(target=activation.run, daemon=True).start()
+    threading.Thread(target=cli_updates.run, daemon=True).start()
     print(f'Quota backend listening on 127.0.0.1:{args.port}', flush=True)
     try:
         server.serve_forever()
@@ -239,6 +262,7 @@ def main():
         pass
     finally:
         stop.set()
+        cli_updates.stop.set()
         activation.close()
         connections.close()
         server.server_close()
