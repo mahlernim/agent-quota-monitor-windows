@@ -174,7 +174,7 @@ class Activation:
         for key in ('enabled', 'suggestions'):
             if key in payload and type(payload[key]) is not bool:
                 raise ValueError('Expected boolean')
-        if 'idleMinutes' in payload and (type(payload['idleMinutes']) is not int or payload['idleMinutes'] not in (30, 60, 120)):
+        if 'idleMinutes' in payload and (type(payload['idleMinutes']) is not int or payload['idleMinutes'] != 30):
             raise ValueError('Invalid inactivity delay')
         ids = payload.get('accounts')
         if ids is not None:
@@ -187,6 +187,7 @@ class Activation:
             prefs = data['preferences']
             reset_suggestions = payload.get('suggestions') is True and not prefs['suggestions']
             prefs.update({k: v for k, v in payload.items() if k != 'dismiss'})
+            prefs.update(idleMinutes=30)
             action = payload.get('dismiss')
             if action == 'later':
                 prefs['snoozeUntil'] = self.clock()+7*86400
@@ -262,7 +263,9 @@ class Activation:
         candidate = None
         with self.journal.transaction() as data:
             prefs = data['preferences']
-            dirty = self._expire(data, now)
+            dirty = prefs['idleMinutes'] != 30
+            prefs.update(idleMinutes=30)
+            dirty = self._expire(data, now) or dirty
             summaries = []
             suggestion = None
             for row in rows:

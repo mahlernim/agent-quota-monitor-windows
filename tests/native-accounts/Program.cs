@@ -98,6 +98,8 @@ internal static class Program
         Render();
         Check(backend.Requests == 0 && Field<CheckBox>(panel,"enabled").IsChecked == false,
             "Rendering activation defaults cannot opt in or issue requests");
+        Check(Field<StackPanel>(panel,"details").Visibility == Visibility.Collapsed,
+            "Disabled activation hides all account and window choices");
         var selections = Field<Dictionary<string, CheckBox>>(panel,"selections");
         Check(selections["claude-a"].IsChecked == false && !selections["antigravity-b"].IsEnabled,
             "New accounts are unselected and unsupported providers cannot be selected");
@@ -121,21 +123,44 @@ internal static class Program
             selections["antigravity-a|gemini-argon|weekly"].Content.ToString()!.Contains("Argon"),
             "Same-email selections explicitly distinguish provider and quota group");
         Field<CheckBox>(panel,"enabled").IsChecked = true;
-        Field<CheckBox>(panel,"enabled").RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));
+        await Call(panel,"Save", false);
+        Check(Field<StackPanel>(panel,"details").Visibility == Visibility.Visible &&
+            JsonNode.Parse(backend.LastBody!)!["accounts"] is null,
+            "Enabling reveals choices and preserves saved selections without opting into new windows");
         selections["claude-a"].IsChecked = true;
+        await Call(panel,"Save", true);
         Render();
-        Check(Field<CheckBox>(panel,"enabled").IsChecked == true, "Status refresh preserves the unsaved activation choice");
-        await Call(panel,"Save");
+        Check(Field<CheckBox>(panel,"enabled").IsChecked == true && selections["claude-a"].IsChecked == true,
+            "An older status response cannot undo a successful immediate save");
         var saved = JsonNode.Parse(backend.LastBody!)!;
         Check(backend.LastPath == "/api/activation" && saved["enabled"]!.GetValue<bool>() &&
             saved["accounts"]!.AsArray().Count == 1 && saved["accounts"]![0]!.GetValue<string>() == "claude-a" &&
-            saved["idleMinutes"]!.GetValue<int>() == 30, "Only explicitly selected accounts and validated defaults are saved");
+            saved["idleMinutes"]!.GetValue<int>() == 30 && saved["suggestions"] is null && saved["dismiss"] is null,
+            "Immediate saves use the fixed delay without changing reminder preferences or dismissals");
         backend.PostStatus = HttpStatusCode.ServiceUnavailable;
-        await Call(panel,"Save");
+        Field<CheckBox>(panel,"enabled").IsChecked = false;
+        await Call(panel,"Save", false);
         Check(Field<TextBlock>(panel,"feedback").Text.Contains("previous choices remain active"), "A failed save never claims the old settings changed");
+        Check(Field<CheckBox>(panel,"enabled").IsChecked == true && Field<StackPanel>(panel,"details").Visibility == Visibility.Visible,
+            "Failed disable restores the confirmed switch and visible choices");
+        selections["claude-a"].IsChecked = false;
+        await Call(panel,"Save", true);
+        Check(selections["claude-a"].IsChecked == true,
+            "A failed window deselection restores the saved opt-in instead of implying it stopped");
+        backend.PostStatus = HttpStatusCode.OK;
+        var pendingSave = new TaskCompletionSource<HttpResponseMessage>();
+        backend.NextPost = pendingSave.Task;
+        Field<CheckBox>(panel,"enabled").IsChecked = false;
+        var pending = Call(panel,"Save", false);
+        Check(!Field<CheckBox>(panel,"enabled").IsEnabled && selections.Values.All(c => !c.IsEnabled),
+            "Pending saves disable every activation control");
+        pendingSave.SetResult(SyntheticBackend.Json("{}")); await pending;
+        Check(Field<StackPanel>(panel,"details").Visibility == Visibility.Collapsed &&
+            JsonNode.Parse(backend.LastBody!)!["accounts"] is null,
+            "Disabling hides choices without clearing saved account selections");
         sample["activation"]!["storageError"] = true;
         Render();
-        Check(!Field<CheckBox>(panel,"enabled").IsEnabled && !Field<Button>(panel,"save").IsEnabled,
+        Check(!Field<CheckBox>(panel,"enabled").IsEnabled && selections.Values.All(c => !c.IsEnabled),
             "Corrupt or unavailable storage disables activation changes");
     }
     private static string Snapshot(params string[] ids) => JsonSerializer.Serialize(new

@@ -201,21 +201,19 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 
 ## Optional quota window activation
 
-Some quota countdowns begin only after a model request. In **Settings → Quota window activation**, you can let AQM send a short prompt after a supported window has remained inactive for 30 minutes. Choose each account and window, enable the feature, then select **Save activation settings**. You can instead wait 60 or 120 minutes.
+In **Settings → Quota window activation**, turn on **Automatically start idle quota windows**, then choose the account windows to activate. Choices appear only while it is on, and changes save immediately. Turning it off keeps your selections for next time.
 
-Activation is off on a fresh install and when first introduced by an update. Later updates retain your choice, account selections, dismissals, and attempt records. New accounts and newly supported windows remain unselected. Quota checks stay prompt-free.
+AQM waits for **30 minutes of observed inactivity** before sending a short subscription prompt. This uses allowance, including CLI context. The wait is fixed. AQM must remain running. Sleep or gaps in fresh readings restart the wait.
 
-Supports **Codex weekly**, **direct Claude five-hour and weekly**, **Antigravity Gemini and Claude/GPT five-hour and weekly**, and **Antigravity Argon weekly** windows. Antigravity groups have separate controls. One prompt can start both windows in its group, so AQM records both and avoids a second prompt. Argon has its own weekly selection and never shares a trigger with Gemini Flash. Codex and Argon do not get an invented five-hour window.
+While activation is off, a quiet reminder may appear in the visible main window after three hours of eligible inactivity. **Configure activation** opens Settings without enabling anything. **Later** snoozes for a week, and **Don't show again** stops future reminders. There is no reminder checkbox in Settings. Existing reminder opt-outs and snoozes are preserved. Reminders never send prompts or open windows.
 
-AQM uses the signed-in official CLI with a fixed economical model. Codex uses GPT-6 Luna with low reasoning, Claude uses Haiku 5.5 with low effort, Antigravity Gemini uses Flash, Antigravity Argon uses Argon Low, and Antigravity Claude/GPT uses GPT-OSS. Claude requires a Pro or Max subscription with extra usage off. Codex requires a recent client with isolated ephemeral execution. Antigravity requires CLI 1.3.6 or newer and uses its own isolated profile and text-only agent in plan mode. Your normal plugins and settings stay unchanged. AQM verifies that its activation profile loads no plugins, MCP servers, or hooks and has credit overages off. Keep official clients current. Prompts consume subscription allowance, including CLI context. There is no paid/API fallback.
+Activation is off by default. Existing on/off choices, account selections, and attempt history are preserved across updates. Earlier 60- or 120-minute waits become 30 minutes. New accounts and windows remain unselected.
 
-Activation status identifies the failed check, such as identity verification, profile isolation, hooks, credit settings, or a CLI timeout. Failures after launch remain marked uncertain and are not automatically retried. Provider output and credential contents are never shown in these messages.
+Supported choices include Codex weekly, direct Claude five-hour and weekly, Antigravity Gemini and Claude/GPT five-hour and weekly, and Antigravity Argon weekly. One prompt may start both windows in a group. Antigravity groups remain separate.
 
-Claude activation uses the extra-usage status reported by its quota source, including the official CLI. If that status is missing or extra usage is enabled, activation waits without sending a prompt. Settings shows the current reason. Your activation history is preserved.
+Selected windows show a short status. Hover a choice for more detail if it is unavailable or waiting. Running windows, stale readings, unknown resets, and exhausted allowance do not trigger activation. An uncertain delivery is never automatically retried. Turning activation off stops future prompts but cannot undo one already sent.
 
-AQM requires consecutive fresh successful readings throughout the chosen delay. Full quota with a fixed running countdown, stale readings, unknown reset information, and exhausted weekly quota never trigger activation. After a prompt, two fresh countdown readings must confirm the change. An uncertain delivery is not automatically retried. If a prompt is never confirmed before its window would have ended, for example because the PC slept, AQM records it as expired and waits for a new inactivity period. Settings shows the current activation status. At most five prompts can be sent per account and quota group in 24 hours. For Codex and Antigravity, consecutive full-quota readings must show a deadline moving with time before AQM treats a window as idle.
-
-With activation off, a quiet suggestion can appear in the main window after three hours of confirmed inactivity for a supported account. **Configure activation** opens Settings, **Later** snoozes for a week, and **Don't show again** persists across restarts and updates. Suggestions never send a prompt or enable the feature. You can turn suggestions off in Settings. The app must be running to observe inactivity and act. Sleep or gaps in fresh readings restart the observation period.
+Official clients retain authentication. There is no paid/API fallback, and quota monitoring remains prompt-free. See [activation behavior](docs/window-activation.md) for supported models, eligibility checks, and duplicate prevention.
 
 ## Privacy
 
