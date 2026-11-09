@@ -31,6 +31,11 @@ public sealed class AccountsWindow : Window
     };
 
     private readonly UpdateService? _updates;
+    private readonly Action<Window>? _installUpdate;
+    private Action? _refreshUpdate;
+    private string? _updateProgress;
+    internal void SetUpdateProgress(string? progress) { _updateProgress = progress; _refreshUpdate?.Invoke(); }
+    internal void ShowUpdateError(string message) { _message.Foreground = Brushes.Firebrick; _message.Text = message; }
     private readonly HttpClient _http;
     private readonly ActivationPanel _activation;
     private readonly CliUpdatesPanel _cliUpdates;
@@ -89,7 +94,7 @@ public sealed class AccountsWindow : Window
 
     internal AccountsWindow(Window owner, HttpClient http, Action changed, UpdateService? updates = null, Func<bool>? backendReady = null,
         Func<Window, bool>? confirmCliInstall = null, Action? startCliInstall = null,
-        Func<Window, OfficialInstall, bool>? confirmInstall = null, Action<OfficialInstall>? startInstall = null, Action<string>? openLink = null)
+        Func<Window, OfficialInstall, bool>? confirmInstall = null, Action<OfficialInstall>? startInstall = null, Action<string>? openLink = null, Action<Window>? installUpdate = null)
     {
         _confirmCliInstall = confirmCliInstall ?? AntigravityCliInstall.Confirm;
         _startCliInstall = startCliInstall ?? AntigravityCliInstall.Start;
@@ -97,6 +102,7 @@ public sealed class AccountsWindow : Window
         _startInstall = startInstall ?? (installer => installer.Start());
         _openLink = openLink ?? (url => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }));
         _updates = updates;
+        _installUpdate = installUpdate;
         Owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _backendReady = backendReady ?? (() => true);
@@ -193,7 +199,23 @@ public sealed class AccountsWindow : Window
             body.Children.Add(updateRow);
             var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Ui.Muted, FontSize = 12, Margin = new Thickness(0, 0, 0, 4) };
             body.Children.Add(status);
-            void UpdateStatus() { check.IsEnabled = !_updates.Busy; status.Text = $"Installed {UpdateService.InstalledVersion} · " + _updates.Status; }
+            var action = Ui.Button("Install update", () => {
+                var release = _updates.Available;
+                if (release is null || _updates.Busy || _updateProgress is not null) return;
+                if (_installUpdate is not null && release.Installer) _installUpdate(this);
+                else { try { _openLink(release.Url); } catch { ShowUpdateError("Couldn't open the release page."); } }
+            });
+            action.Tag = "app-update";
+            action.HorizontalAlignment = HorizontalAlignment.Left;
+            body.Children.Add(action);
+            void UpdateStatus() {
+                check.IsEnabled = !_updates.Busy && _updateProgress is null;
+                status.Text = $"Installed {UpdateService.InstalledVersion} · " + (_updateProgress ?? _updates.Status);
+                action.Visibility = _updates.Available is null ? Visibility.Collapsed : Visibility.Visible;
+                action.IsEnabled = !_updates.Busy && _updateProgress is null;
+                action.Content = _installUpdate is not null && _updates.Available?.Installer == true ? "Install update" : "Download update";
+            }
+            _refreshUpdate = UpdateStatus;
             _updates.Changed += UpdateStatus;
             Closed += (_, _) => _updates.Changed -= UpdateStatus;
             UpdateStatus();

@@ -48,7 +48,7 @@ class CliUpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / 'Programs/OpenAI/Codex/bin/codex.exe'
             executable.parent.mkdir(parents=True)
-            executable.write_bytes(b'synthetic executable')
+            executable.write_bytes(b'MZ' + bytes(58) + (64).to_bytes(4, 'little') + b'PE\0\0' + bytes(20))
             with patch.dict('os.environ', {'LOCALAPPDATA': directory}), \
                     patch('quota.connections.client_command', return_value=[str(executable), 'login']), \
                     patch('quota.cli_updates.subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=b'codex-cli 1.2.3')) as run:
@@ -58,6 +58,32 @@ class CliUpdateTests(unittest.TestCase):
                 self.assertEqual(run.call_args.kwargs['env']['DISABLE_AUTOUPDATER'], '1')
                 run.return_value.stdout = b'codex-cli 1.2.3-beta.1'
                 with self.assertRaises(ValueError): discover('codex')
+
+    def test_codex_update_prefers_npm_cli_over_desktop_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'npm/node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/bin/codex.exe'
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b'MZ' + bytes(58) + (64).to_bytes(4, 'little') + b'PE\0\0' + bytes(20))
+            with patch.dict('os.environ', {'APPDATA': directory, 'LOCALAPPDATA': directory}), \
+                    patch('quota.connections.client_command', return_value=['desktop/codex.exe', 'login']) as fallback, \
+                    patch('quota.cli_updates.subprocess.run', return_value=SimpleNamespace(returncode=0, stdout=b'codex-cli 0.153.4')) as run:
+                row = discover('codex')
+                self.assertEqual(row['method'], 'npm')
+                self.assertEqual(row['installed'], '0.153.4')
+                self.assertEqual(run.call_args.args[0], [str(executable.resolve()), '--version'])
+                fallback.assert_not_called()
+
+    def test_update_probe_rejects_placeholder_without_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'Programs/OpenAI/Codex/bin/codex.exe'
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b'echo "native binary not installed"')
+            with patch.dict('os.environ', {'LOCALAPPDATA': directory}), \
+                    patch('quota.cli_updates.os.name', 'nt'), \
+                    patch('quota.cli_updates.subprocess.run') as run:
+                with self.assertRaisesRegex(ValueError, 'incomplete'):
+                    discover('codex')
+                run.assert_not_called()
 
     def test_daily_interval_survives_restart(self):
         self.service.check()

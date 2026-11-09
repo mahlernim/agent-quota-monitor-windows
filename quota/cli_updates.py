@@ -63,8 +63,12 @@ def discover(provider):
         if channel not in ('latest', 'stable'):
             raise ValueError('Unsupported release channel')
     elif provider == 'codex':
-        command = client_command(provider)
-        executable = command[0] if command else None
+        # Desktop-bundled builds can shadow the standalone CLI on PATH and
+        # have a separate release lifecycle. Update the known CLI installation.
+        native = local / 'Programs/OpenAI/Codex/bin/codex.exe'
+        npm = sorted(islice((roaming / 'npm/node_modules/@openai/codex').glob('**/codex.exe'), 16))
+        command = client_command(provider) if not native.is_file() and not npm else None
+        executable = str(native) if native.is_file() else str(npm[0]) if npm else command[0] if command else None
     elif provider == 'antigravity':
         from .antigravity_cli import command
         try:
@@ -93,6 +97,10 @@ def discover(provider):
             method = 'winget'
     env = os.environ.copy()
     env.update(DISABLE_AUTOUPDATER='1', DISABLE_TELEMETRY='1', DISABLE_ERROR_REPORTING='1', AGY_CLI_DISABLE_AUTO_UPDATE='true')
+    if os.name == 'nt':
+        from .claude_cli import _windows_executable
+        if not _windows_executable(path):
+            raise ValueError('Client executable is incomplete')
     result = subprocess.run([str(path), '--version'], stdin=subprocess.DEVNULL, capture_output=True,
                             timeout=5, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     output = result.stdout[:4096].decode('utf-8', errors='replace')

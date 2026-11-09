@@ -15,6 +15,7 @@ internal sealed class ActivationPanel : StackPanel
     private readonly HttpClient http;
     private readonly CheckBox enabled = new() { Content = "Automatically start idle quota windows", IsEnabled = false };
     private readonly StackPanel details = new() { Visibility = Visibility.Collapsed };
+    private readonly Expander windowOptions = new() { Header = "Choose quota windows", IsExpanded = false };
     private readonly StackPanel accounts = new();
     private readonly TextBlock feedback = Text("");
     private readonly Dictionary<string, CheckBox> selections = new();
@@ -31,7 +32,8 @@ internal sealed class ActivationPanel : StackPanel
         Children.Add(enabled);
         Children.Add(Text("After 30 minutes of observed inactivity, send a short prompt to start the selected windows. Uses subscription allowance."));
         details.Children.Add(Text("Choose windows below. Changes save immediately."));
-        details.Children.Add(accounts);
+        windowOptions.Content = accounts;
+        details.Children.Add(windowOptions);
         Children.Add(details);
         feedback.Visibility = Visibility.Collapsed;
         Children.Add(feedback);

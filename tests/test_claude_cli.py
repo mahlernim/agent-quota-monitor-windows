@@ -11,6 +11,31 @@ from quota import claude_cli as cli, model, providers
 from quota.monitor import Monitor
 
 
+class WindowsExecutableTests(unittest.TestCase):
+    def test_placeholder_and_invalid_headers_never_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'claude.exe'
+            for content in (b'echo "Error: claude native binary not installed."',
+                            b'MZ', b'MZ' + bytes(58) + (4096).to_bytes(4, 'little')):
+                executable.write_bytes(content)
+                self.assertFalse(cli._windows_executable(executable))
+                with patch.object(cli.os, 'name', 'nt'), patch.object(cli.subprocess, 'Popen') as launch:
+                    with self.assertRaises(providers.ReadError) as error:
+                        cli.run(str(executable), ['--version'])
+                    self.assertEqual(error.exception.code, 'claude_cli_failed')
+                    launch.assert_not_called()
+
+    def test_pe_signature_and_missing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'claude.exe'
+            self.assertFalse(cli._windows_executable(executable))
+            header = b'MZ' + bytes(58) + (64).to_bytes(4, 'little')
+            executable.write_bytes(header + b'PE\0\0' + bytes(20))
+            self.assertTrue(cli._windows_executable(executable))
+            executable.write_bytes(header + b'NE\0\0' + bytes(20))
+            self.assertFalse(cli._windows_executable(executable))
+
+
 def events(limits=None):
     return [dict(type='assistant', usage_report=dict(rate_limits=dict(limits=limits if limits is not None else [
         dict(kind='session', percent=0, resets_at=None, is_active=False),

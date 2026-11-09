@@ -36,6 +36,7 @@ internal static class Program
                 await TestAppearance();
                 await TestActivation();
                 await TestCliUpdates();
+                await TestSettingsUpdate();
                 await TestWindow(args.Length == 1 ? args[0] : null);
                 Console.WriteLine($"Passed {_checks} native account checks. Provider requests 0. Settings writes 0.");
                 exit = 0;
@@ -45,6 +46,40 @@ internal static class Program
         }));
         app.Run();
         return exit;
+    }
+
+    private static async Task TestSettingsUpdate()
+    {
+        using var backend = new SyntheticBackend();
+        using var http = new HttpClient(backend) { BaseAddress = new Uri("http://127.0.0.1:1") };
+        backend.Status = """[{"tag_name":"v9.0.0","draft":false,"prerelease":false,"assets":[{"name":"app-win-x64.zip","state":"uploaded"},{"name":"agent-quota-monitor-windows-9.0.0-setup-win-x64.exe","state":"uploaded"},{"name":"agent-quota-monitor-windows-9.0.0-setup-win-x64.exe.sha256","state":"uploaded"}]}]""";
+        using var updates = new UpdateService(new HttpClient(backend), new UpdatePreferences(), _ => { }, version: "1.0.0");
+        var owner = new Window { ShowInTaskbar = false, Width = 1, Height = 1, Opacity = 0 };
+        owner.Show();
+        int installs = 0;
+        Window? confirmationOwner = null;
+        var window = new AccountsWindow(owner, http, () => { }, updates, installUpdate: w => { confirmationOwner = w; installs++; });
+        var button = Tagged<Button>((DependencyObject)window.Content, "app-update")!;
+        Check(button.Visibility == Visibility.Collapsed, "No update action before a release is found");
+        await updates.Check(true);
+        Check(button.Visibility == Visibility.Visible && (string)button.Content == "Install update", "Settings offers installation after checking");
+        Click(button);
+        Check(installs == 1 && confirmationOwner == window, "Settings invokes the shared installer with the correct owner");
+        window.SetUpdateProgress("Downloading and verifying");
+        Check(!button.IsEnabled, "Download disables duplicate update actions");
+        window.SetUpdateProgress(null);
+        Check(button.IsEnabled, "Failed download can be retried");
+        updates.Skip();
+        Check(button.Visibility == Visibility.Collapsed, "Dismissed release removes Settings action");
+        window.Close();
+        string? opened = null;
+        var portable = new AccountsWindow(owner, http, () => { }, updates, openLink: url => opened = url);
+        await updates.Check(true);
+        var download = Tagged<Button>((DependencyObject)portable.Content, "app-update")!;
+        Check((string)download.Content == "Download update", "Portable Settings offers release download");
+        Click(download);
+        Check(opened == updates.Available!.Url, "Portable update opens the validated release page");
+        portable.Close(); owner.Close();
     }
 
     private static async Task TestCliUpdates()
@@ -161,6 +196,7 @@ internal static class Program
         using var backend = new SyntheticBackend();
         using var http = new HttpClient(backend) { BaseAddress = new Uri("http://127.0.0.1:1") };
         var panel = new ActivationPanel(http);
+        Check(!Field<Expander>(panel, "windowOptions").IsExpanded, "Activation window choices start folded");
         JsonObject sample = JsonNode.Parse("""
             {"activation":{"storageError":false,"preferences":{"enabled":false,"accounts":[],"idleMinutes":30,"suggestions":true},
             "accounts":[{"accountId":"claude-a","label":"Sample Claude","supported":true,"status":"Waiting for the inactivity delay.","reason":"Synthetic runner"},

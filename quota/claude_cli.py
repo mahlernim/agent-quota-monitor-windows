@@ -51,6 +51,22 @@ def _stop(process):
         process.wait(timeout=5)
 
 
+def _windows_executable(executable):
+    """Reject npm text placeholders before Windows can display a loader dialog."""
+    try:
+        with open(executable, 'rb') as stream:
+            header = stream.read(64)
+            if len(header) != 64 or header[:2] != b'MZ':
+                return False
+            offset = int.from_bytes(header[60:64], 'little')
+            if offset < 64 or offset > os.fstat(stream.fileno()).st_size - 24:
+                return False
+            stream.seek(offset)
+            return stream.read(4) == b'PE\0\0'
+    except OSError:
+        return False
+
+
 def run(executable, args, timeout=30, *, env=None, cwd=None):
     """Bound memory and runtime. Never retain CLI output in files or diagnostics."""
     process = None
@@ -58,6 +74,8 @@ def run(executable, args, timeout=30, *, env=None, cwd=None):
     output = []
     finished = threading.Event()
     try:
+        if os.name == 'nt' and not _windows_executable(executable):
+            raise ReadError('claude_cli_failed')
         process = subprocess.Popen([executable, *args], stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    cwd=cwd or tempfile.gettempdir(), env=environment() if env is None else env,
