@@ -253,15 +253,16 @@ public sealed class App : Application
     }
     private void ShowUpdate()
     {
+        accounts?.SetUpdateProgress(updateProgress);
         if (!stopping && updates is not null)
             main?.SetUpdate(updates, Installed ? () => _ = InstallUpdateAsync() : null, updateProgress);
     }
-    private async Task InstallUpdateAsync()
+    private async Task InstallUpdateAsync(Window? owner = null)
     {
         var release = updates?.Available;
         if (release is null || stopping || updateProgress is not null || main is null) return;
         string version = release.Tag.TrimStart('v');
-        var answer = MessageBox.Show(main, $"Install version {version} now?\n\n" +
+        var answer = MessageBox.Show(owner ?? main, $"Install version {version} now?\n\n" +
             "The monitor downloads the installer from the official Agent Quota Monitor release on GitHub, checks it against the published SHA-256 checksum, " +
             "closes itself, and opens the installer. Your settings and cached quota are kept.",
             "Install update", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
@@ -283,6 +284,7 @@ public sealed class App : Application
             pendingInstaller = null;
             updateProgress = null;
             ShowUpdate();
+            accounts?.ShowUpdateError("The update could not be downloaded or verified. Nothing was installed. Try again later.");
             main?.ShowBackendError("The update could not be downloaded or verified. Nothing was installed. Try again later or choose Download update.");
         }
     }
@@ -562,7 +564,9 @@ public sealed class App : Application
         if (stopping) return;
         ShowMain();
         if (accounts != null) { accounts.Activate(); return; }
-        accounts = new AccountsWindow(main!, http, () => _ = Poll(), updates, () => backendReady && !stopping && !connecting);
+        accounts = new AccountsWindow(main!, http, () => _ = Poll(), updates, () => backendReady && !stopping && !connecting,
+            installUpdate: Installed ? owner => _ = InstallUpdateAsync(owner) : null);
+        accounts.SetUpdateProgress(updateProgress);
         accounts.Closed += (_, _) => accounts = null; accounts.Show();
     }
     private void ToggleFloating() { if (stopping) return; if (floating!.IsVisible) HideFloating(); else { floating.Opacity = opacity; floating.Show(); _ = Post("/api/desktop", new { desktopFloating = true }); } }

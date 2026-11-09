@@ -6,9 +6,9 @@ Monitor your AI coding quotas from the Windows tray, main window, or compact flo
 
 Requires Windows 10 or 11 on x64 and an eligible account with each provider you enable.
 
-Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.15/agent-quota-monitor-windows-0.4.15-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
+Use the [Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.16/agent-quota-monitor-windows-0.4.16-setup-win-x64.exe) for a Start menu shortcut and an optional desktop shortcut. Installation is per user and needs no administrator rights.
 
-For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.15/agent-quota-monitor-windows-0.4.15-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
+For the [portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.16/agent-quota-monitor-windows-0.4.16-win-x64.zip), extract the entire archive into a permanent folder and run `agent-quota-monitor-windows.exe`. Keep the `backend` folder and all runtime files beside the executable. Python and .NET runtimes are included.
 
 The installer and application are unsigned. Windows may display an unknown-publisher warning.
 
@@ -147,6 +147,8 @@ Quota settings and cached snapshots are encrypted for your Windows user under `%
 
 Activation choices and attempt receipts are encrypted separately in `activation.dpapi` in that folder. Receipts contain stable account IDs, timestamps, outcomes, and numeric token counts. They do not contain response text or credentials. Updates preserve this file. Do not delete it to retry an uncertain prompt.
 
-Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.15) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
+Provider interfaces can change and interrupt readings. See the [release page](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.16) for release notes and the [development guide](https://github.com/mahlernim/agent-quota-monitor-windows/blob/main/docs/development.md) for building from source.
 
 MIT licensed. Independent project, not affiliated with or endorsed by any supported provider.
+
+Settings offers **Install update** when a new app release is available, or **Download update** for portable copies. The activation switch stays visible while **Choose quota windows** starts folded.

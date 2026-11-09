@@ -6,7 +6,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 [Visit the website](https://ahn-lab.org/agent-quota-monitor-windows/) for a quick tour and a visual guide to reading quota rings.
 
-**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.15/agent-quota-monitor-windows-0.4.15-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.15/agent-quota-monitor-windows-0.4.15-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.15)
+**[Download the Windows installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.16/agent-quota-monitor-windows-0.4.16-setup-win-x64.exe)** · [Portable ZIP](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.16/agent-quota-monitor-windows-0.4.16-win-x64.zip) · [Release notes](https://github.com/mahlernim/agent-quota-monitor-windows/releases/tag/v0.4.16)
 
 ![Main window with grouped quota rings](docs/images/main-window.png)
 
@@ -43,7 +43,7 @@ It uses your official clients' existing sign-ins and sends no model prompts to c
 
 For Windows 10 or 11 on x64. Python and .NET runtimes are bundled. You need an eligible account and the official coding client for each provider you enable.
 
-1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.15/agent-quota-monitor-windows-0.4.15-setup-win-x64.exe). No administrator rights are needed.
+1. Download and run the [Windows x64 installer](https://github.com/mahlernim/agent-quota-monitor-windows/releases/download/v0.4.16/agent-quota-monitor-windows-0.4.16-setup-win-x64.exe). No administrator rights are needed.
 2. Open **Agent Quota Monitor** from the Start menu.
 3. Open **Settings** (the gear icon) and tick the providers you use. Changes save right away.
 4. Follow the account's setup or sign-in button if needed. Once a reading appears, click a ring to put it in the tray and click its pin to add it to the floating monitor.
@@ -189,7 +189,7 @@ The monitor checks GitHub for a new release shortly after startup and then at mo
 - **Download update** opens the release page instead. Portable copies always use this. Quit the monitor before replacing the extracted files.
 - **Later** postpones the reminder for a day. **Skip this version** hides that release.
 
-**Check now** in Settings checks immediately. You can turn off automatic checks there. Settings, cached quota, and account bindings are kept across updates.
+**Check now** in Settings checks immediately. When a release is available, use **Install update** there, or **Download update** for a portable copy. You can turn off automatic checks there. Settings, cached quota, and account bindings are kept across updates.
 
 To uninstall, use Windows **Installed apps**. App files, shortcuts, and the startup entry are removed. Monitor settings and provider accounts are kept.
 
@@ -210,6 +210,8 @@ To uninstall, use Windows **Installed apps**. App files, shortcuts, and the star
 - **Something else is wrong, or you have an idea.** Choose **Report it on GitHub** in Settings, or open the [issue page](https://github.com/mahlernim/agent-quota-monitor-windows/issues). Include the copied account details rather than screenshots of your quota.
 
 ## Optional quota window activation
+
+The activation switch stays visible in Settings. Expand **Choose quota windows** to view or change individual selections. These details start folded.
 
 In **Settings → Quota window activation**, turn on **Automatically start idle quota windows**, then choose the account windows to activate. Choices appear only while it is on, and changes save immediately. Turning it off keeps your selections for next time.
 
